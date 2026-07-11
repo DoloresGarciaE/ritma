@@ -19,8 +19,7 @@ const buttonVariants = cva(
         primary: "bg-primary text-on-primary enabled:hover:bg-primary-hover",
         secondary: "border border-border-strong bg-surface text-text enabled:hover:bg-muted",
         ghost: "text-text-secondary enabled:hover:bg-muted",
-        destructive:
-          "bg-destructive text-on-destructive enabled:hover:bg-destructive-hover",
+        destructive: "bg-destructive text-on-destructive enabled:hover:bg-destructive-hover",
         link: "text-primary underline-offset-4 enabled:hover:text-primary-hover enabled:hover:underline",
       },
       size: {

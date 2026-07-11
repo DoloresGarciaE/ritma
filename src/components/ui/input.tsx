@@ -50,7 +50,10 @@ function Field({ label, helpText, error, className, children }: FieldProps) {
         </label>
         {children}
         {message ? (
-          <p id={messageId} className={cn("text-xs", error ? "text-danger" : "text-text-secondary")}>
+          <p
+            id={messageId}
+            className={cn("text-xs", error ? "text-danger" : "text-text-secondary")}
+          >
             {message}
           </p>
         ) : null}
@@ -111,8 +114,7 @@ function AmountInput({
   );
   const [editing, setEditing] = useState(false);
 
-  const displayed =
-    isControlled && !editing ? (value == null ? "" : formatAmount(value)) : draft;
+  const displayed = isControlled && !editing ? (value == null ? "" : formatAmount(value)) : draft;
 
   return (
     // El prefijo va después del input en el DOM (posicionado igual) para que

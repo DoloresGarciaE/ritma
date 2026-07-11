@@ -111,12 +111,7 @@ function Showcase({ title }: { title: string }) {
             value={formatMoney(180000)}
             context="12 pagos"
           />
-          <MetricCard
-            href="#"
-            label="Por cobrar"
-            value={formatMoney(95000)}
-            context="3 deudores"
-          />
+          <MetricCard href="#" label="Por cobrar" value={formatMoney(95000)} context="3 deudores" />
         </div>
       </Section>
 
