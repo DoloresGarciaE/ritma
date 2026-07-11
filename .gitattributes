@@ -1,0 +1,4 @@
+# El repo se edita en Windows y la CI corre en Linux: el working tree usa LF en
+# todos lados. Sin esto, core.autocrlf deja CRLF en Windows y `npm run
+# format:check` falla en todos los archivos (Prettier escribe LF).
+* text=auto eol=lf
