@@ -7,6 +7,7 @@ node_modules/
 # Lockfiles & generated
 package-lock.json
 next-env.d.ts
+src/generated/
 
 # Docs are normative prose — no autoformatting of tables
 docs/
