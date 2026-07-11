@@ -62,6 +62,24 @@ ritma/
   tests/e2e/             ← Playwright
 ```
 
+## Base de datos (desde F0.3)
+
+- **Prisma 7, y no es el Prisma de los tutoriales.** El driver adapter es obligatorio, el
+  generador es `prisma-client` (con `output` requerido) y la URL del CLI **no va en el schema**:
+  vive en [`prisma.config.ts`](prisma.config.ts). Antes de tocar Prisma, leé la doc de la v7.
+- **Dos conexiones a Neon**: la app usa la _pooled_ (`DATABASE_URL`) vía
+  [`src/lib/db.ts`](src/lib/db.ts); el CLI (migrate, studio, seed) usa la _directa_
+  (`DIRECT_URL`), porque por el pooler no se puede hacer DDL.
+- No uses el helper `env()` de `prisma/config`: **lanza si falta la variable** y rompería
+  `prisma generate` (que corre en `postinstall`) en una CI sin credenciales.
+- El cliente se genera en `src/generated/prisma` y **está gitignored** (se regenera en
+  `postinstall` y en `build`). Se importa de `@/generated/prisma/client` — no hay `index.ts`.
+- Schema v1: `Organization`, `User`, `Membership` (+ enums `OrgType`, `Role`). El resto del
+  dominio llega en sus bloques. Toda tabla lleva `createdAt`/`updatedAt`; las de negocio,
+  `orgId` con índice.
+- `prisma.*` solo dentro de `src/lib/` y `src/server/`. Desde F0.6 toda query de negocio pasa
+  por `withOrg`.
+
 ## Tokens y UI (desde F0.2)
 
 - Tailwind v4 es **CSS-first**: no hay `tailwind.config.ts`. Todo vive en
@@ -100,13 +118,16 @@ F1–F3 (Plan §9) con Playwright, en `main`. No se testean componentes UI unita
 
 ## Comandos
 
-| Comando                           | Qué hace                               |
-| --------------------------------- | -------------------------------------- |
-| `npm run dev`                     | Servidor de desarrollo                 |
-| `npm run build`                   | Build de producción                    |
-| `npm run lint`                    | ESLint                                 |
-| `npm run typecheck`               | TypeScript sin emitir (`tsc --noEmit`) |
-| `npm run format` / `format:check` | Prettier: escribir / verificar         |
+| Comando                           | Qué hace                                            |
+| --------------------------------- | --------------------------------------------------- |
+| `npm run dev`                     | Servidor de desarrollo                              |
+| `npm run build`                   | `prisma generate` + build de producción             |
+| `npm run lint`                    | ESLint                                              |
+| `npm run typecheck`               | TypeScript sin emitir (`tsc --noEmit`)              |
+| `npm run format` / `format:check` | Prettier: escribir / verificar                      |
+| `npm run db:migrate`              | Crea y aplica migración, y regenera el cliente      |
+| `npm run db:seed`                 | Seed idempotente (las dos orgs de los casos de uso) |
+| `npm run db:studio`               | Prisma Studio                                       |
 
 > En Next 16 no existe `next lint`: ESLint se corre con `eslint` (config flat en
 > `eslint.config.mjs`).

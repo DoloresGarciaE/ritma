@@ -30,3 +30,16 @@ retomar después de una semana sin tocar el proyecto (Plan de implementación §
   daba 2.15:1). Se resolvieron sin agregar colores nuevos.
 - **Próximo:** F0.3 — Neon + Prisma, `schema.prisma` v1 (Organization, User, Membership),
   primera migración y `seed.ts`.
+
+## Semana 3 (julio 2026) — base de datos
+
+- **Hecho:** F0.2 mergeado a `main` (squash). F0.3 en `feat/f0-3-database`: Prisma 7 sobre Neon
+  (pooled para la app vía driver adapter, directa para el CLI), `schema.prisma` v1 con
+  Organization / User / Membership, primera migración aplicada, seed idempotente con las dos
+  orgs de los casos de uso, y el singleton en `src/lib/db.ts`.
+- **Trabado:** nada bloqueante, pero Prisma 7 no es el Prisma de los tutoriales: el driver
+  adapter es obligatorio, la URL del CLI se mudó a `prisma.config.ts`, y su helper `env()`
+  lanza si falta la variable — eso habría roto `npm ci` en la CI de F0.7, donde no hay
+  credenciales de base. Se esquivó leyendo `process.env` y dejando el `datasource` condicional.
+- **Próximo:** F0.4 — Better Auth (email+contraseña y Google), páginas de login/registro con los
+  componentes de F0.2, y sesión con `activeOrgId`.

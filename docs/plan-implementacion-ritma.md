@@ -83,8 +83,8 @@ ritma/
 - [x] Página interna `/dev/ui` que muestra los componentes en ambos modos (sirve de test visual permanente).
 
 ### F0.3 — Base de datos (1 sesión)
-- [ ] Neon + Prisma; `schema.prisma` v1: `Organization`, `User`, `Membership` (Plan §7).
-- [ ] Primera migración + `seed.ts` con las dos organizaciones de los casos de uso del Plan.
+- [x] Neon + Prisma; `schema.prisma` v1: `Organization`, `User`, `Membership` (Plan §7).
+- [x] Primera migración + `seed.ts` con las dos organizaciones de los casos de uso del Plan.
 
 ### F0.4 — Autenticación (1–2 sesiones)
 - [ ] Better Auth: email+contraseña y Google; páginas login/registro con los componentes de F0.2.
