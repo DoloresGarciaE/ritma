@@ -1,0 +1,12 @@
+# Build output & deps
+.next/
+out/
+build/
+node_modules/
+
+# Lockfiles & generated
+package-lock.json
+next-env.d.ts
+
+# Docs are normative prose — no autoformatting of tables
+docs/

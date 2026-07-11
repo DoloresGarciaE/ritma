@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-4 2 150 58" role="img">
+  <title>Ritma — logotipo negativo</title>
+  <desc>Versión para fondos oscuros o Violeta: letras en blanco roto, pulso en Coral 300.</desc>
+  <g fill="none" stroke="#EDECE6" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3 32 V52"/>
+    <path d="M3 42 A10 10 0 0 1 13 32"/>
+    <path d="M25 32 V52"/>
+    <path d="M45 12 V52"/>
+    <path d="M37 30 H53"/>
+    <path d="M65 52 V42 A10 10 0 0 1 85 42 V52"/>
+    <path d="M85 42 A10 10 0 0 1 105 42 V52"/>
+    <circle cx="127" cy="42" r="10"/>
+    <path d="M137 32 V52"/>
+  </g>
+  <circle cx="25" cy="12" r="4.5" fill="#F59B85"/>
+</svg>

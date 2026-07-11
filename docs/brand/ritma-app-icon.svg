@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img">
+  <title>Ritma — ícono de app</title>
+  <desc>Isotipo "ri" en blanco sobre contenedor redondeado Violeta 600.</desc>
+  <rect width="512" height="512" rx="115" fill="#5A4BD1"/>
+  <g transform="translate(169 62) scale(6.2)">
+    <g fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3 32 V52"/>
+      <path d="M3 42 A10 10 0 0 1 13 32"/>
+      <path d="M25 32 V52"/>
+    </g>
+    <circle cx="25" cy="12" r="4.5" fill="#FFFFFF"/>
+  </g>
+</svg>
