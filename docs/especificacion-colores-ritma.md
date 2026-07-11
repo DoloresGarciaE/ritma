@@ -1,7 +1,9 @@
 # Ritma — Especificación de color
 
 > Documento normativo. Operacionaliza la paleta definida en la Especificación de marca (§6) para producto y comunicaciones.
-> Versión 1.0 · Julio 2026 · Todos los ratios de contraste fueron calculados según WCAG 2.1.
+> Versión 1.1 · Julio 2026 · Todos los ratios de contraste fueron calculados según WCAG 2.1.
+
+> **Cambios de la 1.1** (F0.2, al implementar los tokens): se nombran los tokens de los cinco estados de cuota (§5 definía las recetas pero §8 solo tenía tres); se agrega el par `destructive` / `on-destructive` para superficies destructivas sólidas; se corrige el uso de Neutro 400 como placeholder (2.15:1, no pasa AA); se documenta la colisión de `accent` con shadcn/ui. No se agregó ni un color nuevo: todos los valores salen de las escalas de §3.
 
 ---
 
@@ -56,10 +58,12 @@ Los valores marcados ◆ provienen de la Especificación de marca y son inmutabl
 | 100 | `#F4F2ED` | Fondos de fila hover, badge pendiente |
 | 200 | `#E8E6DE` | Bordes por defecto |
 | 300 | `#D6D3C8` | Bordes fuertes, divisores marcados |
-| 400 | `#B4B1A5` | Íconos deshabilitados, placeholders |
+| 400 | `#B4B1A5` | Íconos deshabilitados, bordes de controles inactivos |
 | 500 | `#8A877B` | Texto terciario (no crítico) |
-| 600 ◆ | `#625F55` | Texto secundario |
+| 600 ◆ | `#625F55` | Texto secundario **y placeholders** |
 | 700 | `#4C4A42` | Texto del badge pendiente |
+
+Neutro 400 y Neutro 500 no se usan como texto sobre fondos claros: dan 2.15:1 y 3.60:1 sobre blanco, debajo del 4.5:1 que exige el checklist de accesibilidad (Componentes §5.1). El placeholder es texto: va en `text-secondary` (Neutro 600, 6.39:1). Neutro 400 queda para elementos deshabilitados, que WCAG no exige contrastar.
 
 ### Tinta (texto y modo oscuro)
 
@@ -103,8 +107,11 @@ Los componentes consumen tokens, nunca stops directos. Definición por modo:
 | `accent-text` | Coral 700 | Coral 300 |
 | `focus-ring` | Violeta 400 | Violeta 300 |
 | `success / warning / danger` | Verde 700 / Ámbar 800 / Rojo 600 | Verde 300 / Ámbar 300 / Rojo 300 |
+| `destructive` / `on-destructive` | Rojo 600 / Blanco | Rojo 600 / Blanco (no cambian) |
 
 Nota del botón primario en oscuro: fondo Violeta 300 con texto Tinta oscura (5.47:1) — no blanco, que quedaría por debajo de AA.
+
+Nota de `destructive`: es el único token que no cambia entre modos. `danger` es color de **texto** y por eso sube a Rojo 300 en oscuro (§7.2); una superficie destructiva sólida no puede usarlo, porque Rojo 300 con texto blanco no llega a AA. El botón destructivo es Rojo 600 con blanco en los dos modos (4.77:1), que es lo que ya pedían Componentes §3.1 y §9.5 de este documento. Su hover es Rojo 700 (6.34:1).
 
 ## 5. Estados de cuota — recetas exactas
 
@@ -118,6 +125,8 @@ Correspondencia fija con los estados del Plan de proyecto (RN3). Formato badge: 
 | Vencida | Rojo 100 / Rojo 700 | 4.71:1 | Rojo 950 / Rojo 300 | 7.47:1 |
 | Exonerada | Violeta 100 / Violeta 700 | 6.70:1 | Violeta 900 / **Violeta 200** | 8.21:1 |
 
+Cada estado tiene su par de tokens `--state-<estado>-bg` / `--state-<estado>-text` (§8). El badge los lee de esta tabla y de ningún otro lado: no reutiliza `success` / `warning` / `danger`, que existen para texto y bordes y podrían cambiar sin que cambie el badge.
+
 Estas recetas aplican también a filas de tablas, timeline de la ficha de alumno y comprobantes. En comprobantes solo se usa el modo claro.
 
 ## 6. Contraste verificado (WCAG 2.1)
@@ -125,6 +134,10 @@ Estas recetas aplican también a filas de tablas, timeline de la ficha de alumno
 Resumen de pares aprobados para texto normal (≥ 4.5:1): Tinta/blanco 15.79 · Tinta/Neutro 50 15.13 · Violeta 600/blanco 6.25 · blanco/Violeta 600 6.25 · Violeta 700/blanco 7.92 · Coral 700/blanco 5.09 · Gris 600/Neutro 50 6.12 · Verde 700/blanco 5.78 · Ámbar 800/blanco 6.17 · Rojo 600/blanco 4.77 · blanco roto/`#201F28` 13.77 · `#A5A29A`/`#17161D` 7.04 · Tinta oscura/Violeta 300 5.47 · Coral 300/`#201F28` 7.69, más las recetas de badges de §5.
 
 Aprobados solo para texto grande, íconos y gráficos (≥ 3:1): Coral 500/blanco 3.09 · Violeta 400/blanco 4.57 (anillo de foco).
+
+Verificados en F0.2, al implementar los componentes: blanco/Rojo 700 6.34 (hover del botón destructivo) · Neutro 600/blanco 6.39 (placeholders) · `#A5A29A`/`#292833` 5.70 (badge pendiente en oscuro, el "≥ 4.5" de §5) · Violeta 300/Tinta oscura 5.47 (anillo de foco en oscuro, ≥ 3).
+
+**Reprobados, no usar como texto sobre fondos claros:** Neutro 400/blanco 2.15 · Neutro 500/blanco 3.60.
 
 Regla operativa: cualquier combinación nueva se verifica antes de usarse (el script `contrast.js` vive en el repo, en `/tools`).
 
@@ -141,7 +154,12 @@ Regla operativa: cualquier combinación nueva se verifica antes de usarse (el sc
 ```css
 /* globals.css — fuente de verdad de tokens (extracto) */
 :root {
-  --background: #FBFAF7;   --surface: #FFFFFF;
+  /* No dependen del modo */
+  --destructive: #CC4141; --destructive-hover: #B03030; --on-destructive: #FFFFFF;
+  --radius: 10px;
+}
+:root, .light {
+  --background: #FBFAF7;   --surface: #FFFFFF;         --surface-raised: #FFFFFF;
   --border: #E8E6DE;       --border-strong: #D6D3C8;
   --text: #23212F;         --text-secondary: #625F55;  --text-muted: #8A877B;
   --primary: #5A4BD1;      --primary-hover: #4A3DB8;   --on-primary: #FFFFFF;
@@ -150,20 +168,42 @@ Regla operativa: cualquier combinación nueva se verifica antes de usarse (el sc
   --success: #177449; --success-bg: #D3EDE0; --success-text: #115A39;
   --warning: #8F5300; --warning-bg: #F7E4C2; --warning-text: #8F5300;
   --danger:  #CC4141; --danger-bg:  #F8D6D6; --danger-text:  #B03030;
+  /* Estados de cuota (§5) */
+  --state-pending-bg: #F4F2ED; --state-pending-text: #4C4A42;
+  --state-partial-bg: #F7E4C2; --state-partial-text: #8F5300;
+  --state-paid-bg:    #D3EDE0; --state-paid-text:    #115A39;
+  --state-overdue-bg: #F8D6D6; --state-overdue-text: #B03030;
+  --state-waived-bg:  #EDEAFB; --state-waived-text:  #4A3DB8;
+  --muted: #F4F2ED;                                    /* fondo de hover neutro */
+  --elevation-float: 0 8px 24px rgba(23, 22, 29, 0.12);
 }
 .dark {
-  --background: #17161D;   --surface: #201F28;
+  --background: #17161D;   --surface: #201F28;         --surface-raised: #292833;
   --border: #35343F;       --border-strong: #45434F;
-  --text: #EDECE6;         --text-secondary: #A5A29A;
+  --text: #EDECE6;         --text-secondary: #A5A29A;  --text-muted: #8A877B;
   --primary: #8B7FF0;      --primary-hover: #C9C2F6;   --on-primary: #17161D;
   --accent: #F59B85;       --accent-text: #F59B85;
+  --focus-ring: #8B7FF0;
   --success: #7CC9A4; --success-bg: #0F3524; --success-text: #7CC9A4;
   --warning: #EBB868; --warning-bg: #3B2A08; --warning-text: #EBB868;
   --danger:  #EE9A9A; --danger-bg:  #3C1414; --danger-text:  #EE9A9A;
+  --state-pending-bg: #292833; --state-pending-text: #A5A29A;
+  --state-partial-bg: #3B2A08; --state-partial-text: #EBB868;
+  --state-paid-bg:    #0F3524; --state-paid-text:    #7CC9A4;
+  --state-overdue-bg: #3C1414; --state-overdue-text: #EE9A9A;
+  --state-waived-bg:  #2A2268; --state-waived-text:  #C9C2F6;
+  --muted: #292833;
+  --elevation-float: none;     /* en oscuro la superficie se aclara, no se le agrega sombra */
 }
 ```
 
-Mapeo a shadcn/ui: `--primary` → primario Ritma, `--destructive` → rojo, `--muted` → Neutro 100 / `#292833`, `--ring` → `--focus-ring`, `--radius` → 10px. En Tailwind, las escalas completas de §3 se exponen bajo `colors.violeta`, `colors.coral`, `colors.neutro`, etc., pero los componentes usan los tokens semánticos — las escalas existen para construir tokens, no para usarse sueltas en JSX.
+El modo lo decide el sistema (§7.5): los valores de `.dark` se repiten en un `@media (prefers-color-scheme: dark)` sobre `:root:not(.light)`. Las clases `.light` y `.dark` fuerzan el modo en cualquier subárbol — es lo que usa la página `/dev/ui` para mostrar los dos modos a la vez, y lo que va a usar el override manual de Ajustes (fase 2).
+
+Mapeo a shadcn/ui: `--primary` → primario Ritma, `--destructive` → rojo sólido, `--muted` → Neutro 100 / `#292833`, `--ring` → `--focus-ring`, `--radius` → 10px, `--card` → `surface`, `--popover` → `surface-raised`, `--foreground` → `text`, `--muted-foreground` → `text-secondary`.
+
+⚠️ **`accent` colisiona**: en shadcn `--accent` es el fondo de hover de botones y menús; en Ritma es el coral. Gana Ritma. Todo componente de shadcn que traigamos tiene que remapear sus `bg-accent` / `text-accent-foreground` a `bg-muted` / `text-text` — que es, además, el hover que pide Componentes §2.3.
+
+En Tailwind, las escalas completas de §3 se exponen bajo `colors.violeta`, `colors.coral`, `colors.neutro`, etc., pero los componentes usan los tokens semánticos — las escalas existen para construir tokens, no para usarse sueltas en JSX.
 
 ## 9. Reglas duras
 

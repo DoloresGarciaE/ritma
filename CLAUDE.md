@@ -62,13 +62,28 @@ ritma/
   tests/e2e/             ← Playwright
 ```
 
+## Tokens y UI (desde F0.2)
+
+- Tailwind v4 es **CSS-first**: no hay `tailwind.config.ts`. Todo vive en
+  [`src/app/globals.css`](src/app/globals.css) — escalas y tokens en `@theme`, y los valores
+  de cada modo en `:root` / `.dark` / el media query de `prefers-color-scheme`.
+- **Los componentes consumen tokens semánticos** (`bg-surface`, `text-text-secondary`,
+  `bg-state-paid-bg`…), nunca stops de la escala (`bg-violeta-600`) ni hex. Las escalas existen
+  para construir tokens.
+- El modo lo decide el sistema; `.light` / `.dark` fuerzan el modo en un subárbol.
+- [`/dev/ui`](src/app/dev/ui/page.tsx) es el test visual permanente: todo componente nuevo se
+  agrega ahí, con sus estados y en los dos modos, con ejemplos del dominio real.
+- ⚠️ Al traer un componente de shadcn: su `--accent` es el fondo de hover, pero en Ritma
+  `accent` es el coral. Remapear `bg-accent` → `bg-muted` (Color §8).
+
 ## Convenciones
 
 - **Ningún hex suelto en la UI:** todo color sale de un token de la Especificación de color.
   Si un color no está en esa spec, no existe (Color §5, §9).
 - **Ningún estado comunica solo con color:** siempre etiqueta de texto además del color.
 - **Montos:** formato `$20.000` (punto de miles, sin decimales salvo necesidad), en
-  `tabular-nums`; períodos como "Marzo 2026" (Marca §7, Componentes §4.2).
+  `tabular-nums`; períodos como "Marzo 2026" (Marca §7, Componentes §4.2). El formato único
+  vive en [`src/lib/format.ts`](src/lib/format.ts) — no reimplementarlo.
 - **Permisos en la UI:** lo que un rol no puede hacer **no se muestra** (no `disabled`).
   El server valida siempre; la UI nunca es el único guardián (Componentes §4.3).
 - **Componentes:** si un componente no está en la Especificación de componentes, primero se
