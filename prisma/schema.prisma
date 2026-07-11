@@ -1,0 +1,72 @@
+// Ritma — schema v1: el núcleo multi-tenant (Plan de proyecto §7).
+// Todo dato de negocio cuelga de una Organization. Los modelos del dominio
+// (Student, ClassGroup, Charge, Payment…) llegan en sus bloques del plan.
+//
+// Prisma 7: la URL de la base NO se declara acá. El CLI la toma de prisma.config.ts
+// (DIRECT_URL) y la app la pasa por el driver adapter (DATABASE_URL, pooled).
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  runtime      = "nodejs"
+  moduleFormat = "esm"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum OrgType {
+  INDEPENDENT
+  STUDIO
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  TEACHER
+}
+
+/// El tenant: unidad de aislamiento de datos (Plan §3).
+model Organization {
+  id               String   @id @default(cuid())
+  name             String
+  type             OrgType
+  currency         String   @default("ARS")
+  timezone         String   @default("America/Argentina/Buenos_Aires")
+  /// Día del mes en que vencen las cuotas (RN2).
+  dueDay           Int      @default(10)
+  reminderTemplate String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  memberships Membership[]
+}
+
+/// Persona con cuenta y login. Puede pertenecer a varias organizaciones.
+/// Los alumnos NO son usuarios: son datos de la organización (Plan §3).
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  memberships Membership[]
+}
+
+/// Vínculo usuario ↔ organización con un rol (Plan §4).
+model Membership {
+  userId    String
+  orgId     String
+  role      Role
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  org  Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@id([userId, orgId])
+  // La PK compuesta ya indexa por userId; §7 pide índice por orgId en toda tabla.
+  @@index([orgId])
+}
