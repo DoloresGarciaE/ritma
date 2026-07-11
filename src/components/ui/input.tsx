@@ -115,13 +115,9 @@ function AmountInput({
     isControlled && !editing ? (value == null ? "" : formatAmount(value)) : draft;
 
   return (
+    // El prefijo va después del input en el DOM (posicionado igual) para que
+    // pueda atenuarse con él vía peer-disabled.
     <div className="relative">
-      <span
-        aria-hidden
-        className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-base text-text-secondary"
-      >
-        $
-      </span>
       <input
         data-slot="amount-input"
         id={id ?? field?.inputId}
@@ -129,7 +125,7 @@ function AmountInput({
         value={displayed}
         aria-invalid={ariaInvalid ?? (field?.invalid || undefined)}
         aria-describedby={ariaDescribedBy ?? (field?.hasMessage ? field.messageId : undefined)}
-        className={cn(controlStyles, "pl-7 font-display tabular-nums", className)}
+        className={cn(controlStyles, "peer pl-7 font-display tabular-nums", className)}
         onFocus={(event) => {
           setEditing(true);
           const current = isControlled ? (value ?? null) : parseAmount(draft);
@@ -149,6 +145,12 @@ function AmountInput({
         }}
         {...props}
       />
+      <span
+        aria-hidden
+        className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-base text-text-secondary peer-disabled:opacity-50"
+      >
+        $
+      </span>
     </div>
   );
 }

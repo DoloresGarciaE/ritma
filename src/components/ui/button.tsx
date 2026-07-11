@@ -67,8 +67,8 @@ function Button({
         // que queda invisible pero ocupando su lugar. El ancho no cambia (§2.3).
         <>
           <span className="invisible inline-flex items-center gap-2">{children}</span>
-          <span className="absolute inset-0 m-auto inline-flex items-center justify-center">
-            <Loader2 aria-hidden className="size-4 animate-spin" />
+          <span className="absolute inset-0 inline-flex items-center justify-center">
+            <Loader2 aria-hidden className="animate-spin" />
           </span>
         </>
       ) : (
