@@ -1,1 +1,350 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+/* El modo lo decide el sistema (Color §7.5); .light/.dark lo fuerzan en un subárbol
+   (lo usa /dev/ui y, más adelante, el override manual de Ajustes). */
+@custom-variant dark {
+  @media (prefers-color-scheme: dark) {
+    &:where(:not(.light, .light *)) {
+      @slot;
+    }
+  }
+  &:where(.dark, .dark *) {
+    @slot;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Escalas — Especificación de color §3.
+   Existen para construir tokens, no para usarse sueltas en JSX.
+   ───────────────────────────────────────────────────────────── */
+@theme {
+  --color-violeta-50: #f6f4fd;
+  --color-violeta-100: #edeafb;
+  --color-violeta-200: #c9c2f6;
+  --color-violeta-300: #8b7ff0;
+  --color-violeta-400: #7263e2;
+  --color-violeta-500: #6455db;
+  --color-violeta-600: #5a4bd1;
+  --color-violeta-700: #4a3db8;
+  --color-violeta-800: #3a2f94;
+  --color-violeta-900: #2a2268;
+
+  --color-coral-50: #fdf0ec;
+  --color-coral-100: #fbdfd6;
+  --color-coral-300: #f59b85;
+  --color-coral-500: #ee6a4d;
+  --color-coral-700: #c24327;
+  --color-coral-900: #6e2616;
+
+  --color-neutro-0: #ffffff;
+  --color-neutro-50: #fbfaf7;
+  --color-neutro-100: #f4f2ed;
+  --color-neutro-200: #e8e6de;
+  --color-neutro-300: #d6d3c8;
+  --color-neutro-400: #b4b1a5;
+  --color-neutro-500: #8a877b;
+  --color-neutro-600: #625f55;
+  --color-neutro-700: #4c4a42;
+
+  --color-tinta-900: #23212f;
+  --color-tinta-oscura: #17161d;
+  --color-superficie-oscura: #201f28;
+  --color-superficie-oscura-elevada: #292833;
+  --color-borde-oscuro: #35343f;
+  --color-borde-oscuro-fuerte: #45434f;
+  --color-blanco-roto: #edece6;
+  --color-texto-secundario-oscuro: #a5a29a;
+
+  --color-verde-100: #d3ede0;
+  --color-verde-300: #7cc9a4;
+  --color-verde-600: #1e8e5a;
+  --color-verde-700: #177449;
+  --color-verde-800: #115a39;
+  --color-verde-950: #0f3524;
+
+  --color-ambar-100: #f7e4c2;
+  --color-ambar-300: #ebb868;
+  --color-ambar-700: #b26a0b;
+  --color-ambar-800: #8f5300;
+  --color-ambar-950: #3b2a08;
+
+  --color-rojo-100: #f8d6d6;
+  --color-rojo-300: #ee9a9a;
+  --color-rojo-600: #cc4141;
+  --color-rojo-700: #b03030;
+  --color-rojo-950: #3c1414;
+
+  /* Movimiento: 150–250 ms ease-out (Componentes §2.3) */
+  --default-transition-duration: 150ms;
+  --default-transition-timing-function: cubic-bezier(0, 0, 0.2, 1);
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Tokens semánticos — Especificación de color §4, §5 y §8.
+   Los valores de .dark se repiten en el media query de abajo:
+   si tocás uno, tocá el otro.
+   ───────────────────────────────────────────────────────────── */
+
+/* Tokens que no dependen del modo */
+:root {
+  /* Superficie destructiva sólida: Rojo 600 + blanco en claro y en oscuro
+     (Componentes §3.1, Color §9.5). Distinto de --danger, que sube a Rojo 300
+     en oscuro porque ahí es color de texto, no de fondo.
+     Contraste: blanco/Rojo 600 4.77:1 · blanco/Rojo 700 6.34:1 */
+  --destructive: #cc4141;
+  --destructive-hover: #b03030;
+  --on-destructive: #ffffff;
+
+  --radius: 10px;
+}
+
+:root,
+.light {
+  color-scheme: light;
+
+  --background: #fbfaf7;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --border: #e8e6de;
+  --border-strong: #d6d3c8;
+  --text: #23212f;
+  --text-secondary: #625f55;
+  --text-muted: #8a877b;
+  --primary: #5a4bd1;
+  --primary-hover: #4a3db8;
+  --on-primary: #ffffff;
+  --accent: #ee6a4d;
+  --accent-text: #c24327;
+  --focus-ring: #7263e2;
+
+  --success: #177449;
+  --success-bg: #d3ede0;
+  --success-text: #115a39;
+  --warning: #8f5300;
+  --warning-bg: #f7e4c2;
+  --warning-text: #8f5300;
+  --danger: #cc4141;
+  --danger-bg: #f8d6d6;
+  --danger-text: #b03030;
+
+  /* Estados de cuota (Color §5) — recetas exactas, sin variantes por pantalla */
+  --state-pending-bg: #f4f2ed;
+  --state-pending-text: #4c4a42;
+  --state-partial-bg: #f7e4c2;
+  --state-partial-text: #8f5300;
+  --state-paid-bg: #d3ede0;
+  --state-paid-text: #115a39;
+  --state-overdue-bg: #f8d6d6;
+  --state-overdue-text: #b03030;
+  --state-waived-bg: #edeafb;
+  --state-waived-text: #4a3db8;
+
+  /* Fondo de hover neutro (Componentes §2.3) y mapeo shadcn --muted (Color §8) */
+  --muted: #f4f2ed;
+
+  /* Única sombra permitida: superficies flotantes (Componentes §2.2) */
+  --elevation-float: 0 8px 24px rgba(23, 22, 29, 0.12);
+}
+
+.dark {
+  color-scheme: dark;
+
+  --background: #17161d;
+  --surface: #201f28;
+  --surface-raised: #292833;
+  --border: #35343f;
+  --border-strong: #45434f;
+  --text: #edece6;
+  --text-secondary: #a5a29a;
+  --text-muted: #8a877b;
+  --primary: #8b7ff0;
+  --primary-hover: #c9c2f6;
+  --on-primary: #17161d;
+  --accent: #f59b85;
+  --accent-text: #f59b85;
+  --focus-ring: #8b7ff0;
+
+  --success: #7cc9a4;
+  --success-bg: #0f3524;
+  --success-text: #7cc9a4;
+  --warning: #ebb868;
+  --warning-bg: #3b2a08;
+  --warning-text: #ebb868;
+  --danger: #ee9a9a;
+  --danger-bg: #3c1414;
+  --danger-text: #ee9a9a;
+
+  --state-pending-bg: #292833;
+  --state-pending-text: #a5a29a;
+  --state-partial-bg: #3b2a08;
+  --state-partial-text: #ebb868;
+  --state-paid-bg: #0f3524;
+  --state-paid-text: #7cc9a4;
+  --state-overdue-bg: #3c1414;
+  --state-overdue-text: #ee9a9a;
+  --state-waived-bg: #2a2268;
+  --state-waived-text: #c9c2f6;
+
+  --muted: #292833;
+
+  /* En oscuro la superficie elevada se aclara, no se le agrega sombra (Componentes §2.2) */
+  --elevation-float: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) {
+    color-scheme: dark;
+
+    --background: #17161d;
+    --surface: #201f28;
+    --surface-raised: #292833;
+    --border: #35343f;
+    --border-strong: #45434f;
+    --text: #edece6;
+    --text-secondary: #a5a29a;
+    --text-muted: #8a877b;
+    --primary: #8b7ff0;
+    --primary-hover: #c9c2f6;
+    --on-primary: #17161d;
+    --accent: #f59b85;
+    --accent-text: #f59b85;
+    --focus-ring: #8b7ff0;
+
+    --success: #7cc9a4;
+    --success-bg: #0f3524;
+    --success-text: #7cc9a4;
+    --warning: #ebb868;
+    --warning-bg: #3b2a08;
+    --warning-text: #ebb868;
+    --danger: #ee9a9a;
+    --danger-bg: #3c1414;
+    --danger-text: #ee9a9a;
+
+    --state-pending-bg: #292833;
+    --state-pending-text: #a5a29a;
+    --state-partial-bg: #3b2a08;
+    --state-partial-text: #ebb868;
+    --state-paid-bg: #0f3524;
+    --state-paid-text: #7cc9a4;
+    --state-overdue-bg: #3c1414;
+    --state-overdue-text: #ee9a9a;
+    --state-waived-bg: #2a2268;
+    --state-waived-text: #c9c2f6;
+
+    --muted: #292833;
+    --elevation-float: none;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Tokens → utilidades de Tailwind.
+   Los componentes consumen estos tokens, nunca los stops de §3.
+   ───────────────────────────────────────────────────────────── */
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-text: var(--text);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-on-primary: var(--on-primary);
+  --color-accent: var(--accent);
+  --color-accent-text: var(--accent-text);
+  --color-focus-ring: var(--focus-ring);
+
+  --color-success: var(--success);
+  --color-success-bg: var(--success-bg);
+  --color-success-text: var(--success-text);
+  --color-warning: var(--warning);
+  --color-warning-bg: var(--warning-bg);
+  --color-warning-text: var(--warning-text);
+  --color-danger: var(--danger);
+  --color-danger-bg: var(--danger-bg);
+  --color-danger-text: var(--danger-text);
+  --color-destructive: var(--destructive);
+  --color-destructive-hover: var(--destructive-hover);
+  --color-on-destructive: var(--on-destructive);
+
+  --color-state-pending-bg: var(--state-pending-bg);
+  --color-state-pending-text: var(--state-pending-text);
+  --color-state-partial-bg: var(--state-partial-bg);
+  --color-state-partial-text: var(--state-partial-text);
+  --color-state-paid-bg: var(--state-paid-bg);
+  --color-state-paid-text: var(--state-paid-text);
+  --color-state-overdue-bg: var(--state-overdue-bg);
+  --color-state-overdue-text: var(--state-overdue-text);
+  --color-state-waived-bg: var(--state-waived-bg);
+  --color-state-waived-text: var(--state-waived-text);
+
+  /* Mapeo a shadcn/ui (Color §8). Ojo: shadcn usa --accent como fondo de hover;
+     en Ritma accent es el coral, así que los componentes de shadcn que traigamos
+     tienen que remapear sus `bg-accent` a `bg-muted`. */
+  --color-foreground: var(--text);
+  --color-card: var(--surface);
+  --color-card-foreground: var(--text);
+  --color-popover: var(--surface-raised);
+  --color-popover-foreground: var(--text);
+  --color-primary-foreground: var(--on-primary);
+  --color-secondary: var(--surface);
+  --color-secondary-foreground: var(--text);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--text-secondary);
+  --color-input: var(--border-strong);
+  --color-ring: var(--focus-ring);
+
+  /* Tipografía (Marca §7) */
+  --font-sans: var(--font-inter), system-ui, -apple-system, sans-serif;
+  --font-display: var(--font-space-grotesk), system-ui, -apple-system, sans-serif;
+  --font-heading: var(--font-display);
+
+  /* Radios (Componentes §2.2) */
+  --radius-control: var(--radius);
+  --radius-card: 12px;
+  --radius-sheet: 16px;
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+
+  --shadow-float: var(--elevation-float);
+}
+
+@layer base {
+  body {
+    background-color: var(--background);
+    color: var(--text);
+    font-family: var(--font-sans);
+    /* Escala base: 14 px mobile / 16 px desktop (Marca §7.4) */
+    font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  @media (width >= 48rem) {
+    body {
+      font-size: 16px;
+    }
+  }
+
+  /* El foco visible nunca se elimina (Componentes §2.3) */
+  :focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}

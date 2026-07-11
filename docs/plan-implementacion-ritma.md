@@ -77,10 +77,10 @@ ritma/
 - [x] Deploy inicial "hola Ritma" en Vercel (el deploy existe desde el día 1, no al final).
 
 ### F0.2 — Tokens y UI base (1–2 sesiones)
-- [ ] `globals.css` con los tokens de Especificación de color §8 (claro y oscuro) y escalas en Tailwind.
-- [ ] Fuentes con `next/font`: Inter + Space Grotesk; `tabular-nums` como utilidad.
-- [ ] shadcn/ui init con mapeo de Color §8; construir Botón, Input, Badge de estado y Card según Componentes §3.
-- [ ] Página interna `/dev/ui` que muestra los componentes en ambos modos (sirve de test visual permanente).
+- [x] `globals.css` con los tokens de Especificación de color §8 (claro y oscuro) y escalas en Tailwind.
+- [x] Fuentes con `next/font`: Inter + Space Grotesk; `tabular-nums` como utilidad.
+- [x] shadcn/ui init con mapeo de Color §8; construir Botón, Input, Badge de estado y Card según Componentes §3.
+- [x] Página interna `/dev/ui` que muestra los componentes en ambos modos (sirve de test visual permanente).
 
 ### F0.3 — Base de datos (1 sesión)
 - [ ] Neon + Prisma; `schema.prisma` v1: `Organization`, `User`, `Membership` (Plan §7).
