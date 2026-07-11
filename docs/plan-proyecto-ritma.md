@@ -369,6 +369,8 @@ model ReminderLog {
 
 Convenciones: toda tabla de negocio lleva `orgId` con índice; se accede solo a través de helpers que fuerzan el scoping por organización (nunca `prisma.x.findMany` "a mano" en código de aplicación).
 
+Toda tabla lleva además `createdAt` (`@default(now())`) y `updatedAt` (`@updatedAt`) — omitidos en el borrador de arriba por brevedad, igual que las relaciones. Better Auth los exige en `User` (F0.4), y sin ellos no hay forma de auditar ni depurar nada. Los ids son `cuid()`.
+
 ## 8. Reglas de negocio
 
 **RN1 — Generación de cuotas.** El día 1 de cada mes, un cron crea una cuota `pendiente` por cada inscripción mensual activa, con `amount = enrollment.price` y `dueDate = día de vencimiento de la org`. La cuota es única por (inscripción, período).
@@ -473,6 +475,7 @@ prisma/schema.prisma
 2. **Lógica de negocio en `server/services` como funciones puras** que reciben datos y devuelven resultados (ej. `computeSettlement(payments, agreement)`), para testear RN1–RN10 sin base de datos.
 3. **El comprobante es un link, no un PDF adjunto**: más liviano, siempre actualizado, revocable, y en WhatsApp se ve con preview. La imagen se genera on-demand para compartir.
 4. **Sin estado offline en MVP**: PWA instalable sí, sync offline no (complejidad alta, valor incierto).
+5. **Dos conexiones a Neon** (F0.3): la app usa la *pooled* (`DATABASE_URL`) a través del driver adapter de Prisma; el CLI (migrate, studio, seed) usa la *directa* (`DIRECT_URL`), porque por el pooler no se puede hacer DDL. En Prisma 7 la URL del CLI ya no vive en el schema: va en `prisma.config.ts`, y el driver adapter es obligatorio.
 
 ## 11. UX y pantallas principales
 
