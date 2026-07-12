@@ -93,8 +93,9 @@ ritma/
       la guardia real es `requireSession()` en el layout de `(app)`.)
 
 ### F0.5 — Organización y shell (1–2 sesiones)
-- [ ] Wizard de creación de org (3 pasos, Plan HU1.1–1.2): nombre, tipo, disciplinas; defaults ARS / vencimiento 10 / zona horaria AR.
-- [ ] Shell `(app)`: bottom nav de 5 ítems (Componentes §3.6), app bar, rutas placeholder, sidebar en `md`.
+- [x] Modelo `Discipline` (Plan §7): lo necesita el wizard. Estaba listado en S2 por error.
+- [x] Wizard de creación de org (3 pasos, Plan HU1.1–1.2): nombre, tipo, disciplinas; defaults ARS / vencimiento 10 / zona horaria AR.
+- [x] Shell `(app)`: bottom nav de 5 ítems (Componentes §3.6), app bar, rutas placeholder, sidebar en `md`.
 
 ### F0.6 — Scoping y permisos (1 sesión, la más importante)
 - [ ] Helper `withOrg` en `lib/db`: toda query de negocio pasa por él; regla de lint o convención que prohíbe `prisma.*` directo fuera de `lib` y `server`.
@@ -118,7 +119,7 @@ ritma/
 - **DoD:** cargar 20 alumnos reales toma < 10 minutos desde el teléfono.
 
 ### S2 — Agenda
-- [ ] Modelos `Discipline`, `ClassGroup`, `ScheduleSlot`, `ClassSession`; creación de grupo con múltiples franjas (HU3.1).
+- [ ] Modelos `ClassGroup`, `ScheduleSlot`, `ClassSession`; creación de grupo con múltiples franjas (HU3.1). (`Discipline` ya llegó en F0.5: el wizard la necesitaba.)
 - [ ] Generación de sesiones on-demand para las semanas visibles (servicio puro + tests); cancelar/reprogramar sesión puntual (HU3.3).
 - [ ] Vistas semana y día mobile-first con el bloque de sesión (Componentes §3.7).
 - **DoD:** la semana del profe se ve correcta con feriado cancelado incluido.

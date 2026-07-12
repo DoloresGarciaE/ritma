@@ -141,6 +141,10 @@
   --state-waived-bg: #edeafb;
   --state-waived-text: #4a3db8;
 
+  /* Ítem activo de la navegación (Componentes §3.6). Violeta 600 sobre Violeta 50: 5.73:1 */
+  --nav-active-bg: #f6f4fd;
+  --nav-active-text: #5a4bd1;
+
   /* Fondo de hover neutro (Componentes §2.3) y mapeo shadcn --muted (Color §8) */
   --muted: #f4f2ed;
 
@@ -187,6 +191,11 @@
   --state-waived-bg: #2a2268;
   --state-waived-text: #c9c2f6;
 
+  /* En oscuro el texto NO es primary: Violeta 300 sobre Violeta 900 da 4.19:1 y no llega a
+     AA. Con Violeta 200 son 8.21:1, y el violeta sigue siendo la señal de "seleccionado". */
+  --nav-active-bg: #2a2268;
+  --nav-active-text: #c9c2f6;
+
   --muted: #292833;
 
   /* En oscuro la superficie elevada se aclara, no se le agrega sombra (Componentes §2.2) */
@@ -232,6 +241,9 @@
     --state-overdue-text: #ee9a9a;
     --state-waived-bg: #2a2268;
     --state-waived-text: #c9c2f6;
+
+    --nav-active-bg: #2a2268;
+    --nav-active-text: #c9c2f6;
 
     --muted: #292833;
     --elevation-float: none;
@@ -281,6 +293,9 @@
   --color-state-overdue-text: var(--state-overdue-text);
   --color-state-waived-bg: var(--state-waived-bg);
   --color-state-waived-text: var(--state-waived-text);
+
+  --color-nav-active-bg: var(--nav-active-bg);
+  --color-nav-active-text: var(--nav-active-text);
 
   /* Mapeo a shadcn/ui (Color §8). Ojo: shadcn usa --accent como fondo de hover;
      en Ritma accent es el coral, así que los componentes de shadcn que traigamos

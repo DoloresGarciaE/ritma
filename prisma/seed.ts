@@ -24,6 +24,12 @@ const SEED_USERS = [
   { email: "carla@example.com", name: "Carla Duarte", orgId: ORG_ESTUDIO },
 ];
 
+/** Disciplinas de cada org. El unique [orgId, name] las hace idempotentes. */
+const SEED_DISCIPLINES: Record<string, string[]> = {
+  [ORG_INDEPENDIENTE]: ["Árabe", "Folklore"],
+  [ORG_ESTUDIO]: ["Árabe", "Contemporáneo", "Funcional", "Canto"],
+};
+
 async function main() {
   // Import dinámico y no estático: db.ts y auth.ts leen process.env al importarse,
   // así que tienen que cargarse DESPUÉS de dotenv (los import se hoistean).
@@ -76,9 +82,19 @@ async function main() {
       });
     }
 
+    for (const [orgId, names] of Object.entries(SEED_DISCIPLINES)) {
+      await db.discipline.createMany({
+        data: names.map((name) => ({ orgId, name })),
+        skipDuplicates: true,
+      });
+    }
+
     const orgs = await db.organization.findMany({
       orderBy: { name: "asc" },
-      include: { memberships: { include: { user: { include: { accounts: true } } } } },
+      include: {
+        memberships: { include: { user: { include: { accounts: true } } } },
+        disciplines: { orderBy: { name: "asc" } },
+      },
     });
 
     console.log("\nOrganizaciones sembradas:\n");
@@ -91,13 +107,15 @@ async function main() {
           email: m.user.email,
           rol: m.role,
           "puede entrar": m.user.accounts.some((a) => a.providerId === "credential") ? "sí" : "no",
+          disciplinas: org.disciplines.map((d) => d.name).join(", "),
         })),
       ),
     );
     console.log(
       `Totales — organizaciones: ${await db.organization.count()} · ` +
         `usuarios: ${await db.user.count()} · ` +
-        `membresías: ${await db.membership.count()}\n` +
+        `membresías: ${await db.membership.count()} · ` +
+        `disciplinas: ${await db.discipline.count()}\n` +
         `Contraseña de desarrollo: ${DEV_PASSWORD}\n`,
     );
   } finally {

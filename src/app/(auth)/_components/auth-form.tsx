@@ -124,7 +124,11 @@ export function AuthForm({ mode, googleEnabled }: { mode: Mode; googleEnabled: b
       return;
     }
 
-    router.push("/dashboard");
+    // Quien se acaba de registrar no tiene organización: va derecho al wizard. Pasar por
+    // /dashboard sería un rebote, y ese rebote es lo que deja una entrada envenenada en el
+    // cache del router (la de "dashboard = andá al wizard").
+    // Al iniciar sesión, el layout de (app) decide: si no hay org, manda al wizard igual.
+    router.push(mode === "registro" ? "/crear-organizacion" : "/dashboard");
     router.refresh();
   }
 

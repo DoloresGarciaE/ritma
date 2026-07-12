@@ -97,7 +97,9 @@ Anatomía de izquierda a derecha: avatar de iniciales (ver §3.11) · nombre en 
 
 **Bottom nav (mobile).** Cinco ítems fijos: Inicio · Agenda · Alumnos · Cobranzas · Más. Ícono Lucide 24 px + label 11 px. Activo: `primary` en ícono y label; inactivo: `text-secondary`. Altura 56 px + safe-area inferior. No se agregan ni reordenan ítems sin actualizar esta spec.
 
-**Sidebar (≥ md).** Misma estructura y jerarquía; logotipo arriba (área de respeto de Marca §5.4), ítem activo con fondo Violeta 50 y texto `primary`.
+**Sidebar (≥ md).** Misma estructura y jerarquía; logotipo arriba (área de respeto de Marca §5.4), ítem activo con los tokens `nav-active-bg` / `nav-active-text` (Color §4): fondo Violeta 50 y texto Violeta 600 en claro, fondo Violeta 900 y texto Violeta 200 en oscuro. En oscuro el texto **no** es `primary`: Violeta 300 sobre un fondo violeta no llega a AA.
+
+"Más" es la puerta a Estudio y Ajustes (Plan §11) y se queda activo mientras estés en cualquiera de las dos.
 
 **App bar.** Título de la pantalla (18 px, peso 500), back a la izquierda cuando hay jerarquía, una acción contextual a la derecha como máximo.
 
@@ -117,7 +119,7 @@ Una línea, esquina superior (desktop) o sobre la bottom nav (mobile), auto-cier
 
 ### 3.10 Estado vacío
 
-Ícono Lucide 48 px en Neutro 400, título corto, una línea de contexto y un CTA primario. El copy sigue la voz de marca: invita a actuar, no describe la ausencia ("Tu semana está vacía. Creá tu primer grupo y armá la agenda."). Cada pantalla del MVP define su estado vacío en el diseño, no como afterthought.
+Ícono Lucide 48 px en `text-muted`, título corto, una línea de contexto y un CTA primario. (El ícono es decorativo y va con `aria-hidden`: siempre lo acompaña el título. Antes esta línea decía "Neutro 400", que es un stop de la escala, y Color §8 prohíbe que los componentes consuman stops.) El copy sigue la voz de marca: invita a actuar, no describe la ausencia ("Tu semana está vacía. Creá tu primer grupo y armá la agenda."). Cada pantalla del MVP define su estado vacío en el diseño, no como afterthought.
 
 ### 3.11 Avatar
 
@@ -140,6 +142,8 @@ Bloques Neutro 100 (claro) / `#292833` (oscuro) con pulso de opacidad de 1.5 s, 
 ### 4.1 Formularios
 
 Validación en `blur` y en submit, nunca al tipear la primera letra. Errores concretos y accionables junto al campo; el CTA no se deshabilita por errores — al tocarlo, lleva el foco al primer campo inválido (un botón deshabilitado no explica nada). Al guardar con éxito: cerrar el sheet + toast. Los formularios del MVP caben en una pantalla de sheet; si un formulario necesita pasos, se rediseña el formulario.
+
+**Única excepción a lo de los pasos: el wizard de creación de organización** (HU1.1, F0.5). No es un formulario de acción dentro de un sheet sino el onboarding, y la historia de usuario pide tres pasos explícitamente. La regla del CTA sigue valiendo igual: no se deshabilita, y al tocarlo salta al paso del primer campo inválido y le lleva el foco.
 
 ### 4.2 Montos, fechas y períodos
 

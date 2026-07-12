@@ -1,7 +1,9 @@
 # Ritma — Especificación de color
 
 > Documento normativo. Operacionaliza la paleta definida en la Especificación de marca (§6) para producto y comunicaciones.
-> Versión 1.1 · Julio 2026 · Todos los ratios de contraste fueron calculados según WCAG 2.1.
+> Versión 1.2 · Julio 2026 · Todos los ratios de contraste fueron calculados según WCAG 2.1.
+
+> **Cambios de la 1.2** (F0.5, al construir la navegación): se agrega el par `nav-active-bg` / `nav-active-text` para el ítem activo de la navegación. Componentes §3.6 lo definía como "fondo Violeta 50 y texto `primary`", que solo funciona en modo claro: en oscuro, `primary` (Violeta 300) sobre cualquier fondo violeta reprueba AA (4.19:1 sobre Violeta 900). Sin colores nuevos.
 
 > **Cambios de la 1.1** (F0.2, al implementar los tokens): se nombran los tokens de los cinco estados de cuota (§5 definía las recetas pero §8 solo tenía tres); se agrega el par `destructive` / `on-destructive` para superficies destructivas sólidas; se corrige el uso de Neutro 400 como placeholder (2.15:1, no pasa AA); se documenta la colisión de `accent` con shadcn/ui. No se agregó ni un color nuevo: todos los valores salen de las escalas de §3.
 
@@ -108,8 +110,11 @@ Los componentes consumen tokens, nunca stops directos. Definición por modo:
 | `focus-ring` | Violeta 400 | Violeta 300 |
 | `success / warning / danger` | Verde 700 / Ámbar 800 / Rojo 600 | Verde 300 / Ámbar 300 / Rojo 300 |
 | `destructive` / `on-destructive` | Rojo 600 / Blanco | Rojo 600 / Blanco (no cambian) |
+| `nav-active-bg` / `nav-active-text` | Violeta 50 / Violeta 600 | Violeta 900 / Violeta 200 |
 
 Nota del botón primario en oscuro: fondo Violeta 300 con texto Tinta oscura (5.47:1) — no blanco, que quedaría por debajo de AA.
+
+Nota de `nav-active-*`: en claro es lo que pide Componentes §3.6 (fondo Violeta 50, texto `primary`, 5.73:1). En oscuro **el texto no es `primary`**: Violeta 300 sobre Violeta 900 da 4.19:1 y no llega a AA, igual que cualquier fondo violeta translúcido. Con Violeta 200 el par da 8.21:1 y el violeta sigue siendo la señal de "seleccionado". Es el mismo patrón (fondo + texto por modo) que las recetas de §5.
 
 Nota de `destructive`: es el único token que no cambia entre modos. `danger` es color de **texto** y por eso sube a Rojo 300 en oscuro (§7.2); una superficie destructiva sólida no puede usarlo, porque Rojo 300 con texto blanco no llega a AA. El botón destructivo es Rojo 600 con blanco en los dos modos (4.77:1), que es lo que ya pedían Componentes §3.1 y §9.5 de este documento. Su hover es Rojo 700 (6.34:1).
 
@@ -137,7 +142,11 @@ Aprobados solo para texto grande, íconos y gráficos (≥ 3:1): Coral 500/blanc
 
 Verificados en F0.2, al implementar los componentes: blanco/Rojo 700 6.34 (hover del botón destructivo) · Neutro 600/blanco 6.39 (placeholders) · `#A5A29A`/`#292833` 5.70 (badge pendiente en oscuro, el "≥ 4.5" de §5) · Violeta 300/Tinta oscura 5.47 (anillo de foco en oscuro, ≥ 3).
 
+Verificados en F0.5 (navegación): Violeta 600/Violeta 50 5.73 (ítem activo, claro) · Violeta 200/Violeta 900 8.21 (ítem activo, oscuro).
+
 **Reprobados, no usar como texto sobre fondos claros:** Neutro 400/blanco 2.15 · Neutro 500/blanco 3.60.
+
+**Reprobados en oscuro (por eso `nav-active-text` no es `primary`):** Violeta 300/Violeta 900 4.19 · Violeta 300 sobre `primary` al 10 % 4.30 · Violeta 300/`#292833` 4.42.
 
 Regla operativa: cualquier combinación nueva se verifica antes de usarse (el script `contrast.js` vive en el repo, en `/tools`).
 
@@ -174,6 +183,8 @@ Regla operativa: cualquier combinación nueva se verifica antes de usarse (el sc
   --state-paid-bg:    #D3EDE0; --state-paid-text:    #115A39;
   --state-overdue-bg: #F8D6D6; --state-overdue-text: #B03030;
   --state-waived-bg:  #EDEAFB; --state-waived-text:  #4A3DB8;
+  /* Ítem activo de la navegación (Componentes §3.6) */
+  --nav-active-bg: #F6F4FD;    --nav-active-text: #5A4BD1;
   --muted: #F4F2ED;                                    /* fondo de hover neutro */
   --elevation-float: 0 8px 24px rgba(23, 22, 29, 0.12);
 }
@@ -192,6 +203,7 @@ Regla operativa: cualquier combinación nueva se verifica antes de usarse (el sc
   --state-paid-bg:    #0F3524; --state-paid-text:    #7CC9A4;
   --state-overdue-bg: #3C1414; --state-overdue-text: #EE9A9A;
   --state-waived-bg:  #2A2268; --state-waived-text:  #C9C2F6;
+  --nav-active-bg: #2A2268;    --nav-active-text: #C9C2F6;   /* NO primary: no llegaría a AA */
   --muted: #292833;
   --elevation-float: none;     /* en oscuro la superficie se aclara, no se le agrega sombra */
 }
