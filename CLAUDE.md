@@ -62,6 +62,27 @@ ritma/
   tests/e2e/             ← Playwright
 ```
 
+## Autenticación (desde F0.4)
+
+- **Better Auth maneja identidad y sesión, y nada más.** La tenencia (qué organización, con
+  qué rol) sale de `Organization` y `Membership`, que son la única fuente de verdad. **No
+  usamos su plugin de organizaciones.**
+- [`src/lib/auth.ts`](src/lib/auth.ts) es el contrato: `getSession()` (devuelve `null` si no
+  hay) y `requireSession()` (redirige a `/login`). Los dos exponen `userId` y `activeOrgId`.
+- `activeOrgId` es la primera membresía del usuario, o `null` si todavía no tiene ninguna. Se
+  recalcula en cada `getSession()` con el plugin `customSession`, así que nunca queda una org
+  vieja pegada a la sesión. **Es contexto, no autorización**: que la sesión traiga un `orgId`
+  no prueba que el usuario siga siendo miembro — eso lo revalida `withOrg` (F0.6).
+- **La guardia real vive en el layout de `(app)`** (`requireSession()`), no en el proxy:
+  `src/proxy.ts` solo mira si existe la cookie (corre en Edge y no puede tocar la base). Cero
+  lógica de negocio ahí.
+- Al correr `npx @better-auth/cli generate`: **reescribe `prisma/schema.prisma`** y le mete
+  `@@map("user")` y compañía. Sacale los `@@map` (renombran las tablas a minúscula sin
+  necesidad) y revisá el diff completo antes de migrar.
+- `BETTER_AUTH_URL` tiene que coincidir con el origen que sirve la app, o Better Auth
+  responde `INVALID_ORIGIN`. Sin `GOOGLE_CLIENT_ID`/`SECRET`, el botón de Google no se
+  muestra y el resto anda igual.
+
 ## Base de datos (desde F0.3)
 
 - **Prisma 7, y no es el Prisma de los tutoriales.** El driver adapter es obligatorio, el

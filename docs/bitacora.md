@@ -43,3 +43,17 @@ retomar después de una semana sin tocar el proyecto (Plan de implementación §
   credenciales de base. Se esquivó leyendo `process.env` y dejando el `datasource` condicional.
 - **Próximo:** F0.4 — Better Auth (email+contraseña y Google), páginas de login/registro con los
   componentes de F0.2, y sesión con `activeOrgId`.
+
+## Semana 4 (julio 2026) — autenticación
+
+- **Hecho:** F0.3 mergeado a `main` (squash). F0.4 en `feat/f0-4-auth`: Better Auth con adapter
+  de Prisma (sus tablas Session/Account/Verification migradas en Neon), login y registro con los
+  componentes de F0.2, Google detrás de un chequeo de env vars, `activeOrgId` en la sesión vía
+  `customSession`, protección de rutas (proxy optimista + `requireSession()` en el layout de
+  `(app)`), logout, y el seed con contraseña de desarrollo para los dos owners.
+- **Trabado:** nada bloqueante. Dos cosas para tener presentes: el CLI de Better Auth reescribe
+  `schema.prisma` y le agrega `@@map("user")` —que habría renombrado nuestra tabla `User` a
+  minúscula, con datos adentro—, así que hay que revisar su diff siempre; y `BETTER_AUTH_URL`
+  tiene que coincidir con el origen que sirve la app o todo responde `INVALID_ORIGIN`.
+- **Próximo:** F0.5 — wizard de creación de organización (3 pasos, HU1.1–1.2) y shell de `(app)`
+  con bottom nav, app bar y sidebar en `md`.
