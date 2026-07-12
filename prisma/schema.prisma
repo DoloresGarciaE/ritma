@@ -1,9 +1,20 @@
-// Ritma — schema v1: el núcleo multi-tenant (Plan de proyecto §7).
-// Todo dato de negocio cuelga de una Organization. Los modelos del dominio
-// (Student, ClassGroup, Charge, Payment…) llegan en sus bloques del plan.
+// Ritma — schema v1: el núcleo multi-tenant (Plan de proyecto §7) + las tablas de
+// identidad de Better Auth (F0.4).
+//
+// Reparto de responsabilidades: Better Auth es dueño de User, Session, Account y
+// Verification (identidad y sesión). La tenencia —qué organización, con qué rol— es
+// nuestra: vive en Organization y Membership, y es la única fuente de verdad. Por eso
+// no usamos su plugin de organizaciones.
+//
+// Los modelos del dominio (Student, ClassGroup, Charge, Payment…) llegan en sus bloques.
 //
 // Prisma 7: la URL de la base NO se declara acá. El CLI la toma de prisma.config.ts
 // (DIRECT_URL) y la app la pasa por el driver adapter (DATABASE_URL, pooled).
+//
+// OJO al correr `npx @better-auth/cli generate`: reescribe este archivo y le agrega
+// `@@map("user")` y compañía, que renombrarían las tablas a minúscula. Las sacamos: su
+// adapter habla con los MODELOS de Prisma, no con los nombres de tabla, así que el @@map
+// no le aporta nada y nos dejaría medio schema en PascalCase y medio en minúscula.
 
 generator client {
   provider     = "prisma-client"
@@ -45,14 +56,19 @@ model Organization {
 
 /// Persona con cuenta y login. Puede pertenecer a varias organizaciones.
 /// Los alumnos NO son usuarios: son datos de la organización (Plan §3).
+/// emailVerified e image los agrega Better Auth.
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id            String   @id @default(cuid())
+  email         String   @unique
+  name          String
+  emailVerified Boolean  @default(false)
+  image         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   memberships Membership[]
+  sessions    Session[]
+  accounts    Account[]
 }
 
 /// Vínculo usuario ↔ organización con un rol (Plan §4).
@@ -66,7 +82,56 @@ model Membership {
   user User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   org  Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
-  @@id([userId, orgId])
   // La PK compuesta ya indexa por userId; §7 pide índice por orgId en toda tabla.
+  @@id([userId, orgId])
   @@index([orgId])
+}
+
+/// Better Auth. Los ids de sus tablas los genera la librería, por eso no llevan @default.
+model Session {
+  id        String   @id
+  token     String   @unique
+  expiresAt DateTime
+  ipAddress String?
+  userAgent String?
+  userId    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+/// Better Auth: credenciales locales (providerId "credential") y cuentas OAuth.
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+/// Better Auth: tokens de verificación de email y de reseteo de contraseña.
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
 }
