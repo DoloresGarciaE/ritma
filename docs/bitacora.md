@@ -57,3 +57,20 @@ retomar después de una semana sin tocar el proyecto (Plan de implementación §
   tiene que coincidir con el origen que sirve la app o todo responde `INVALID_ORIGIN`.
 - **Próximo:** F0.5 — wizard de creación de organización (3 pasos, HU1.1–1.2) y shell de `(app)`
   con bottom nav, app bar y sidebar en `md`.
+
+## Semana 5 (julio 2026) — organización y shell
+
+- **Hecho:** F0.4 mergeado a `main` (squash). F0.5 en `feat/f0-5-org-shell`: modelo `Discipline`,
+  wizard de 3 pasos en `/crear-organizacion` (server action con Zod, creación atómica de org +
+  membresía OWNER + disciplinas), shell de `(app)` con bottom nav, sidebar con el logotipo y app
+  bar, y las rutas placeholder con sus estados vacíos. El DoD de la Fase 0 queda a un paso: se
+  recorre registro → wizard → dashboard con el CTA. Medido en un navegador de verdad: **2,6 s**
+  de punta a punta (HU1.1 pedía menos de 2 minutos).
+- **Trabado:** nada bloqueante, pero aparecieron dos cosas feas. Una, que en F0.4 escribí que el
+  Proxy de Next corre en Edge: **es falso**, corre en Node. La conclusión (no autorizar ahí)
+  seguía siendo la correcta, pero el motivo estaba mal y quedó corregido en CLAUDE.md y en §10.
+  Dos, el riesgo real del bloque no era la base sino el **cache del router del cliente**, que
+  podía dejar al usuario rebotando entre el wizard y el dashboard; se resuelve con
+  `revalidatePath("/", "layout")` antes del redirect, y quedó verificado que no rebota.
+- **Próximo:** F0.6 — `withOrg`, permisos por rol y los tests de aislamiento entre organizaciones.
+  Es el bloque más importante de la fase.

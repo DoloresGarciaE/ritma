@@ -56,7 +56,9 @@ ritma/
     app/                 ← rutas: (auth)/, (app)/{dashboard,agenda,alumnos,cobranzas,estudio,ajustes},
                            r/[token]/ (comprobante público), api/cron/*
     components/ui/       ← componentes shadcn según Especificación de componentes
+    components/brand/    ← logotipo e isotipo (SVG inline con tokens)
     lib/                 ← auth, db (withOrg), permisos, whatsapp, receipts
+    server/              ← queries org-scoped (reciben el orgId explícito)
     server/services/     ← lógica de negocio pura (RN1–RN10), con tests
   tools/                 ← contrast.js y scripts de apoyo
   tests/e2e/             ← Playwright
@@ -73,15 +75,36 @@ ritma/
   recalcula en cada `getSession()` con el plugin `customSession`, así que nunca queda una org
   vieja pegada a la sesión. **Es contexto, no autorización**: que la sesión traiga un `orgId`
   no prueba que el usuario siga siendo miembro — eso lo revalida `withOrg` (F0.6).
-- **La guardia real vive en el layout de `(app)`** (`requireSession()`), no en el proxy:
-  `src/proxy.ts` solo mira si existe la cookie (corre en Edge y no puede tocar la base). Cero
-  lógica de negocio ahí.
+- **La guardia real vive en el layout de `(app)`** (`requireSession()` + organización), no en el
+  proxy. `src/proxy.ts` solo mira si existe la cookie. Ojo: **el Proxy de Next 16 corre en Node,
+  no en Edge** —podría tocar la base— pero no lo hace a propósito, porque corre en toda request
+  que matchea (incluidos los prefetch de los `<Link>` del shell) y el layout ya lee la base.
+  Cero lógica de negocio ahí.
 - Al correr `npx @better-auth/cli generate`: **reescribe `prisma/schema.prisma`** y le mete
   `@@map("user")` y compañía. Sacale los `@@map` (renombran las tablas a minúscula sin
   necesidad) y revisá el diff completo antes de migrar.
 - `BETTER_AUTH_URL` tiene que coincidir con el origen que sirve la app, o Better Auth
   responde `INVALID_ORIGIN`. Sin `GOOGLE_CLIENT_ID`/`SECRET`, el botón de Google no se
   muestra y el resto anda igual.
+
+## Organización y shell (desde F0.5)
+
+- **Sin organización no hay app.** El layout de `(app)` exige sesión **y** `activeOrgId`; sin
+  org manda a `/crear-organizacion` (que vive en `(onboarding)`, fuera de `(app)`, para que las
+  dos guardias no se peleen).
+- Después de crear la organización, la server action hace **`revalidatePath("/", "layout")`
+  antes del `redirect`**. No es decorativo: purga el cache del router del cliente, que si no
+  puede tener guardado un `/dashboard` de cuando no había org (o sea: "andá al wizard") y te
+  deja rebotando entre las dos pantallas para siempre.
+- Las queries org-scoped viven en `src/server/` y reciben el `orgId` **explícito**, sacado de la
+  sesión. `withOrg` (F0.6) las va a absorber.
+- La bottom nav son **cinco ítems fijos** (Componentes §3.6). No se agregan ni se reordenan sin
+  actualizar esa spec. "Más" agrupa Estudio y Ajustes.
+- En una organización independiente no se muestra **nada** de estudio: ni el link en `/mas`, ni
+  la palabra en el payload; `/estudio` devuelve 404 (no redirect: un redirect confirmaría que la
+  ruta existe).
+- La app bar la compone **cada página** (`<AppBar title=… />`), no el layout: así el título puede
+  salir de los datos y cada pantalla trae su propia acción.
 
 ## Base de datos (desde F0.3)
 
