@@ -87,8 +87,10 @@ ritma/
 - [x] Primera migración + `seed.ts` con las dos organizaciones de los casos de uso del Plan.
 
 ### F0.4 — Autenticación (1–2 sesiones)
-- [ ] Better Auth: email+contraseña y Google; páginas login/registro con los componentes de F0.2.
-- [ ] Sesión con `activeOrgId`; middleware que protege el grupo de rutas `(app)`.
+- [x] Better Auth: email+contraseña y Google; páginas login/registro con los componentes de F0.2.
+- [x] Sesión con `activeOrgId`; middleware que protege el grupo de rutas `(app)`.
+      (En Next 16 el middleware se llama Proxy, y solo hace el chequeo optimista de la cookie:
+      la guardia real es `requireSession()` en el layout de `(app)`.)
 
 ### F0.5 — Organización y shell (1–2 sesiones)
 - [ ] Wizard de creación de org (3 pasos, Plan HU1.1–1.2): nombre, tipo, disciplinas; defaults ARS / vencimiento 10 / zona horaria AR.
