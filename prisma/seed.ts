@@ -1,113 +1,111 @@
-import { PrismaPg } from "@prisma/adapter-pg";
 import { config as loadEnv } from "dotenv";
-
-import { PrismaClient } from "../src/generated/prisma/client";
 
 /**
  * Seed idempotente: se puede correr todas las veces que haga falta sin duplicar
  * nada. Siembra las dos organizaciones de los casos de uso del Plan (§2, §3):
  * una profe independiente y un estudio con varios profes.
  *
- * No usa el singleton de src/lib/db.ts a propósito: ese apunta a la conexión
- * pooled y nunca hace $disconnect(), así que dejaría el proceso colgado.
+ * Los dos owners quedan con una contraseña de DESARROLLO (ver README) para poder
+ * entrar a la app. El hash lo hace Better Auth: acá no se inventa nada de auth.
  */
 
 // `prisma db seed` ya hereda las variables que cargó prisma.config.ts, pero esto
 // permite correr `tsx prisma/seed.ts` a mano.
 loadEnv({ path: [".env.local", ".env"], quiet: true });
 
-const connectionString = process.env.DIRECT_URL ?? process.env.DATABASE_URL;
+/** Solo para desarrollo. En producción nadie se registra por acá. */
+const DEV_PASSWORD = "ritma-dev-2026";
 
-if (!connectionString) {
-  throw new Error("Falta DIRECT_URL (o DATABASE_URL) para correr el seed.");
-}
-
-const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
-
-// Ids estables: son la clave de la idempotencia del upsert de organizaciones,
-// que no tiene ningún otro campo único.
 const ORG_INDEPENDIENTE = "seed_org_independiente";
 const ORG_ESTUDIO = "seed_org_estudio";
 
+const SEED_USERS = [
+  { email: "malena@example.com", name: "Malena Ríos", orgId: ORG_INDEPENDIENTE },
+  { email: "carla@example.com", name: "Carla Duarte", orgId: ORG_ESTUDIO },
+];
+
 async function main() {
-  // Caso 1 — profe independiente: trabaja sola, es dueña y docente de su org.
-  const malena = await prisma.user.upsert({
-    where: { email: "malena@example.com" },
-    update: { name: "Malena Ríos" },
-    create: { email: "malena@example.com", name: "Malena Ríos" },
-  });
+  // Import dinámico y no estático: db.ts y auth.ts leen process.env al importarse,
+  // así que tienen que cargarse DESPUÉS de dotenv (los import se hoistean).
+  const { db } = await import("../src/lib/db");
+  const { auth } = await import("../src/lib/auth");
 
-  const danzasMalena = await prisma.organization.upsert({
-    where: { id: ORG_INDEPENDIENTE },
-    update: { name: "Danzas Malena" },
-    create: {
-      id: ORG_INDEPENDIENTE,
-      name: "Danzas Malena",
-      type: "INDEPENDENT",
-      // currency, timezone y dueDay quedan en los defaults del schema (ARS,
-      // America/Argentina/Buenos_Aires, 10) — son los defaults de HU1.2.
-    },
-  });
-
-  // Caso 2 — estudio: la dueña administra, y más adelante suma profes staff y externos.
-  const carla = await prisma.user.upsert({
-    where: { email: "carla@example.com" },
-    update: { name: "Carla Duarte" },
-    create: { email: "carla@example.com", name: "Carla Duarte" },
-  });
-
-  const estudioCompas = await prisma.organization.upsert({
-    where: { id: ORG_ESTUDIO },
-    update: { name: "Estudio Compás" },
-    create: {
-      id: ORG_ESTUDIO,
-      name: "Estudio Compás",
-      type: "STUDIO",
-    },
-  });
-
-  for (const { userId, orgId } of [
-    { userId: malena.id, orgId: danzasMalena.id },
-    { userId: carla.id, orgId: estudioCompas.id },
-  ]) {
-    await prisma.membership.upsert({
-      where: { userId_orgId: { userId, orgId } },
-      update: { role: "OWNER" },
-      create: { userId, orgId, role: "OWNER" },
+  try {
+    await db.organization.upsert({
+      where: { id: ORG_INDEPENDIENTE },
+      update: { name: "Danzas Malena" },
+      create: {
+        id: ORG_INDEPENDIENTE,
+        name: "Danzas Malena",
+        type: "INDEPENDENT",
+        // currency, timezone y dueDay quedan en los defaults del schema
+        // (ARS, America/Argentina/Buenos_Aires, 10): son los de HU1.2.
+      },
     });
+
+    await db.organization.upsert({
+      where: { id: ORG_ESTUDIO },
+      update: { name: "Estudio Compás" },
+      create: { id: ORG_ESTUDIO, name: "Estudio Compás", type: "STUDIO" },
+    });
+
+    for (const { email, name, orgId } of SEED_USERS) {
+      const existing = await db.user.findUnique({
+        where: { email },
+        include: { accounts: { where: { providerId: "credential" } } },
+      });
+
+      // El seed de F0.3 creó estos usuarios sin contraseña. Los borramos para que
+      // Better Auth los cree de nuevo con su credencial (las membresías caen por
+      // cascada y se vuelven a crear abajo). Idempotente: si ya tienen credencial,
+      // no se toca nada.
+      if (existing && existing.accounts.length === 0) {
+        await db.user.delete({ where: { id: existing.id } });
+      }
+
+      if (!existing || existing.accounts.length === 0) {
+        await auth.api.signUpEmail({ body: { email, name, password: DEV_PASSWORD } });
+      }
+
+      const user = await db.user.findUniqueOrThrow({ where: { email } });
+
+      await db.membership.upsert({
+        where: { userId_orgId: { userId: user.id, orgId } },
+        update: { role: "OWNER" },
+        create: { userId: user.id, orgId, role: "OWNER" },
+      });
+    }
+
+    const orgs = await db.organization.findMany({
+      orderBy: { name: "asc" },
+      include: { memberships: { include: { user: { include: { accounts: true } } } } },
+    });
+
+    console.log("\nOrganizaciones sembradas:\n");
+    console.table(
+      orgs.flatMap((org) =>
+        org.memberships.map((m) => ({
+          org: org.name,
+          tipo: org.type,
+          usuario: m.user.name,
+          email: m.user.email,
+          rol: m.role,
+          "puede entrar": m.user.accounts.some((a) => a.providerId === "credential") ? "sí" : "no",
+        })),
+      ),
+    );
+    console.log(
+      `Totales — organizaciones: ${await db.organization.count()} · ` +
+        `usuarios: ${await db.user.count()} · ` +
+        `membresías: ${await db.membership.count()}\n` +
+        `Contraseña de desarrollo: ${DEV_PASSWORD}\n`,
+    );
+  } finally {
+    await db.$disconnect();
   }
-
-  const orgs = await prisma.organization.findMany({
-    orderBy: { name: "asc" },
-    include: { memberships: { include: { user: true } } },
-  });
-
-  console.log("\nOrganizaciones sembradas:\n");
-  console.table(
-    orgs.flatMap((org) =>
-      org.memberships.map((m) => ({
-        org: org.name,
-        tipo: org.type,
-        moneda: org.currency,
-        vencimiento: org.dueDay,
-        usuario: m.user.name,
-        email: m.user.email,
-        rol: m.role,
-      })),
-    ),
-  );
-  console.log(
-    `Totales — organizaciones: ${await prisma.organization.count()} · ` +
-      `usuarios: ${await prisma.user.count()} · ` +
-      `membresías: ${await prisma.membership.count()}\n`,
-  );
 }
 
-main()
-  .catch((error) => {
-    console.error(error);
-    process.exitCode = 1;
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+main().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});
