@@ -4,6 +4,7 @@ import { nextCookies } from "better-auth/next-js";
 import { customSession } from "better-auth/plugins";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { cache } from "react";
 
 import { db } from "@/lib/db";
 
@@ -85,8 +86,14 @@ export type RitmaSession = {
   activeOrgId: string | null;
 };
 
-/** La sesión actual, o `null` si no hay. No redirige: úsalo cuando la sesión es opcional. */
-export async function getSession(): Promise<RitmaSession | null> {
+/**
+ * La sesión actual, o `null` si no hay. No redirige: úsalo cuando la sesión es opcional.
+ *
+ * Va con `cache()` de React porque en cada request la piden el layout y la página: sin
+ * esto, cada pantalla paga dos veces la query de sesión y la de membresía. El cache es
+ * por request, así que no puede servir datos viejos.
+ */
+export const getSession = cache(async (): Promise<RitmaSession | null> => {
   const session = await auth.api.getSession({ headers: await headers() });
 
   if (!session) return null;
@@ -97,7 +104,7 @@ export async function getSession(): Promise<RitmaSession | null> {
     email: session.user.email,
     activeOrgId: session.activeOrgId,
   };
-}
+});
 
 /**
  * La sesión actual; si no hay, manda a /login. Es la guardia real de las rutas
