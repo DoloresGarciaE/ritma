@@ -98,9 +98,10 @@ ritma/
 - [x] Shell `(app)`: bottom nav de 5 ítems (Componentes §3.6), app bar, rutas placeholder, sidebar en `md`.
 
 ### F0.6 — Scoping y permisos (1 sesión, la más importante)
-- [ ] Helper `withOrg` en `lib/db`: toda query de negocio pasa por él; regla de lint o convención que prohíbe `prisma.*` directo fuera de `lib` y `server`.
-- [ ] Capa de permisos por rol (`owner`/`admin`/`teacher`) en `server/services`.
-- [ ] **Tests de aislamiento**: un usuario de la org A no lee/escribe datos de la org B; un teacher no accede a grupos ajenos. Corren en CI para siempre.
+- [x] Helper `withOrg` en `lib/db`: toda query de negocio pasa por él; regla de ESLint (`no-restricted-imports`) que prohíbe el `db` crudo fuera de `lib`. (Más estricto que "fuera de `lib` y `server`": `server/` también usa `withOrg`.)
+- [x] Capa de permisos por rol (`owner`/`admin`/`teacher`): matriz pura en `server/services/permissions.ts`; resolvers `requireMember`/`requireRole` en `server/authz.ts`.
+- [x] **Tests de aislamiento** (Vitest contra Postgres real, en Docker): un usuario de la org A no lee/escribe datos de la org B (probado con `Discipline` y `Membership`); sin membresía toda operación falla; un `teacher` no pasa un chequeo de owner/admin; el wizard crea org+membresía+disciplinas atómicamente. El harness mapea 1:1 a CI (se conecta en F0.7).
+  - **Diferido a S2:** "un teacher no accede a grupos ajenos" necesita `ClassGroup`/`Enrollment`, que no existen hasta S2/S3 (y F0.6 no crea modelos nuevos). El punto de extensión queda listo (`scopeOf`); el test se escribe cuando llega el modelo.
 
 ### F0.7 — CI/CD y observabilidad (1 sesión)
 - [ ] GitHub Actions: lint + typecheck + Vitest en cada PR; Playwright en `main`.

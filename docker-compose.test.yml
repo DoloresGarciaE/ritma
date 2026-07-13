@@ -1,0 +1,26 @@
+# Postgres de TEST. Efímero a propósito: sin volumen persistente (tmpfs), la base se
+# recrea con el contenedor. La misma imagen y el mismo mapeo de puerto que va a usar el
+# job de CI en F0.7, así el harness no cambia entre local y CI.
+name: ritma-test
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ritma
+      POSTGRES_PASSWORD: ritma
+      # El sufijo _test es parte de la guarda de seguridad (ver tests/db.ts).
+      POSTGRES_DB: ritma_test
+    ports:
+      # 55432, NO 5432: si hay un Postgres local, no se pisan.
+      - "55432:5432"
+    # Base de test = datos descartables. En tmpfs vuela y no toca el disco.
+    tmpfs:
+      - /var/lib/postgresql/data
+    command: >
+      postgres -c fsync=off -c full_page_writes=off -c synchronous_commit=off
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ritma -d ritma_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 15

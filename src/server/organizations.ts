@@ -2,14 +2,14 @@ import "server-only";
 
 import { cache } from "react";
 
-import { db } from "@/lib/db";
+import { withOrg } from "@/lib/db";
 
 /**
- * Queries de organización.
- *
- * El `orgId` se recibe SIEMPRE explícito, y sale del `activeOrgId` de la sesión: nunca
- * de la URL ni de un input. En F0.6 llega `withOrg` y absorbe este scoping — hasta
- * entonces, esto es lo único que toca `prisma.*` fuera de `src/lib/`.
+ * Queries de organización, todas acotadas con `withOrg` (F0.6): el `orgId` se recibe
+ * explícito —sale del `activeOrgId` de la sesión, nunca de la URL ni de un input— y el
+ * cliente lo inyecta en cada query. La guardia de membresía la hace `requireMember` en el
+ * layout de `(app)`; acá el aislamiento es defensa en profundidad: con un `orgId` ajeno,
+ * estas queries no devuelven nada.
  */
 
 export type ShellOrganization = {
@@ -24,15 +24,14 @@ export type ShellOrganization = {
  */
 export const getShellOrganization = cache(
   async (orgId: string): Promise<ShellOrganization | null> =>
-    db.organization.findUnique({
+    withOrg(orgId).organization.findUnique({
       where: { id: orgId },
       select: { id: true, name: true, type: true },
     }),
 );
 
 export const getDisciplines = cache(async (orgId: string) =>
-  db.discipline.findMany({
-    where: { orgId },
+  withOrg(orgId).discipline.findMany({
     orderBy: { name: "asc" },
     select: { id: true, name: true },
   }),

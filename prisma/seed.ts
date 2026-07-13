@@ -20,9 +20,12 @@ const ORG_INDEPENDIENTE = "seed_org_independiente";
 const ORG_ESTUDIO = "seed_org_estudio";
 
 const SEED_USERS = [
-  { email: "malena@example.com", name: "Malena Ríos", orgId: ORG_INDEPENDIENTE },
-  { email: "carla@example.com", name: "Carla Duarte", orgId: ORG_ESTUDIO },
-];
+  { email: "malena@example.com", name: "Malena Ríos", orgId: ORG_INDEPENDIENTE, role: "OWNER" },
+  { email: "carla@example.com", name: "Carla Duarte", orgId: ORG_ESTUDIO, role: "OWNER" },
+  // Staff del estudio: un profe (TEACHER) para que los tests de roles y la matriz §4 tengan
+  // datos realistas (owner ≠ teacher). En la org independiente el owner es el único profe.
+  { email: "sofia@example.com", name: "Sofía Herrera", orgId: ORG_ESTUDIO, role: "TEACHER" },
+] as const;
 
 /** Disciplinas de cada org. El unique [orgId, name] las hace idempotentes. */
 const SEED_DISCIPLINES: Record<string, string[]> = {
@@ -55,7 +58,7 @@ async function main() {
       create: { id: ORG_ESTUDIO, name: "Estudio Compás", type: "STUDIO" },
     });
 
-    for (const { email, name, orgId } of SEED_USERS) {
+    for (const { email, name, orgId, role } of SEED_USERS) {
       const existing = await db.user.findUnique({
         where: { email },
         include: { accounts: { where: { providerId: "credential" } } },
@@ -77,8 +80,8 @@ async function main() {
 
       await db.membership.upsert({
         where: { userId_orgId: { userId: user.id, orgId } },
-        update: { role: "OWNER" },
-        create: { userId: user.id, orgId, role: "OWNER" },
+        update: { role },
+        create: { userId: user.id, orgId, role },
       });
     }
 

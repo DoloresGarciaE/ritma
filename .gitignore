@@ -34,6 +34,8 @@ yarn-error.log*
 .env*
 # ...except the versioned template (Plan §5): real secrets stay in .env.local / Vercel.
 !.env.example
+# ...and .env.test: solo credenciales de un Postgres local y descartable (F0.6), sin secretos.
+!.env.test
 
 # vercel
 .vercel

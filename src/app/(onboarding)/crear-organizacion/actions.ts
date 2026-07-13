@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { requireSession } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { createOrganizationWithOwner } from "@/lib/db";
 
 import {
   createOrgSchema,
@@ -38,24 +38,15 @@ export async function createOrganization(
     ...new Map(disciplines.map((d) => [d.toLowerCase(), normalizeDiscipline(d)])).values(),
   ];
 
-  // Una escritura anidada es UNA transacción (BEGIN…COMMIT sobre una sola conexión). No
-  // usamos $transaction interactiva: mantendría la conexión tomada entre round-trips, y
-  // contra el pooler de Neon eso es buscar problemas.
-  // La moneda, el día de vencimiento y la zona horaria salen de los defaults del schema
-  // (ARS, 10, America/Argentina/Buenos_Aires — HU1.2).
-  await db.organization.create({
-    data: {
-      name,
-      type,
-      memberships: { create: { userId: session.userId, role: "OWNER" } },
-      disciplines: {
-        createMany: {
-          data: uniqueDisciplines.map((discipline) => ({ name: discipline })),
-          skipDuplicates: true,
-        },
-      },
-    },
-    select: { id: true },
+  // La creación del tenant vive en `src/lib/db.ts` (no puede pasar por `withOrg`: todavía
+  // no hay orgId). Es una escritura anidada = UNA transacción: si algo falla, no queda
+  // nada a medio crear. La moneda, el día de vencimiento y la zona horaria salen de los
+  // defaults del schema (ARS, 10, America/Argentina/Buenos_Aires — HU1.2).
+  await createOrganizationWithOwner({
+    ownerId: session.userId,
+    name,
+    type,
+    disciplines: uniqueDisciplines,
   });
 
   // El servidor ya ve la organización nueva (activeOrgId se recalcula en cada

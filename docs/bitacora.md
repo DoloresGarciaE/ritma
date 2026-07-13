@@ -74,3 +74,26 @@ retomar después de una semana sin tocar el proyecto (Plan de implementación §
   `revalidatePath("/", "layout")` antes del redirect, y quedó verificado que no rebota.
 - **Próximo:** F0.6 — `withOrg`, permisos por rol y los tests de aislamiento entre organizaciones.
   Es el bloque más importante de la fase.
+
+## Semana 6 (julio 2026) — scoping y permisos
+
+- **Hecho:** F0.5 mergeado a `main` (por PR, no squash). F0.6 en `feat/f0-6-scoping`: `withOrg(orgId)`
+  en `src/lib/db.ts` (cliente Prisma acotado por organización vía `$extends`, con un mapa
+  `Record<Prisma.ModelName>` que no compila si se agrega un modelo sin clasificar); regla de ESLint
+  que prohíbe el `db` crudo fuera de `src/lib/`; matriz de permisos §4 como función pura en
+  `server/services/permissions.ts` y los resolvers `requireMember`/`requireRole` en `server/authz.ts`;
+  refactor de todas las queries a `withOrg` (grep de Prisma crudo fuera de `lib` = cero); y **53 tests**
+  de Vitest contra un Postgres real en Docker (aislamiento org×org, sin-membresía, roles, atomicidad
+  del wizard). Seed con una profe TEACHER en el estudio.
+- **Trabado:** nada bloqueante, pero el diseño tuvo que blindarse contra tres fugas reales de la
+  extensión de Prisma (verificadas contra la base): las escrituras **anidadas** no disparan el hook del
+  hijo, `upsert` con `orgId` ajeno **cae al CREATE** en vez de tirar, y `$queryRaw` no pasa por el hook.
+  Se cubren con convención (escrituras de negocio por funciones explícitas, cero SQL crudo fuera de
+  `lib`) + tests. Elegí **Docker local** para la base de test, no un branch de Neon: la URL de Neon es
+  idéntica en forma a la de prod, así que un typo apunta a producción sin que ninguna validación lo
+  note; la guarda de `tests/db.ts` (4 capas, con tabla centinela) hace imposible truncar la base que no
+  es. Dos decisiones de la matriz §4 quedaron anotadas para confirmar: owner y admin tienen permisos
+  idénticos (así está en la spec), y el scope fino de teacher se difiere a S2 (no hay modelos todavía).
+- **Próximo:** F0.7 — CI/CD (GitHub Actions: lint + typecheck + Vitest en cada PR, con el service de
+  Postgres que ya mapea el harness de hoy) y observabilidad (Sentry), más el cableado Vercel↔Git. Cierra
+  la Fase 0.

@@ -30,8 +30,8 @@ propone actualizar la spec **en el mismo PR** — nunca divergen en silencio.
 ## Reglas no negociables
 
 1. **Las specs son normativas.** Ver arriba. Toda contradicción se resuelve, no se ignora.
-2. **Multi-tenancy:** toda query de negocio pasa por el helper `withOrg` (llega en F0.6).
-   Prohibido usar `prisma.*` directo fuera de `src/lib/` y `src/server/`.
+2. **Multi-tenancy:** toda query de negocio pasa por el helper `withOrg(orgId)` (F0.6). El
+   cliente crudo `db` solo se importa dentro de `src/lib/` (lo hace cumplir ESLint).
 3. **La lógica de negocio vive en `src/server/services/`** como funciones puras (reciben
    datos, devuelven resultados; testeables sin DB). Todo lo que toca dinero (RN1–RN10) se
    escribe **junto con sus tests**, no después.
@@ -61,6 +61,7 @@ ritma/
     server/              ← queries org-scoped (reciben el orgId explícito)
     server/services/     ← lógica de negocio pura (RN1–RN10), con tests
   tools/                 ← contrast.js y scripts de apoyo
+  tests/                 ← Vitest: aislamiento org×org, permisos, harness de DB (F0.6)
   tests/e2e/             ← Playwright
 ```
 
@@ -121,8 +122,42 @@ ritma/
 - Schema v1: `Organization`, `User`, `Membership` (+ enums `OrgType`, `Role`). El resto del
   dominio llega en sus bloques. Toda tabla lleva `createdAt`/`updatedAt`; las de negocio,
   `orgId` con índice.
-- `prisma.*` solo dentro de `src/lib/` y `src/server/`. Desde F0.6 toda query de negocio pasa
-  por `withOrg`.
+- El cliente crudo `db` se importa **solo dentro de `src/lib/`** (lo obliga ESLint). En todo
+  el resto se usa `withOrg` — ver la sección siguiente.
+
+## Scoping y permisos (desde F0.6)
+
+- **Toda query de negocio pasa por `withOrg(orgId)`** ([`src/lib/db.ts`](src/lib/db.ts)): es un
+  cliente Prisma acotado a una organización (vía `$extends`) que filtra e inyecta el `orgId`
+  automáticamente. Imposible olvidárselo. El `orgId` sale **siempre** del `activeOrgId` de la
+  sesión, nunca de la URL ni de un input.
+- **`db` crudo solo en `src/lib/`**, y lo hace cumplir una regla de ESLint (`no-restricted-imports`):
+  importarlo desde `src/app/`, `src/server/` o cualquier otro lado es error de lint. Excepciones:
+  `prisma/` (el seed corre antes de que exista una org) y `tests/` (arman datos cross-org a
+  propósito). La creación del tenant (que no tiene `orgId` todavía) vive en
+  `createOrganizationWithOwner`, también en `src/lib/db.ts`.
+- **El mapa `SCOPE` (`Record<Prisma.ModelName, …>`) es la red de seguridad**: si se agrega un
+  modelo al schema y no se clasifica (`orgId` / `self` / `global`), **no compila**. Al sumar una
+  tabla de negocio (Student, ClassGroup…), clasificala como `orgId`.
+- **Límites conocidos de `withOrg`** (por eso no es la única defensa): el hook **no** cubre
+  escrituras **anidadas** (`disciplines: { create: … }` no dispara el hook del hijo) ni
+  `$queryRaw`. Las escrituras de negocio van por funciones explícitas en `server/services/`, y
+  cero SQL crudo fuera de `src/lib/`. La garantía dura sería RLS en Postgres (post-MVP).
+- **Permisos**: la matriz del Plan §4 vive como función pura en
+  [`src/server/services/permissions.ts`](src/server/services/permissions.ts) (`can`, `scopeOf`,
+  `CAPABILITIES`) — testeable sin base. Los resolvers `requireMember(orgId)` y
+  `requireRole(orgId, …roles)` están en [`src/server/authz.ts`](src/server/authz.ts): revalidan la
+  membresía contra la base y devuelven el `Actor` (`{ userId, orgId, role }`). `activeOrgId` es
+  contexto, no permiso: la membresía se revalida siempre en el server, nunca en la UI.
+- El scope fino de teacher ("sus grupos y alumnos") todavía **no tiene modelos** (llegan en
+  S2/S3): `scopeOf` deja el punto de extensión (devuelve `{ kind: "ownTeacher", teacherUserId }`),
+  sin abstracción vacía. El test "un teacher no accede a grupos ajenos" se escribe en S2.
+- **Tests de aislamiento** (Vitest contra Postgres real, nunca mockeando Prisma): levantá la base
+  con `npm run test:db:up` (Docker) y corré `npm test`. La base es un contenedor efímero
+  (`docker-compose.test.yml`, puerto 55432); [`tests/db.ts`](tests/db.ts) tiene una guarda de 4
+  capas (incluida una tabla centinela) para que sea **imposible** truncar dev o producción por un
+  `TEST_DATABASE_URL` mal puesto. `.env.test` está commiteado a propósito (solo credenciales de
+  localhost, sin secretos).
 
 ## Tokens y UI (desde F0.2)
 
@@ -162,16 +197,19 @@ F1–F3 (Plan §9) con Playwright, en `main`. No se testean componentes UI unita
 
 ## Comandos
 
-| Comando                           | Qué hace                                            |
-| --------------------------------- | --------------------------------------------------- |
-| `npm run dev`                     | Servidor de desarrollo                              |
-| `npm run build`                   | `prisma generate` + build de producción             |
-| `npm run lint`                    | ESLint                                              |
-| `npm run typecheck`               | TypeScript sin emitir (`tsc --noEmit`)              |
-| `npm run format` / `format:check` | Prettier: escribir / verificar                      |
-| `npm run db:migrate`              | Crea y aplica migración, y regenera el cliente      |
-| `npm run db:seed`                 | Seed idempotente (las dos orgs de los casos de uso) |
-| `npm run db:studio`               | Prisma Studio                                       |
+| Comando                           | Qué hace                                               |
+| --------------------------------- | ------------------------------------------------------ |
+| `npm run dev`                     | Servidor de desarrollo                                 |
+| `npm run build`                   | `prisma generate` + build de producción                |
+| `npm run lint`                    | ESLint                                                 |
+| `npm run typecheck`               | TypeScript sin emitir (`tsc --noEmit`)                 |
+| `npm run format` / `format:check` | Prettier: escribir / verificar                         |
+| `npm run db:migrate`              | Crea y aplica migración, y regenera el cliente         |
+| `npm run db:seed`                 | Seed idempotente (las dos orgs de los casos de uso)    |
+| `npm run db:studio`               | Prisma Studio                                          |
+| `npm test`                        | Levanta la DB de test (Docker), migra y corre Vitest   |
+| `npm run test:watch`              | Vitest en watch (la DB de test tiene que estar arriba) |
+| `npm run test:db:up` / `:down`    | Prende / apaga el Postgres de test (docker-compose)    |
 
 > En Next 16 no existe `next lint`: ESLint se corre con `eslint` (config flat en
 > `eslint.config.mjs`).
