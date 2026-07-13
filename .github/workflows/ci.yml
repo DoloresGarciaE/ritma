@@ -1,0 +1,164 @@
+name: CI
+
+# En los PR: lint + typecheck + Vitest (aislamiento contra Postgres real).
+# Al mergear a main: además, el smoke E2E contra un build de producción local.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Un PR que recibe otro push cancela la corrida anterior: no pagamos CI de commits viejos.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "24"
+
+jobs:
+  # ── Estático: no necesita base ni secretos ────────────────────────────────────
+  quality:
+    name: Lint + typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      # `postinstall` corre `prisma generate`. Anda sin credenciales: prisma.config.ts
+      # solo declara `datasource` si existe DIRECT_URL (y no usa el helper env(), que
+      # lanzaría). El cliente generado (src/generated/, gitignored) es lo que necesita
+      # el typecheck.
+      - run: npm ci
+
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run format:check
+
+  # ── Vitest: aislamiento org×org y permisos, contra Postgres REAL ──────────────
+  test:
+    name: Vitest (Postgres real)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        # Misma imagen y mismas credenciales que docker-compose.test.yml.
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: ritma
+          POSTGRES_PASSWORD: ritma
+          # El sufijo _test es parte de la guarda de tests/db.ts.
+          POSTGRES_DB: ritma_test
+        ports:
+          # 55432 en el runner → 5432 en el contenedor. El job NO corre dentro de un
+          # container, así que el service se ve en localhost:55432: exactamente la URL
+          # que ya trae .env.test, que se usa TAL CUAL (host local + base *_test = la
+          # guarda pasa sin tocarla).
+          - 55432:5432
+        options: >-
+          --health-cmd "pg_isready -U ritma -d ritma_test"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 15
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+
+      # Aplica las migraciones a la base del service. `dotenv -e .env.test --` le da la
+      # DIRECT_URL que el CLI de Prisma necesita; no hace falta setear nada más.
+      - run: npm run test:db:setup
+
+      # `npm test` levantaría su propio Postgres con docker compose: acá ya lo trae el
+      # service, así que se corre Vitest directo. vitest.config.ts carga .env.test solo.
+      - run: npx vitest run
+
+  # ── Smoke E2E: solo en main (Plan §9) ─────────────────────────────────────────
+  e2e:
+    name: Smoke E2E (Playwright)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [quality, test]
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: ritma
+          POSTGRES_PASSWORD: ritma
+          POSTGRES_DB: ritma_test
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd "pg_isready -U ritma -d ritma_test"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 15
+
+    env:
+      # La app del E2E habla con el Postgres efímero de ESTE job, nunca con producción.
+      DATABASE_URL: postgresql://ritma:ritma@localhost:55432/ritma_test
+      DIRECT_URL: postgresql://ritma:ritma@localhost:55432/ritma_test
+      # No es un secreto: la base y el server viven lo que dura el job. Pero tiene que
+      # existir: en un build de producción, Better Auth se niega a arrancar con el secret
+      # por defecto ("You are using the default secret") y muere la autenticación entera.
+      BETTER_AUTH_SECRET: e2e-only-not-a-secret-0123456789abcdefghijkl
+      # Tiene que coincidir con el origen que sirve la app (si no: INVALID_ORIGIN), y al
+      # ser http:// las cookies salen sin el prefijo __Secure- (que el browser tiraría).
+      BETTER_AUTH_URL: http://localhost:3100
+      NEXT_PUBLIC_APP_URL: http://localhost:3100
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+
+      # Los browsers son ~130 MB: se cachean por versión de Playwright (que sale del
+      # lockfile). Las dependencias de SISTEMA no viven en esa carpeta, así que en un
+      # cache hit hay que instalarlas igual.
+      - name: Cache de los browsers de Playwright
+        id: playwright-cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      - if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+
+      - if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+
+      # EL ORDEN IMPORTA: el schema tiene que estar aplicado ANTES de que arranque el
+      # server de Next (el layout de (app) lee la base en la primera request).
+      #   1. migrate deploy  → la base del service queda con el schema
+      #   2. next build      → necesita DATABASE_URL (src/lib/db.ts lanza al importarse
+      #                        si falta, y el build importa esa cadena) y hornea
+      #                        NEXT_PUBLIC_APP_URL
+      #   3. playwright      → su `webServer` levanta `next start --port 3100`
+      - run: npm run test:db:setup
+
+      - run: npm run build
+
+      - run: npm run test:e2e
+
+      - if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
