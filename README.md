@@ -1,5 +1,7 @@
 # Ritma
 
+[![CI](https://github.com/DoloresGarciaE/ritma/actions/workflows/ci.yml/badge.svg)](https://github.com/DoloresGarciaE/ritma/actions/workflows/ci.yml)
+
 Web app **mobile-first** de gestión para docentes independientes y estudios: agenda de
 clases, padrón de alumnos y cobranzas. Multi-tenant desde el día 1.
 
@@ -56,15 +58,38 @@ está acá a propósito y no existe en producción.
 
 ## Comandos
 
-| Comando                | Qué hace                                |
-| ---------------------- | --------------------------------------- |
-| `npm run dev`          | Servidor de desarrollo                  |
-| `npm run build`        | Build de producción                     |
-| `npm run start`        | Servir el build                         |
-| `npm run lint`         | ESLint                                  |
-| `npm run typecheck`    | TypeScript sin emitir                   |
-| `npm run format`       | Formatear con Prettier                  |
-| `npm run format:check` | Verificar formato sin escribir          |
-| `npm run db:migrate`   | Crea y aplica migraciones               |
-| `npm run db:seed`      | Seed idempotente (organizaciones y dev) |
-| `npm run db:studio`    | Prisma Studio                           |
+| Comando                | Qué hace                                            |
+| ---------------------- | --------------------------------------------------- |
+| `npm run dev`          | Servidor de desarrollo                              |
+| `npm run build`        | Build de producción                                 |
+| `npm run start`        | Servir el build                                     |
+| `npm run lint`         | ESLint                                              |
+| `npm run typecheck`    | TypeScript sin emitir                               |
+| `npm run format`       | Formatear con Prettier                              |
+| `npm run format:check` | Verificar formato sin escribir                      |
+| `npm run db:migrate`   | Crea y aplica migraciones                           |
+| `npm run db:seed`      | Seed idempotente (organizaciones y dev)             |
+| `npm run db:studio`    | Prisma Studio                                       |
+| `npm test`             | Levanta el Postgres de test (Docker) y corre Vitest |
+| `npm run test:e2e`     | Smoke E2E con Playwright (necesita un build previo) |
+
+## Tests
+
+- **Vitest** — aislamiento org×org, permisos por rol y servicios de dinero. Corren contra un
+  **Postgres real** (contenedor efímero, `docker-compose.test.yml`), nunca mockeando Prisma.
+  `npm test` levanta la base, aplica las migraciones y corre la suite.
+- **Playwright** — un solo smoke: registro → wizard → dashboard. Corre contra un build de
+  producción local apuntando al mismo Postgres efímero.
+
+## Deploy
+
+Producción: **Vercel**, desde `main`. Cada PR genera un **preview deployment**.
+
+- El build de Vercel usa el script `vercel-build`, que corre **`prisma migrate deploy`** antes
+  de `next build`: las migraciones viajan con cada deploy. Por eso `DIRECT_URL` (la conexión
+  directa de Neon) es obligatoria en las variables de entorno de Vercel.
+- **Un branch de Neon por entorno**: `production` para producción, `dev` para desarrollo local
+  y para los previews. Nunca se comparte base entre entornos.
+- **CI** (GitHub Actions): en cada PR corre lint + typecheck + formato + Vitest; al mergear a
+  `main`, además el smoke de Playwright. No necesita ningún secreto: la base de los tests es
+  un service container del propio job.
