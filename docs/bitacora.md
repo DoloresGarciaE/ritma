@@ -118,3 +118,23 @@ retomar después de una semana sin tocar el proyecto (Plan de implementación §
   las env vars de Vercel (¡`DIRECT_URL` es ahora obligatoria o el deploy falla!), el dominio y el DSN.
 - **Próximo:** cerrar el DoD de la Fase 0 con las acciones manuales y taggear `v0.1.0-f0`. Después,
   S1 — Alumnos (modelo `Student`, CRUD con búsqueda, alta express).
+
+### Cierre de la Fase 0 ✅
+
+F0.7 mergeada por PR #2, con los tres jobs en verde en `main` (lint+typecheck, Vitest contra Postgres
+real, y el smoke de Playwright corriendo por primera vez en un runner). **DoD de la Fase 0 verificado
+contra producción**: un usuario nuevo se registra, crea su organización y llega al dashboard con el CTA
+"Creá tu primer grupo" — el mismo smoke, apuntado al deploy real, pasa en 9,6 s.
+
+**Incidente al cerrar (para no repetirlo):** el primer intento contra producción falló con
+`INVALID_ORIGIN`. Causa: `BETTER_AUTH_URL` estaba puesta en `https://ritma.com.ar`, un dominio que
+todavía no resuelve, mientras la app se sirve desde `ritma-eight.vercel.app`. Better Auth compara el
+origen de CADA request contra esa variable y rechaza todo si no coincide. Es la **tercera** vez que este
+mismo mecanismo nos muerde (ya había pasado con el `redirect_uri` de Google y con el puerto en dev), y
+el switch al dominio definitivo lo va a provocar otra vez. Pendiente de decisión: configurar
+`trustedOrigins` en Better Auth para aceptar varios orígenes válidos a la vez y que el cambio de dominio
+deje de ser un momento de riesgo.
+
+**Basura en la base de producción:** el smoke deja un usuario y una organización de prueba
+(`malena+<timestamp>@ritma.test`, org "Danzas Malena"), más un usuario suelto `diag-<timestamp>@ritma.test`
+del diagnóstico. Se pueden borrar con Prisma Studio apuntando al branch de producción.
