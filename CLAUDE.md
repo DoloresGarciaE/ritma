@@ -87,6 +87,12 @@ ritma/
 - `BETTER_AUTH_URL` tiene que coincidir con el origen que sirve la app, o Better Auth
   responde `INVALID_ORIGIN`. Sin `GOOGLE_CLIENT_ID`/`SECRET`, el botón de Google no se
   muestra y el resto anda igual.
+- ⚠️ **`INVALID_ORIGIN` es la trampa recurrente de esta base**: ya rompió el login de Google
+  (`redirect_uri`), el dev en otro puerto y el primer deploy con el dominio definitivo cargado
+  antes de que propagara. Por eso `auth.ts` declara **`trustedOrigins`** con el apex, el www y la
+  URL de Vercel — más `VERCEL_URL`, que Vercel inyecta sola y hace que la auth también funcione en
+  los preview deployments. Si aparece un origen nuevo (otro dominio, otro puerto), **agregalo ahí**;
+  no alcanza con cambiar `BETTER_AUTH_URL`.
 
 ## Organización y shell (desde F0.5)
 
