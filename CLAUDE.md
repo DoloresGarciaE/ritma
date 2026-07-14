@@ -113,6 +113,30 @@ ritma/
 - La app bar la compone **cada página** (`<AppBar title=… />`), no el layout: así el título puede
   salir de los datos y cada pantalla trae su propia acción.
 
+## El patrón para un modelo de negocio nuevo (desde S1)
+
+`Student` (S1) es la plantilla. Todo modelo de negocio que llegue después se construye **en este
+orden**, y la seguridad va primero:
+
+1. **Schema + migración.** Toda tabla de negocio lleva `orgId` con índice, `createdAt`/`updatedAt`.
+2. **Clasificarlo en `SCOPE`** ([`src/lib/db.ts`](src/lib/db.ts)) como `orgId`. Si te lo olvidás,
+   **no compila** — esa es la red de F0.6, no la desactives.
+3. **Tests de aislamiento** en [`tests/isolation.test.ts`](tests/isolation.test.ts), copiando el
+   bloque de `Student`: A no lee, no edita, no borra lo de B; y una escritura vía `withOrg(A)` no
+   puede aterrizar en B. **No es opcional.**
+4. **Servicio** en `server/services/`, que recibe `orgId` y usa `withOrg`. Nunca `db` crudo.
+5. **Server actions** con `requireMember(orgId)` **cada una**: el layout de `(app)` NO las protege
+   (se invocan por POST directo, sin pasar por él).
+6. **UI** al final, y los componentes nuevos van a [`/dev/ui`](src/app/dev/ui/page.tsx).
+
+- **Búsqueda de texto:** se busca contra una columna normalizada (`searchName`: minúsculas y sin
+  tildes, ver [`src/lib/students.ts`](src/lib/students.ts)), no con `unaccent` de Postgres — eso
+  exigiría SQL crudo, que se saltea `withOrg`.
+- **Teléfonos:** se guardan en **E.164** (`+541155554433`) con `libphonenumber-js`, default AR. El
+  profe tipea "11 5555-4433"; el formato lindo es cosa de la vista (`formatPhone`).
+- **Bajas (RN9):** siempre **lógicas** (`active = false`). Nunca se borra una fila de negocio: el
+  historial queda consultable.
+
 ## CI/CD y observabilidad (desde F0.7)
 
 - **Un branch de Neon por entorno.** `production` → Vercel Production; `dev` → tu `.env.local`

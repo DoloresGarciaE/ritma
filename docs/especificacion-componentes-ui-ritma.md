@@ -176,12 +176,23 @@ Confirmación breve → toast. Error de acción → toast persistente o mensaje 
 | Combobox de alumno/grupo | `Command` + `Popover` | Bottom sheet en mobile |
 | Badge de estado | `Badge` | Recetas fijas de Color §5 |
 | Card | `Card` | Radio 12, sin sombra |
-| Sheet / Dialog | `Sheet` (o vaul) / `Dialog` | CTA fijo al fondo; sombra única de §2.2 |
-| Toast | `sonner` | Acción única; error persistente |
+| Sheet / Dialog | `Drawer` de Base UI / `Dialog` propio | CTA fijo al fondo; sombra única de §2.2. **Ver nota 1.** |
+| Toast | `Toast` de Base UI | Acción única; error persistente. **Ver nota 2.** |
 | Tabla | `Table` | Colapso a cards en mobile |
 | Avatar | `Avatar` | Iniciales, Violeta 100/800 |
 | Skeleton | `Skeleton` | Pulso 1.5 s |
 | Bottom nav / Bloque de sesión / FAB / Input de monto | — (propios) | Según §3.6, §3.7, §3.13, §3.2 |
+
+**Nota 1 (S1).** El `sheet` del registry de shadcn está construido sobre `Dialog` y **no tiene
+cierre por gesto**, que §3.8 exige. Se usa el **`Drawer` de Base UI** (que sí lo trae) para mobile
+y un **`Dialog` propio** para desktop, envueltos en un único `ActionSheet`. Los ítems `sheet` y
+`dialog` del registry, además, dependen de `button` y lo sobrescribirían con variantes que Ritma
+no tiene. `vaul` queda descartado: esta base no usa Radix.
+
+**Nota 2 (S1).** `sonner` queda descartado: el item del registry depende de **`next-themes`**, y
+Ritma no tiene theme provider a propósito (el modo lo decide el sistema, Color §7.5). El `Toast`
+de Base UI da exactamente lo que pide §3.9 —`timeout` por toast (`0` = sin autocierre para los
+errores), una sola acción, y límite de uno a la vez— y es unstyled, así que consume solo tokens.
 
 ## 7. Definition of done de un componente
 
