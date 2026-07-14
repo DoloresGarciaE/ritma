@@ -24,8 +24,33 @@ export const isGoogleEnabled = Boolean(
   process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET,
 );
 
+/**
+ * Los orígenes desde los que la app puede servirse legítimamente.
+ *
+ * Better Auth compara el origen de CADA request contra `BETTER_AUTH_URL` y, si no coincide,
+ * rechaza todo con `INVALID_ORIGIN`. Con una sola URL válida, cada cambio de dominio es un
+ * momento de riesgo: ya nos rompió el login de Google (redirect_uri), el dev en otro puerto,
+ * y el primer deploy con el dominio definitivo cargado antes de que propagara.
+ *
+ * Con esta lista, el apex, el www y la URL de Vercel valen todos a la vez, así que la
+ * migración a `ritma.com.ar` deja de ser un salto al vacío. No son secretos: son las
+ * direcciones públicas de la app.
+ *
+ * `VERCEL_URL` la inyecta Vercel sola y cambia en cada deploy: es lo que hace que la
+ * autenticación también funcione en los preview deployments de los PRs.
+ */
+const trustedOrigins = [
+  "https://ritma.com.ar",
+  "https://www.ritma.com.ar",
+  "https://ritma-eight.vercel.app",
+  ...(process.env.BETTER_AUTH_URL ? [process.env.BETTER_AUTH_URL] : []),
+  ...(process.env.VERCEL_URL ? [`https://${process.env.VERCEL_URL}`] : []),
+];
+
 export const auth = betterAuth({
   database: prismaAdapter(db, { provider: "postgresql" }),
+
+  trustedOrigins,
 
   emailAndPassword: {
     enabled: true,
