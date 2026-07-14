@@ -104,8 +104,11 @@ ritma/
   - **Diferido a S2:** "un teacher no accede a grupos ajenos" necesita `ClassGroup`/`Enrollment`, que no existen hasta S2/S3 (y F0.6 no crea modelos nuevos). El punto de extensión queda listo (`scopeOf`); el test se escribe cuando llega el modelo.
 
 ### F0.7 — CI/CD y observabilidad (1 sesión)
-- [ ] GitHub Actions: lint + typecheck + Vitest en cada PR; Playwright en `main`.
-- [ ] Vercel: preview por PR, producción desde `main`, dominio conectado; Sentry client+server.
+- [x] GitHub Actions: lint + typecheck + `format:check` + Vitest (aislamiento contra Postgres real, vía `services:`) en cada PR; smoke de Playwright en `main`. **Cero secretos**.
+- [x] Vercel: preview por PR y producción desde `main` (integración Git ya activa). El build usa `vercel-build` = `prisma migrate deploy && next build`, así que **las migraciones viajan con cada deploy**; `DIRECT_URL` pasa a ser obligatoria en Vercel.
+- [x] Entornos de base separados: un branch de Neon por entorno (`production` / `dev`); los tests siguen contra Docker (decisión de F0.6).
+- [x] Sentry client + server con `@sentry/nextjs`, activo **solo si hay DSN** (en local, cero ruido). Bajo Turbopack el cliente va en `instrumentation-client.ts`, no en `sentry.client.config.ts`.
+- [ ] **Manual (requiere credenciales):** branch `dev` en Neon, env vars en Vercel, dominio `ritma.com.ar` + delegación en nic.ar, DSN de Sentry, protección de `main`. Ver el checklist de la bitácora.
 
 **DoD Fase 0:** una persona ajena puede registrarse en producción, crear su organización y ver el dashboard vacío con el CTA "Creá tu primer grupo"; CI verde; tests de scoping pasando.
 

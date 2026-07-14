@@ -107,6 +107,34 @@ ritma/
 - La app bar la compone **cada página** (`<AppBar title=… />`), no el layout: así el título puede
   salir de los datos y cada pantalla trae su propia acción.
 
+## CI/CD y observabilidad (desde F0.7)
+
+- **Un branch de Neon por entorno.** `production` → Vercel Production; `dev` → tu `.env.local`
+  **y** los Preview deployments. Los tests **no usan Neon**: van contra el Postgres efímero de
+  `docker-compose.test.yml`. Nunca compartas base entre entornos.
+- **Las migraciones viajan con el deploy.** [`vercel.json`](vercel.json) fija el build command a
+  `npm run vercel-build`, que es `prisma generate && prisma migrate deploy && next build`. El
+  `build` normal **no** migra, así que tu build local y el de CI no tocan ninguna base. Corolario:
+  **`DIRECT_URL` es obligatoria en Vercel** (el CLI de Prisma no puede hacer DDL por el pooler);
+  sin ella, el deploy falla en el build.
+- **CI sin secretos** ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)): en cada PR corren
+  lint + typecheck + `format:check` + Vitest; al pushear a `main`, además el smoke de Playwright.
+  El Postgres de los tests es un `services:` container mapeado a `localhost:55432`, o sea la misma
+  URL que ya trae `.env.test` — sirve tal cual, sin editar nada y sin tocar la guarda de
+  [`tests/db.ts`](tests/db.ts).
+- **El E2E nunca toca producción**: Playwright corre contra `next build` + `next start` apuntando
+  al Postgres efímero del propio job. Un solo smoke (registro → wizard → dashboard); los E2E de
+  cobranzas llegan en S6.
+- **Sentry solo existe si hay DSN.** El gate está en [`next.config.ts`](next.config.ts) y es de
+  **build**: sin `NEXT_PUBLIC_SENTRY_DSN` no se instala el plugin, no se inicializa nada y el build
+  ni lo menciona (cero ruido en local). Sin `SENTRY_AUTH_TOKEN` el build igual pasa: solo no sube
+  sourcemaps.
+- ⚠️ **Bajo Turbopack (el default de Next 16), `sentry.client.config.ts` NO funciona**: el SDK solo
+  inyecta en `instrumentation-client.*` e `instrumentation.*`. Por eso el cliente vive en
+  [`src/instrumentation-client.ts`](src/instrumentation-client.ts) y el servidor lo carga
+  [`src/instrumentation.ts`](src/instrumentation.ts), que además exporta `onRequestError` (captura
+  Server Components, Route Handlers, Server Actions y el Proxy).
+
 ## Base de datos (desde F0.3)
 
 - **Prisma 7, y no es el Prisma de los tutoriales.** El driver adapter es obligatorio, el
@@ -210,6 +238,8 @@ F1–F3 (Plan §9) con Playwright, en `main`. No se testean componentes UI unita
 | `npm test`                        | Levanta la DB de test (Docker), migra y corre Vitest   |
 | `npm run test:watch`              | Vitest en watch (la DB de test tiene que estar arriba) |
 | `npm run test:db:up` / `:down`    | Prende / apaga el Postgres de test (docker-compose)    |
+| `npm run test:e2e`                | Smoke de Playwright (requiere `npm run build` antes)   |
+| `npm run vercel-build`            | El build de Vercel: migra la base y después buildea    |
 
 > En Next 16 no existe `next lint`: ESLint se corre con `eslint` (config flat en
 > `eslint.config.mjs`).

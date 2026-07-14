@@ -97,3 +97,24 @@ retomar después de una semana sin tocar el proyecto (Plan de implementación §
 - **Próximo:** F0.7 — CI/CD (GitHub Actions: lint + typecheck + Vitest en cada PR, con el service de
   Postgres que ya mapea el harness de hoy) y observabilidad (Sentry), más el cableado Vercel↔Git. Cierra
   la Fase 0.
+
+## Semana 7 (julio 2026) — CI/CD y observabilidad
+
+- **Hecho:** F0.6 mergeada a `main` y deployada. F0.7 en `feat/f0-7-ci-cd`: GitHub Actions con dos
+  jobs en cada PR (lint + typecheck + `format:check`; y Vitest contra un Postgres real vía
+  `services:`) más el smoke de Playwright al pushear a `main`; **el CI no necesita ningún secreto**,
+  porque el `services:` container queda en `localhost:55432` — exactamente la URL que ya traía
+  `.env.test`, así que sirve tal cual y sin tocar la guarda de `tests/db.ts`. Playwright con **un**
+  smoke (registro → wizard → dashboard con el CTA) contra un build de producción local, nunca contra
+  producción. Sentry client+server, activo solo si hay DSN. Y las migraciones ahora **viajan con el
+  deploy**: `vercel.json` fija el build a `vercel-build` = `prisma migrate deploy && next build`.
+- **Trabado:** nada bloqueante, pero aparecieron tres cosas que había que verificar y no suponer. Una:
+  bajo Turbopack (el default de Next 16) **`sentry.client.config.ts` no funciona** — el SDK solo
+  inyecta en `instrumentation-client.*`. Dos: sin auth token, Sentry igual prende
+  `productionBrowserSourceMaps` y después avisa que no puede subir nada; hay que apagarlas explícito.
+  Tres: en un build de producción, Better Auth **se niega a arrancar sin `BETTER_AUTH_SECRET`**, y sin
+  `BETTER_AUTH_URL` las cookies salen con prefijo `__Secure-` y el browser las tira sobre `http://` —
+  por eso el job de E2E setea las dos. Queda **pendiente de mis credenciales**: branch `dev` en Neon,
+  las env vars de Vercel (¡`DIRECT_URL` es ahora obligatoria o el deploy falla!), el dominio y el DSN.
+- **Próximo:** cerrar el DoD de la Fase 0 con las acciones manuales y taggear `v0.1.0-f0`. Después,
+  S1 — Alumnos (modelo `Student`, CRUD con búsqueda, alta express).
