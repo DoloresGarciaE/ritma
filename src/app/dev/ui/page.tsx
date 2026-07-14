@@ -1,11 +1,24 @@
 import type { Metadata } from "next";
 import { Check, Plus } from "lucide-react";
 
+import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, MetricCard } from "@/components/ui/card";
+import { Fab } from "@/components/ui/fab";
 import { AmountInput, Field, Input } from "@/components/ui/input";
 import { StatusBadge, type InstallmentStatus } from "@/components/ui/status-badge";
 import { formatMoney } from "@/lib/format";
+import type { StudentListItem } from "@/server/services/students";
+
+import { StudentRow } from "../../(app)/alumnos/_components/student-row";
+import { OverlaysDemo } from "./overlays-demo";
+
+/** Alumnos del dominio real (Marca §4): nada de lorem ipsum. */
+const DEMO_STUDENTS: StudentListItem[] = [
+  { id: "1", name: "Sofía Herrera", phone: "+541155554433", active: true },
+  { id: "2", name: "Iñaki Gómez", phone: null, active: true },
+  { id: "3", name: "Martina Álvarez", phone: "+541122334455", active: false },
+];
 
 export const metadata: Metadata = {
   title: "Componentes · Ritma",
@@ -134,6 +147,31 @@ function Showcase({ title }: { title: string }) {
           </div>
         </Card>
       </Section>
+
+      {/* ── S1 ───────────────────────────────────────────────────────────────── */}
+
+      <Section title="Avatar de iniciales (32 · 40 · 56)">
+        <div className="flex items-center gap-3">
+          <Avatar name="Sofía Herrera" size="sm" />
+          <Avatar name="Sofía Herrera" size="md" />
+          <Avatar name="Iñaki Gómez" size="lg" />
+          <Avatar name="Madonna" size="md" />
+        </div>
+      </Section>
+
+      <Section title="Ítem de lista (alumno)">
+        <ul className="divide-y divide-border border-y border-border bg-surface">
+          {DEMO_STUDENTS.map((student) => (
+            <StudentRow key={student.id} student={student} />
+          ))}
+        </ul>
+      </Section>
+
+      <Section title="FAB (fijo en la pantalla real; acá estático)">
+        <div className="flex">
+          <Fab label="Nuevo alumno" className="static" />
+        </div>
+      </Section>
     </div>
   );
 }
@@ -158,6 +196,17 @@ export default function DevUiPage() {
             <Showcase title="Modo oscuro" />
           </div>
         </div>
+
+        <section className="flex flex-col gap-3 rounded-card border border-border bg-surface p-4">
+          <h2 className="font-display text-lg font-medium">
+            Overlays (siguen el modo del sistema)
+          </h2>
+          <p className="text-sm text-text-secondary">
+            Sheet y Toast no se pueden mostrar en los dos modos a la vez: probalos acá. En el
+            teléfono el sheet se cierra deslizando; en desktop es un dialog de 480 px.
+          </p>
+          <OverlaysDemo />
+        </section>
       </div>
     </main>
   );
