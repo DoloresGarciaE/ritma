@@ -5,6 +5,7 @@ import { useRef, useState, useTransition } from "react";
 
 import { Fab } from "@/components/ui/fab";
 import { Input } from "@/components/ui/input";
+import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 import type { StudentListItem } from "@/server/services/students";
 
@@ -30,8 +31,18 @@ export function StudentsScreen({ initialStudents }: { initialStudents: StudentLi
   const [includeInactive, setIncludeInactive] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [isSearching, startSearch] = useTransition();
+  const toast = useToast();
 
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  /**
+   * Abrir el alta cierra el toast del alumno anterior: cargando varios en fila, el aviso de
+   * uno no se queda flotando encima del formulario del siguiente.
+   */
+  const openSheet = () => {
+    toast.closeAll();
+    setSheetOpen(true);
+  };
 
   /** Debounce dirigido por evento (no por efecto): una query por pausa de tipeo. */
   const scheduleSearch = (nextQuery: string, nextIncludeInactive: boolean) => {
@@ -120,7 +131,7 @@ export function StudentsScreen({ initialStudents }: { initialStudents: StudentLi
             icon={Users}
             title={includeInactive ? "Tu padrón está vacío" : "Todavía no tenés alumnos activos"}
             description="Cargá tu primer alumno: con el nombre alcanza, el resto lo completás después."
-            action={{ label: "Cargar mi primer alumno", onClick: () => setSheetOpen(true) }}
+            action={{ label: "Cargar mi primer alumno", onClick: openSheet }}
           />
         )
       ) : (
@@ -134,7 +145,7 @@ export function StudentsScreen({ initialStudents }: { initialStudents: StudentLi
         </ul>
       )}
 
-      <Fab label="Nuevo alumno" onClick={() => setSheetOpen(true)} />
+      <Fab label="Nuevo alumno" onClick={openSheet} />
 
       <QuickCreateSheet
         open={sheetOpen}

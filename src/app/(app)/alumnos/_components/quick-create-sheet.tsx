@@ -67,7 +67,10 @@ export function QuickCreateSheet({
       setPhone("");
       onOpenChange(false);
       onCreated();
-      toast.notify(`${saved} ya está en tu padrón.`);
+      // El nombre va PRIMERO: es lo que confirma a quién guardaste, y el toast de mobile es
+      // angosto (deja libre el FAB), así que si algo se corta que sea la cola. El verbo es el
+      // mismo del botón — "una acción, un verbo" (Marca §4).
+      toast.notify(`Guardaste a ${saved}`);
     });
   };
 

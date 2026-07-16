@@ -26,9 +26,13 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         <Toast.Viewport
           className={cn(
             "pointer-events-none fixed z-30",
-            // Mobile: 12 px por encima de la bottom nav.
-            "inset-x-4 bottom-[calc(3.5rem_+_env(safe-area-inset-bottom)_+_0.75rem)]",
-            // Desktop: no hay bottom nav → esquina superior derecha.
+            // Mobile: 12 px por encima de la bottom nav...
+            "bottom-[calc(3.5rem_+_env(safe-area-inset-bottom)_+_0.75rem)] left-4",
+            // ...y frenando ANTES del FAB, que vive en esa misma esquina (§3.13: 16 px de
+            // margen + 56 px de ancho) + 12 px de aire. Si el toast lo tapara, no solo lo
+            // escondería: le comería el tap, y cargar alumnos en fila se vuelve imposible.
+            "right-[5.25rem]",
+            // Desktop: no hay bottom nav y el toast va arriba → no se cruza con nada.
             "md:inset-x-auto md:top-6 md:right-6 md:bottom-auto md:w-[22.5rem]",
           )}
         >
@@ -97,5 +101,13 @@ export function useToast() {
       manager.add({ title, type: "error", timeout: 0, priority: "high", ...options }),
 
     close: manager.close,
+
+    /**
+     * Cierra los toasts que estén vivos. Se usa al abrir un formulario: el aviso del alumno
+     * ANTERIOR no tiene por qué seguir en pantalla mientras cargás el siguiente.
+     */
+    closeAll: () => {
+      for (const toast of manager.toasts) manager.close(toast.id);
+    },
   };
 }
