@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import type { OrgType, Role } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
+import { normalizeForSearch } from "@/lib/students";
 
 /**
  * Fábricas para los tests de aislamiento. Usan el `db` CRUDO a propósito: arman datos
@@ -29,4 +30,21 @@ export async function makeMember(orgId: string, role: Role = "TEACHER") {
 /** Una disciplina en una org, por el camino crudo (setup, no lo que se testea). */
 export async function makeDiscipline(orgId: string, name: string) {
   return db.discipline.create({ data: { orgId, name } });
+}
+
+/** Un alumno en una org, por el camino crudo. `searchName` se calcula igual que el servicio. */
+export async function makeStudent(
+  orgId: string,
+  name: string,
+  extra: { phone?: string | null; active?: boolean } = {},
+) {
+  return db.student.create({
+    data: {
+      orgId,
+      name,
+      searchName: normalizeForSearch(name),
+      phone: extra.phone ?? null,
+      active: extra.active ?? true,
+    },
+  });
 }

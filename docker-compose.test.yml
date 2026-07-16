@@ -12,8 +12,13 @@ services:
       # El sufijo _test es parte de la guarda de seguridad (ver tests/db.ts).
       POSTGRES_DB: ritma_test
     ports:
-      # 55432, NO 5432: si hay un Postgres local, no se pisan.
-      - "55432:5432"
+      # 15432, NO 5432: si hay un Postgres local, no se pisan.
+      #
+      # Y NO un puerto 5xxxx: Windows le reserva rangos enteros de ~50000 para arriba a
+      # Hyper-V, se re-sortean en cada reinicio y Docker no puede bindear ahí ("bind: An
+      # attempt was made to access a socket in a way forbidden by its access permissions").
+      # Por debajo del rango dinámico (49152) eso no pasa.
+      - "15432:5432"
     # Base de test = datos descartables. En tmpfs vuela y no toca el disco.
     tmpfs:
       - /var/lib/postgresql/data

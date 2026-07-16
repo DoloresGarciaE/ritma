@@ -1,22 +1,27 @@
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
 
-import { buttonVariants } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 
 /**
  * Estado vacío (Componentes §3.10): ícono de 48 px, título corto, una línea de contexto y
  * un CTA primario. El copy invita a actuar; no describe la ausencia (Marca §4).
+ *
+ * El CTA puede navegar (`cta`) o disparar una acción en el lugar (`action`) — el padrón de
+ * alumnos abre el sheet de alta, no cambia de pantalla.
  */
 export function EmptyState({
   icon: Icon,
   title,
   description,
   cta,
+  action,
 }: {
   icon: LucideIcon;
   title: string;
   description: string;
   cta?: { label: string; href: string };
+  action?: { label: string; onClick: () => void };
 }) {
   return (
     <div className="flex flex-col items-center gap-3 px-4 py-16 text-center">
@@ -29,6 +34,12 @@ export function EmptyState({
         <Link href={cta.href} className={buttonVariants({ size: "lg", className: "mt-3" })}>
           {cta.label}
         </Link>
+      ) : null}
+
+      {action ? (
+        <Button size="lg" className="mt-3" onClick={action.onClick}>
+          {action.label}
+        </Button>
       ) : null}
     </div>
   );

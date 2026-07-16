@@ -117,6 +117,10 @@ Chip de la vista semanal/diaria: barra de acento de 3 px a la izquierda con el c
 
 Una línea, esquina superior (desktop) o sobre la bottom nav (mobile), auto-cierre a los 4 s. Puede llevar **una** acción: el toast de "Pago registrado" incluye "Compartir comprobante" — es el atajo que hace cumplir el objetivo de 15 segundos del Plan (HU4.3 + HU5.1). Los toasts de error no se auto-cierran y explican qué pasó y qué hacer (Marca §4.2).
 
+**En mobile el toast NO llega hasta el borde derecho: frena antes del FAB** (S1). Este documento se contradecía: §3.9 pone el toast "sobre la bottom nav" y §3.13 pone el FAB "16 px por encima de la bottom nav" — el mismo lugar. Al probar el alta express en un teléfono, el toast tapaba el `+` durante 4 segundos y, peor, **le comía el tap**: cargar alumnos en fila (el DoD de S1) se volvía imposible. El toast termina a 84 px del borde (16 de margen + 56 del FAB + 12 de aire) y el `+` queda libre. Consecuencia para el copy: el toast de mobile es angosto, así que **el dato que identifica va primero** ("Guardaste a Sofía Herrera", no "Sofía Herrera ya está en tu padrón"); si algo se trunca, que sea la cola.
+
+**Abrir un formulario cierra los toasts vivos** (S1): el aviso del alumno anterior no se queda flotando sobre el formulario del siguiente.
+
 ### 3.10 Estado vacío
 
 Ícono Lucide 48 px en `text-muted`, título corto, una línea de contexto y un CTA primario. (El ícono es decorativo y va con `aria-hidden`: siempre lo acompaña el título. Antes esta línea decía "Neutro 400", que es un stop de la escala, y Color §8 prohíbe que los componentes consuman stops.) El copy sigue la voz de marca: invita a actuar, no describe la ausencia ("Tu semana está vacía. Creá tu primer grupo y armá la agenda."). Cada pantalla del MVP define su estado vacío en el diseño, no como afterthought.
@@ -176,12 +180,23 @@ Confirmación breve → toast. Error de acción → toast persistente o mensaje 
 | Combobox de alumno/grupo | `Command` + `Popover` | Bottom sheet en mobile |
 | Badge de estado | `Badge` | Recetas fijas de Color §5 |
 | Card | `Card` | Radio 12, sin sombra |
-| Sheet / Dialog | `Sheet` (o vaul) / `Dialog` | CTA fijo al fondo; sombra única de §2.2 |
-| Toast | `sonner` | Acción única; error persistente |
+| Sheet / Dialog | `Drawer` de Base UI / `Dialog` propio | CTA fijo al fondo; sombra única de §2.2. **Ver nota 1.** |
+| Toast | `Toast` de Base UI | Acción única; error persistente. **Ver nota 2.** |
 | Tabla | `Table` | Colapso a cards en mobile |
 | Avatar | `Avatar` | Iniciales, Violeta 100/800 |
 | Skeleton | `Skeleton` | Pulso 1.5 s |
 | Bottom nav / Bloque de sesión / FAB / Input de monto | — (propios) | Según §3.6, §3.7, §3.13, §3.2 |
+
+**Nota 1 (S1).** El `sheet` del registry de shadcn está construido sobre `Dialog` y **no tiene
+cierre por gesto**, que §3.8 exige. Se usa el **`Drawer` de Base UI** (que sí lo trae) para mobile
+y un **`Dialog` propio** para desktop, envueltos en un único `ActionSheet`. Los ítems `sheet` y
+`dialog` del registry, además, dependen de `button` y lo sobrescribirían con variantes que Ritma
+no tiene. `vaul` queda descartado: esta base no usa Radix.
+
+**Nota 2 (S1).** `sonner` queda descartado: el item del registry depende de **`next-themes`**, y
+Ritma no tiene theme provider a propósito (el modo lo decide el sistema, Color §7.5). El `Toast`
+de Base UI da exactamente lo que pide §3.9 —`timeout` por toast (`0` = sin autocierre para los
+errores), una sola acción, y límite de uno a la vez— y es unstyled, así que consume solo tokens.
 
 ## 7. Definition of done de un componente
 
