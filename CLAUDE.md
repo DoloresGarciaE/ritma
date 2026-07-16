@@ -87,12 +87,21 @@ ritma/
 - `BETTER_AUTH_URL` tiene que coincidir con el origen que sirve la app, o Better Auth
   responde `INVALID_ORIGIN`. Sin `GOOGLE_CLIENT_ID`/`SECRET`, el botón de Google no se
   muestra y el resto anda igual.
-- ⚠️ **`INVALID_ORIGIN` es la trampa recurrente de esta base**: ya rompió el login de Google
-  (`redirect_uri`), el dev en otro puerto y el primer deploy con el dominio definitivo cargado
-  antes de que propagara. Por eso `auth.ts` declara **`trustedOrigins`** con el apex, el www y la
-  URL de Vercel — más `VERCEL_URL`, que Vercel inyecta sola y hace que la auth también funcione en
-  los preview deployments. Si aparece un origen nuevo (otro dominio, otro puerto), **agregalo ahí**;
-  no alcanza con cambiar `BETTER_AUTH_URL`.
+- ⚠️ **La configuración de orígenes es la trampa recurrente de esta base**: ya rompió el login de
+  Google (`redirect_uri`), el dev en otro puerto, el primer deploy con el dominio definitivo antes
+  de que propagara, y los previews de los PRs. Está fijada con tests en
+  [`tests/auth-origins.test.ts`](tests/auth-origins.test.ts) — si tocás `auth.ts`, corrélos.
+- **`baseURL` se DERIVA, no se carga a mano** ([`src/lib/auth.ts`](src/lib/auth.ts)): es
+  `BETTER_AUTH_URL` si está, y si no la URL de la rama (`VERCEL_BRANCH_URL`, que Vercel inyecta
+  sola en los previews). Si no se la das, **Better Auth cae a `http://localhost:3000`** y en un
+  deploy eso hace que Google reciba un redirect_uri de localhost: login imposible, sin ningún error
+  que lo explique.
+- **`trustedOrigins`** lista el apex, el www, la URL de producción y —en preview— la de la rama
+  **y** la del deploy: un preview se puede abrir por cualquiera de las dos. Si aparece un origen
+  nuevo, **agregalo ahí**; no alcanza con cambiar `BETTER_AUTH_URL`.
+- **Google se apaga en los previews** aunque haya credenciales: su `redirect_uri` sería el de la
+  rama, que Google no tiene autorizado (habría que cargar una por rama). En preview se entra con
+  email y contraseña.
 
 ## Organización y shell (desde F0.5)
 
@@ -149,7 +158,7 @@ orden**, y la seguridad va primero:
   sin ella, el deploy falla en el build.
 - **CI sin secretos** ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)): en cada PR corren
   lint + typecheck + `format:check` + Vitest; al pushear a `main`, además el smoke de Playwright.
-  El Postgres de los tests es un `services:` container mapeado a `localhost:55432`, o sea la misma
+  El Postgres de los tests es un `services:` container mapeado a `localhost:15432`, o sea la misma
   URL que ya trae `.env.test` — sirve tal cual, sin editar nada y sin tocar la guarda de
   [`tests/db.ts`](tests/db.ts).
 - **El E2E nunca toca producción**: Playwright corre contra `next build` + `next start` apuntando
@@ -212,7 +221,7 @@ orden**, y la seguridad va primero:
   sin abstracción vacía. El test "un teacher no accede a grupos ajenos" se escribe en S2.
 - **Tests de aislamiento** (Vitest contra Postgres real, nunca mockeando Prisma): levantá la base
   con `npm run test:db:up` (Docker) y corré `npm test`. La base es un contenedor efímero
-  (`docker-compose.test.yml`, puerto 55432); [`tests/db.ts`](tests/db.ts) tiene una guarda de 4
+  (`docker-compose.test.yml`, puerto 15432); [`tests/db.ts`](tests/db.ts) tiene una guarda de 4
   capas (incluida una tabla centinela) para que sea **imposible** truncar dev o producción por un
   `TEST_DATABASE_URL` mal puesto. `.env.test` está commiteado a propósito (solo credenciales de
   localhost, sin secretos).
