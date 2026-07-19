@@ -36,3 +36,11 @@ export const getDisciplines = cache(async (orgId: string) =>
     select: { id: true, name: true },
   }),
 );
+
+/** Config de la org que la agenda necesita: la zona define qué día es "hoy" (RN10). */
+export const getOrgSettings = cache(async (orgId: string) =>
+  withOrg(orgId).organization.findUnique({
+    where: { id: orgId },
+    select: { timezone: true },
+  }),
+);
