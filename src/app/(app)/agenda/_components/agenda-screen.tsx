@@ -15,6 +15,7 @@ import { EmptyState } from "../../_components/empty-state";
 import { AgendaNav } from "./agenda-nav";
 import { GroupSheet } from "./group-sheet";
 import { GroupsSheet } from "./groups-sheet";
+import { SessionDetailSheet } from "./session-detail-sheet";
 import { WeekView, weekDays } from "./week-view";
 
 /**
@@ -50,6 +51,8 @@ export function AgendaScreen({
   const [editing, setEditing] = useState<GroupListItem | null>(null);
   const [sheetKey, setSheetKey] = useState(0);
   const [groupsListOpen, setGroupsListOpen] = useState(false);
+  const [selected, setSelected] = useState<AgendaOccurrence | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
 
   // Limpia el `?nuevo=grupo` de la URL (solo navegación, sin setState: el estado inicial
   // del sheet ya salió del prop).
@@ -72,9 +75,16 @@ export function AgendaScreen({
   const openEdit = (group: GroupListItem) => {
     toast.closeAll();
     setGroupsListOpen(false);
+    setDetailOpen(false);
     setEditing(group);
     setSheetKey((key) => key + 1);
     setGroupSheetOpen(true);
+  };
+
+  const openDetail = (occurrence: AgendaOccurrence) => {
+    toast.closeAll();
+    setSelected(occurrence);
+    setDetailOpen(true);
   };
 
   const days = selectedDay ? [selectedDay] : weekDays(weekStart);
@@ -105,7 +115,12 @@ export function AgendaScreen({
       ) : (
         <>
           <AgendaNav weekStart={weekStart} selectedDay={selectedDay} today={today} />
-          <WeekView days={days} today={today} occurrences={shownOccurrences} />
+          <WeekView
+            days={days}
+            today={today}
+            occurrences={shownOccurrences}
+            onSelect={openDetail}
+          />
         </>
       )}
 
@@ -125,6 +140,17 @@ export function AgendaScreen({
         onOpenChange={setGroupsListOpen}
         groups={groups}
         onEdit={openEdit}
+      />
+
+      <SessionDetailSheet
+        key={selected ? `${selected.slotId}|${selected.originalDate}` : "sin-sesion"}
+        open={detailOpen}
+        onOpenChange={setDetailOpen}
+        occurrence={selected}
+        onEditGroup={(groupId) => {
+          const group = groups.find((g) => g.id === groupId);
+          if (group) openEdit(group);
+        }}
       />
     </>
   );

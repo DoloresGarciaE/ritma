@@ -10,8 +10,17 @@ import {
   setGroupActive,
   updateGroup,
 } from "@/server/services/groups";
+import { cancelSession, rescheduleSession, restoreSession } from "@/server/services/sessions";
 
-import { groupSchema, toGroupFieldErrors, type GroupFormState } from "./schema";
+import {
+  groupSchema,
+  occurrenceRefSchema,
+  rescheduleSchema,
+  toGroupFieldErrors,
+  toRescheduleFieldErrors,
+  type GroupFormState,
+  type RescheduleFormState,
+} from "./schema";
 
 /**
  * Server actions de la agenda.
@@ -74,6 +83,47 @@ export async function updateGroupAction(
 export async function setGroupActiveAction(groupId: string, active: boolean): Promise<void> {
   const orgId = await currentOrgId();
   await setGroupActive(orgId, groupId, active);
+
+  revalidateAgenda();
+}
+
+/**
+ * Cancela SOLO esa ocurrencia (HU3.3, RN8). La identidad es `(slotId, date ORIGINAL)`:
+ * los inputs forjados los corta el servicio (franja ajena, fecha que no es ocurrencia).
+ */
+export async function cancelSessionAction(input: { slotId: string; date: string }): Promise<void> {
+  const orgId = await currentOrgId();
+
+  const parsed = occurrenceRefSchema.parse(input);
+  await cancelSession(orgId, parsed);
+
+  revalidateAgenda();
+}
+
+/** Mueve SOLO esa ocurrencia a otra fecha/hora (HU3.3). */
+export async function rescheduleSessionAction(input: {
+  slotId: string;
+  date: string;
+  movedToDate: string;
+  movedToStartTime: string;
+}): Promise<RescheduleFormState> {
+  const orgId = await currentOrgId();
+
+  const parsed = rescheduleSchema.safeParse(input);
+  if (!parsed.success) return { errors: toRescheduleFieldErrors(parsed.error) };
+
+  await rescheduleSession(orgId, parsed.data);
+
+  revalidateAgenda();
+  return {};
+}
+
+/** Restablece la ocurrencia: borra la excepción (cancelada o movida) y vuelve la regla. */
+export async function restoreSessionAction(input: { slotId: string; date: string }): Promise<void> {
+  const orgId = await currentOrgId();
+
+  const parsed = occurrenceRefSchema.parse(input);
+  await restoreSession(orgId, parsed);
 
   revalidateAgenda();
 }
