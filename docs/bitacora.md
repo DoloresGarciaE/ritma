@@ -157,3 +157,28 @@ del diagnóstico. Se pueden borrar con Prisma Studio apuntando al branch de prod
   `border-border` siempre. Verificado en un navegador real, en viewport de teléfono.
 - **Próximo:** S2 — Agenda (`ClassGroup`, `ScheduleSlot`, `ClassSession`), y con ella el test que
   quedó pendiente desde F0.6: "un teacher no accede a grupos ajenos".
+
+## Semana 9 (julio 2026) — agenda (S2)
+
+- **Hecho:** `feat/s2-schedule`: los tres modelos de la agenda con sus bloques de aislamiento
+  (calcados del patrón Student, + los casos nuevos de referencia cruzada: `disciplineId`/`slotId`
+  ajenos rechazan ANTES de escribir); el **motor puro de ocurrencias** (`schedule.ts`) — las
+  sesiones se calculan al vuelo y `ClassSession` guarda solo los desvíos, identidad
+  `(slotId, fecha original)`, restablecer = borrar la fila; vistas semana/día con toggle,
+  navegación por `<Link>` y "Hoy"; crear/editar grupo con editor de franjas (§3.15 nueva) y
+  disciplina al vuelo; cancelar (con el copy canónico de §3.8) / reprogramar / restablecer;
+  acceso "Grupos" en la app bar; seed con 7 grupos y el feriado cancelado del DoD. **167 tests**
+  (venían 80).
+- **Trabado:** nada bloqueante, pero tres hallazgos. Uno: **Coral 400 no puede existir** — el
+  interpolado da 2.58:1 y reprueba el 3:1 de no-texto (verificado con `contrast.js`); la barra de
+  disciplina clara usa Coral 500 ◆ y la spec de color quedó en v1.4 con los tokens
+  `discipline-1/-2/-3`. Dos: el borrador de §7 no identificaba una ocurrencia (un grupo puede
+  tener dos franjas el mismo día): `ClassSession` ganó `slotId` + `@@unique([slotId, date])` —
+  nota S2 en §7. Tres: `date-fns` quedó AFUERA — la aritmética de fechas civiles es entera y una
+  librería que opera en el huso del servidor ahí es riesgo, no ayuda; solo entró `@date-fns/tz`
+  (TZDate, el sucesor first-party de `date-fns-tz` para "hoy" en la zona de la org). Deuda
+  registrada: sin `teacherId` hasta S9, el test de teacher-scope se re-difiere y un TEACHER de
+  estudio ve todos los grupos de su org; y editar/borrar una franja reescribe también las semanas
+  pasadas (inherente al patrón on-the-fly; se revisita cuando RN7/F2 lo exija).
+- **Próximo:** S3 — Cobranzas: inscripciones y cuotas (`Enrollment`, `Charge`), la lista de
+  inscriptos en el detalle de sesión, y el primer cron (RN1).
