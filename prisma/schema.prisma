@@ -54,6 +54,9 @@ model Organization {
   memberships Membership[]
   disciplines Discipline[]
   students    Student[]
+  groups      ClassGroup[]
+  slots       ScheduleSlot[]
+  sessions    ClassSession[]
 }
 
 /// Alumno del padrón (Plan §7, HU2.1–2.3).
@@ -101,11 +104,111 @@ model Discipline {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  org    Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  groups ClassGroup[]
 
   // El unique ya indexa por orgId (es la columna líder), así que cumple la convención
   // de §7 sin pagar un segundo índice. Además evita disciplinas repetidas en una org.
   @@unique([orgId, name])
+}
+
+enum SessionStatus {
+  SCHEDULED
+  CANCELLED
+  DONE
+}
+
+/// Grupo (comisión): la unidad central de la agenda (Plan §3, HU3.1).
+///
+/// SIN `teacherId` (llega con TeacherProfile en S9) ni `spaceId` (Space, S8): en la
+/// Fase 1 la org independiente tiene un solo profe implícito. Desvío del borrador de
+/// §7 registrado ahí mismo; la migración que los agrega va en esos bloques.
+model ClassGroup {
+  id           String  @id @default(cuid())
+  orgId        String
+  disciplineId String
+  name         String
+  /// Tarifa de referencia (HU3.1): el precio sugerido al inscribir, no un contrato.
+  /// Decimal(12,2) queda como precedente de precisión para Charge/Payment (S3/S4).
+  defaultPrice Decimal @db.Decimal(12, 2)
+  /// RN9: baja lógica. Un grupo inactivo desaparece de la agenda, no de la historia.
+  active       Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  org        Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  // Restrict: hoy no hay UI para borrar disciplinas; si llega, no puede dejar grupos
+  // huérfanos en silencio.
+  discipline Discipline   @relation(fields: [disciplineId], references: [id], onDelete: Restrict)
+
+  slots    ScheduleSlot[]
+  sessions ClassSession[]
+
+  @@index([orgId, active])
+}
+
+/// Franja recurrente de un grupo: día de semana + hora + duración (Plan §3, RN10).
+/// Recurrencia propia simple, sin RRULE (Plan §10). Un grupo puede tener varias.
+model ScheduleSlot {
+  id          String @id @default(cuid())
+  orgId       String
+  groupId     String
+  /// 0–6 convención JS (0 = domingo), para calzar con `Date.getDay()` sin traducciones.
+  /// La UI renderiza lunes-primero.
+  weekday     Int
+  /// Hora LOCAL de la org, "HH:mm" ("19:00"). Nunca un instante UTC (RN10).
+  startTime   String
+  durationMin Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  org   Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  group ClassGroup   @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  sessions ClassSession[]
+
+  @@index([orgId])
+  @@index([groupId])
+}
+
+/// EXCEPCIÓN sobre una ocurrencia calculada (HU3.3, RN8).
+///
+/// Las ocurrencias NO se materializan: se calculan al vuelo desde las franjas para el
+/// rango visible (server/services/schedule.ts). Una fila acá existe SOLO si esa
+/// ocurrencia concreta se desvió: cancelada, reprogramada o anotada. Restablecer una
+/// sesión = borrar la fila (volver a la verdad calculada).
+///
+/// La identidad de la ocurrencia es `(slotId, date)` con `date` = fecha CIVIL original
+/// (@db.Date, sin hora — RN10). No alcanza `(groupId, date)`: un grupo puede tener dos
+/// franjas el mismo día. Reprogramar NO cambia la identidad: la nueva posición vive en
+/// `movedToDate`/`movedToStartTime` y el status queda SCHEDULED.
+model ClassSession {
+  id      String        @id @default(cuid())
+  orgId   String
+  groupId String
+  slotId  String
+  date    DateTime      @db.Date
+  status  SessionStatus @default(SCHEDULED)
+  note    String?
+
+  movedToDate      DateTime? @db.Date
+  movedToStartTime String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  org   Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  group ClassGroup   @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  slot  ScheduleSlot @relation(fields: [slotId], references: [id], onDelete: Cascade)
+
+  @@unique([slotId, date])
+  // Las dos queries de weekData: excepciones cuya fecha original cae en la semana, y
+  // las reprogramadas HACIA la semana desde una fecha de afuera.
+  @@index([orgId, date])
+  @@index([orgId, movedToDate])
+  @@index([groupId])
 }
 
 /// Persona con cuenta y login. Puede pertenecer a varias organizaciones.

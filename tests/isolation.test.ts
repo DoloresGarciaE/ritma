@@ -2,7 +2,15 @@ import { describe, expect, it } from "vitest";
 
 import { db, withOrg } from "@/lib/db";
 
-import { makeDiscipline, makeMember, makeOrg, makeStudent } from "./factories";
+import {
+  makeDiscipline,
+  makeGroup,
+  makeMember,
+  makeOrg,
+  makeSession,
+  makeSlot,
+  makeStudent,
+} from "./factories";
 
 /**
  * El corazón de F0.6: un cliente `withOrg(A)` no puede leer NI escribir datos de la org B.
@@ -192,6 +200,263 @@ describe("aislamiento org × org — Student", () => {
 
     expect(created.orgId).toBe(a.id);
     expect(await db.student.count({ where: { orgId: b.id } })).toBe(0);
+  });
+});
+
+/** S2: los tres modelos de la agenda, con el mismo bloque que Student. */
+describe("aislamiento org × org — ClassGroup", () => {
+  it("A no ve los grupos de B; solo los propios", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+    await makeGroup(a.id, "Árabe inicial");
+    await makeGroup(b.id, "Folklore adultos");
+
+    const seenByA = await withOrg(a.id).classGroup.findMany();
+    expect(seenByA.map((g) => g.name)).toEqual(["Árabe inicial"]);
+  });
+
+  it("findUnique por el id de un grupo de B, desde A, devuelve null", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+    const bGroup = await makeGroup(b.id, "Folklore adultos");
+
+    expect(await withOrg(a.id).classGroup.findUnique({ where: { id: bGroup.id } })).toBeNull();
+  });
+
+  it("A no puede editar un grupo de B (P2025), ni desactivarlo", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+    const bGroup = await makeGroup(b.id, "Folklore adultos");
+
+    await expect(
+      withOrg(a.id).classGroup.update({
+        where: { id: bGroup.id },
+        data: { name: "Hackeado" },
+      }),
+    ).rejects.toMatchObject({ code: "P2025" });
+
+    await expect(
+      withOrg(a.id).classGroup.update({
+        where: { id: bGroup.id },
+        data: { active: false },
+      }),
+    ).rejects.toMatchObject({ code: "P2025" });
+
+    const after = await db.classGroup.findUniqueOrThrow({ where: { id: bGroup.id } });
+    expect(after.name).toBe("Folklore adultos");
+    expect(after.active).toBe(true);
+  });
+
+  it("A no puede borrar un grupo de B; un deleteMany desde A no lo alcanza", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+    const bGroup = await makeGroup(b.id, "Folklore adultos");
+
+    await expect(
+      withOrg(a.id).classGroup.delete({ where: { id: bGroup.id } }),
+    ).rejects.toMatchObject({ code: "P2025" });
+
+    await withOrg(a.id).classGroup.deleteMany({});
+    expect(await db.classGroup.count({ where: { orgId: b.id } })).toBe(1);
+  });
+
+  it("un grupo creado vía withOrg(A) no puede aterrizar en B: el orgId se fuerza", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+    const aDiscipline = await makeDiscipline(a.id, "Árabe");
+
+    const created = await withOrg(a.id).classGroup.create({
+      data: {
+        name: "Canto grupal",
+        disciplineId: aDiscipline.id,
+        defaultPrice: 20000,
+        orgId: b.id,
+      },
+    });
+
+    expect(created.orgId).toBe(a.id);
+    expect(await db.classGroup.count({ where: { orgId: b.id } })).toBe(0);
+  });
+});
+
+describe("aislamiento org × org — ScheduleSlot", () => {
+  it("A no ve las franjas de B; solo las propias", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+    const aGroup = await makeGroup(a.id, "Árabe inicial");
+    const bGroup = await makeGroup(b.id, "Folklore adultos");
+    await makeSlot(a.id, aGroup.id, { startTime: "18:00" });
+    await makeSlot(b.id, bGroup.id, { startTime: "10:00" });
+
+    const seenByA = await withOrg(a.id).scheduleSlot.findMany();
+    expect(seenByA.map((s) => s.startTime)).toEqual(["18:00"]);
+  });
+
+  it("findUnique por el id de una franja de B, desde A, devuelve null", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+    const bGroup = await makeGroup(b.id, "Folklore adultos");
+    const bSlot = await makeSlot(b.id, bGroup.id);
+
+    expect(await withOrg(a.id).scheduleSlot.findUnique({ where: { id: bSlot.id } })).toBeNull();
+  });
+
+  it("A no puede editar una franja de B (P2025)", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+    const bGroup = await makeGroup(b.id, "Folklore adultos");
+    const bSlot = await makeSlot(b.id, bGroup.id, { startTime: "10:00" });
+
+    await expect(
+      withOrg(a.id).scheduleSlot.update({
+        where: { id: bSlot.id },
+        data: { startTime: "03:00" },
+      }),
+    ).rejects.toMatchObject({ code: "P2025" });
+
+    const after = await db.scheduleSlot.findUniqueOrThrow({ where: { id: bSlot.id } });
+    expect(after.startTime).toBe("10:00");
+  });
+
+  it("A no puede borrar una franja de B; un deleteMany desde A no la alcanza", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+    const bGroup = await makeGroup(b.id, "Folklore adultos");
+    const bSlot = await makeSlot(b.id, bGroup.id);
+
+    await expect(
+      withOrg(a.id).scheduleSlot.delete({ where: { id: bSlot.id } }),
+    ).rejects.toMatchObject({ code: "P2025" });
+
+    await withOrg(a.id).scheduleSlot.deleteMany({});
+    expect(await db.scheduleSlot.count({ where: { orgId: b.id } })).toBe(1);
+  });
+
+  it("una franja creada vía withOrg(A) no puede aterrizar en B: el orgId se fuerza", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+    const aGroup = await makeGroup(a.id, "Árabe inicial");
+
+    const created = await withOrg(a.id).scheduleSlot.create({
+      data: { groupId: aGroup.id, weekday: 2, startTime: "19:00", durationMin: 60, orgId: b.id },
+    });
+
+    expect(created.orgId).toBe(a.id);
+    expect(await db.scheduleSlot.count({ where: { orgId: b.id } })).toBe(0);
+  });
+});
+
+describe("aislamiento org × org — ClassSession", () => {
+  it("A no ve las excepciones de B; solo las propias", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+    const aGroup = await makeGroup(a.id, "Árabe inicial");
+    const aSlot = await makeSlot(a.id, aGroup.id);
+    const bGroup = await makeGroup(b.id, "Folklore adultos");
+    const bSlot = await makeSlot(b.id, bGroup.id);
+    await makeSession(a.id, aGroup.id, aSlot.id, "2026-07-14");
+    await makeSession(b.id, bGroup.id, bSlot.id, "2026-07-14");
+
+    const seenByA = await withOrg(a.id).classSession.findMany();
+    expect(seenByA.map((s) => s.orgId)).toEqual([a.id]);
+  });
+
+  it("findUnique por el id de una excepción de B, desde A, devuelve null", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+    const bGroup = await makeGroup(b.id, "Folklore adultos");
+    const bSlot = await makeSlot(b.id, bGroup.id);
+    const bSession = await makeSession(b.id, bGroup.id, bSlot.id, "2026-07-14");
+
+    expect(await withOrg(a.id).classSession.findUnique({ where: { id: bSession.id } })).toBeNull();
+  });
+
+  it("A no puede editar una excepción de B (P2025)", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+    const bGroup = await makeGroup(b.id, "Folklore adultos");
+    const bSlot = await makeSlot(b.id, bGroup.id);
+    const bSession = await makeSession(b.id, bGroup.id, bSlot.id, "2026-07-14");
+
+    await expect(
+      withOrg(a.id).classSession.update({
+        where: { id: bSession.id },
+        data: { status: "SCHEDULED" },
+      }),
+    ).rejects.toMatchObject({ code: "P2025" });
+
+    const after = await db.classSession.findUniqueOrThrow({ where: { id: bSession.id } });
+    expect(after.status).toBe("CANCELLED");
+  });
+
+  it("A no puede borrar una excepción de B; un deleteMany desde A no la alcanza", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+    const bGroup = await makeGroup(b.id, "Folklore adultos");
+    const bSlot = await makeSlot(b.id, bGroup.id);
+    const bSession = await makeSession(b.id, bGroup.id, bSlot.id, "2026-07-14");
+
+    await expect(
+      withOrg(a.id).classSession.delete({ where: { id: bSession.id } }),
+    ).rejects.toMatchObject({ code: "P2025" });
+
+    await withOrg(a.id).classSession.deleteMany({});
+    expect(await db.classSession.count({ where: { id: bSession.id } })).toBe(1);
+  });
+
+  it("una excepción creada vía withOrg(A) no puede aterrizar en B: el orgId se fuerza", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+    const aGroup = await makeGroup(a.id, "Árabe inicial");
+    const aSlot = await makeSlot(a.id, aGroup.id);
+
+    const created = await withOrg(a.id).classSession.create({
+      data: {
+        groupId: aGroup.id,
+        slotId: aSlot.id,
+        date: new Date("2026-07-14T00:00:00.000Z"),
+        status: "CANCELLED",
+        orgId: b.id,
+      },
+    });
+
+    expect(created.orgId).toBe(a.id);
+    expect(await db.classSession.count({ where: { orgId: b.id } })).toBe(0);
+  });
+
+  it("un upsert sobre la ocurrencia de B no la toca: cae al create y queda en A", async () => {
+    // CRÍTICO: cancelar una sesión ES un upsert por (slotId, date). Si el upsert de A
+    // matcheara la fila de B, "cancelar" cruzaría tenants.
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+    const aGroup = await makeGroup(a.id, "Árabe inicial");
+    const aSlot = await makeSlot(a.id, aGroup.id);
+    const bGroup = await makeGroup(b.id, "Folklore adultos");
+    const bSlot = await makeSlot(b.id, bGroup.id);
+    const bSession = await makeSession(b.id, bGroup.id, bSlot.id, "2026-07-14", {
+      status: "SCHEDULED",
+      note: "Nota de B",
+    });
+
+    // Mismo (slotId, date) que la fila de B: el where inyecta orgId=A → no matchea → CREATE
+    // (con los datos de A: el hook además pisa el orgId del create).
+    const result = await withOrg(a.id).classSession.upsert({
+      where: { slotId_date: { slotId: bSlot.id, date: new Date("2026-07-14T00:00:00.000Z") } },
+      create: {
+        groupId: aGroup.id,
+        slotId: aSlot.id,
+        date: new Date("2026-07-14T00:00:00.000Z"),
+        status: "CANCELLED",
+        orgId: b.id, // el hook también pisa esto
+      },
+      update: { status: "CANCELLED", note: "No debería pasar" },
+    });
+
+    expect(result.orgId).toBe(a.id);
+    // La de B quedó exactamente igual: ni cancelada ni anotada.
+    const bAfter = await db.classSession.findUniqueOrThrow({ where: { id: bSession.id } });
+    expect(bAfter.status).toBe("SCHEDULED");
+    expect(bAfter.note).toBe("Nota de B");
   });
 });
 
