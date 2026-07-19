@@ -24,7 +24,8 @@ export default async function DashboardPage() {
         icon={CalendarPlus}
         title="Empecemos por tu primer grupo"
         description="Un grupo es una clase con su horario, su disciplina y sus alumnos. Con eso armado, la agenda y las cuotas salen solas."
-        cta={{ label: "Creá tu primer grupo", href: "/agenda" }}
+        // `?nuevo=grupo` abre el alta directo (S2): un tap menos que aterrizar en la agenda.
+        cta={{ label: "Creá tu primer grupo", href: "/agenda?nuevo=grupo" }}
       />
     </>
   );

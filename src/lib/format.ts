@@ -69,6 +69,16 @@ const MONTHS_SHORT = [
   "dic",
 ] as const;
 
+/** `2` → `"mar"` — para resúmenes de franjas ("mar 19:00 · jue 19:00"). */
+export function shortWeekday(weekday: number): string {
+  return WEEKDAYS_SHORT[weekday];
+}
+
+/** `2` → `"martes"` — para labels accesibles y confirmaciones. */
+export function fullWeekday(weekday: number): string {
+  return WEEKDAYS_FULL[weekday];
+}
+
 function partsOf(date: string): { day: string; month: string; monthIndex: number } {
   const [, month, day] = date.split("-");
   return { day: String(Number(day)), month, monthIndex: Number(month) - 1 };

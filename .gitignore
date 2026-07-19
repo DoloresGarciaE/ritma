@@ -52,3 +52,6 @@ next-env.d.ts
 
 # prisma: cliente generado (se regenera con `prisma generate`, en postinstall y build)
 /src/generated/
+
+#skills
+.agents

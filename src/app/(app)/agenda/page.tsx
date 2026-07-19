@@ -2,11 +2,10 @@ import type { Metadata } from "next";
 
 import { requireSession } from "@/lib/auth";
 import { DEFAULT_TIMEZONE, isCivilDate, mondayOf, todayInTz } from "@/lib/dates";
-import { getOrgSettings } from "@/server/organizations";
+import { getDisciplines, getOrgSettings } from "@/server/organizations";
 import { listGroups } from "@/server/services/groups";
 import { weekData } from "@/server/services/sessions";
 
-import { AppBar } from "../_components/app-bar";
 import { AgendaScreen } from "./_components/agenda-screen";
 
 export const metadata: Metadata = {
@@ -48,22 +47,22 @@ export default async function AgendaPage({
     ? (day ?? (mondayOf(today) === weekStart ? today : weekStart))
     : null;
 
-  const [{ occurrences }, groups] = await Promise.all([
+  const [{ occurrences }, groups, disciplines] = await Promise.all([
     weekData(orgId, weekStart),
     listGroups(orgId, { includeInactive: true }),
+    getDisciplines(orgId),
   ]);
 
+  // La app bar la compone la screen (client): su acción "Grupos" abre un sheet.
   return (
-    <>
-      <AppBar title="Agenda" />
-
-      <AgendaScreen
-        weekStart={weekStart}
-        today={today}
-        selectedDay={selectedDay}
-        occurrences={occurrences}
-        hasGroups={groups.length > 0}
-      />
-    </>
+    <AgendaScreen
+      weekStart={weekStart}
+      today={today}
+      selectedDay={selectedDay}
+      occurrences={occurrences}
+      groups={groups}
+      disciplines={disciplines}
+      autoOpenCreate={first(params.nuevo) === "grupo"}
+    />
   );
 }
