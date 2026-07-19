@@ -59,6 +59,7 @@
 
   --color-verde-100: #d3ede0;
   --color-verde-300: #7cc9a4;
+  --color-verde-400: #3fa173;
   --color-verde-600: #1e8e5a;
   --color-verde-700: #177449;
   --color-verde-800: #115a39;
@@ -145,6 +146,13 @@
   --nav-active-bg: #f6f4fd;
   --nav-active-text: #5a4bd1;
 
+  /* Colores de disciplina (Componentes §3.7, Color §4): la barra del bloque de sesión.
+     No-texto sobre blanco: Violeta 400 4.57 · Coral 500 3.09 · Verde 400 3.20.
+     Coral 400 NO existe: el interpolado (#f18269) da 2.58:1 y reprueba — se usa el 500 ◆. */
+  --discipline-1: #7263e2;
+  --discipline-2: #ee6a4d;
+  --discipline-3: #3fa173;
+
   /* Avatar de iniciales (Componentes §3.11). Violeta 800 sobre Violeta 100: 8.82:1 */
   --avatar-bg: #edeafb;
   --avatar-text: #3a2f94;
@@ -203,6 +211,11 @@
   --nav-active-bg: #2a2268;
   --nav-active-text: #c9c2f6;
 
+  /* Disciplinas en oscuro: stops 300 sobre superficie #201f28 — 4.96 · 7.69 · 8.34 */
+  --discipline-1: #8b7ff0;
+  --discipline-2: #f59b85;
+  --discipline-3: #7cc9a4;
+
   /* Avatar: misma receta que --nav-active-* y --state-waived-*. Violeta 200 sobre 900: 8.21:1 */
   --avatar-bg: #2a2268;
   --avatar-text: #c9c2f6;
@@ -258,6 +271,10 @@
 
     --nav-active-bg: #2a2268;
     --nav-active-text: #c9c2f6;
+
+    --discipline-1: #8b7ff0;
+    --discipline-2: #f59b85;
+    --discipline-3: #7cc9a4;
 
     --avatar-bg: #2a2268;
     --avatar-text: #c9c2f6;
@@ -315,6 +332,10 @@
 
   --color-nav-active-bg: var(--nav-active-bg);
   --color-nav-active-text: var(--nav-active-text);
+
+  --color-discipline-1: var(--discipline-1);
+  --color-discipline-2: var(--discipline-2);
+  --color-discipline-3: var(--discipline-3);
 
   --color-avatar-bg: var(--avatar-bg);
   --color-avatar-text: var(--avatar-text);
