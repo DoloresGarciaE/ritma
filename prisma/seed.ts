@@ -55,6 +55,76 @@ const SEED_STUDENTS: Record<string, { name: string; phone?: string; active?: boo
   ],
 };
 
+/**
+ * La agenda (S2): grupos con franjas realistas. "Árabe inicial" y "Contemporáneo juvenil"
+ * son los de dos días por semana; "Canto grupal" está inactivo para probar el acceso
+ * "Grupos" y el filtro de la agenda.
+ */
+const SEED_GROUPS: Record<
+  string,
+  {
+    name: string;
+    discipline: string;
+    price: number;
+    active?: boolean;
+    slots: { weekday: number; startTime: string; durationMin: number }[];
+  }[]
+> = {
+  [ORG_INDEPENDIENTE]: [
+    {
+      name: "Árabe inicial",
+      discipline: "Árabe",
+      price: 18000,
+      slots: [
+        { weekday: 2, startTime: "18:00", durationMin: 60 },
+        { weekday: 4, startTime: "18:00", durationMin: 60 },
+      ],
+    },
+    {
+      name: "Árabe intermedio",
+      discipline: "Árabe",
+      price: 20000,
+      slots: [{ weekday: 3, startTime: "19:30", durationMin: 90 }],
+    },
+    {
+      name: "Folklore adultos",
+      discipline: "Folklore",
+      price: 15000,
+      slots: [{ weekday: 6, startTime: "10:00", durationMin: 90 }],
+    },
+  ],
+  [ORG_ESTUDIO]: [
+    {
+      name: "Contemporáneo juvenil",
+      discipline: "Contemporáneo",
+      price: 22000,
+      slots: [
+        { weekday: 1, startTime: "17:00", durationMin: 60 },
+        { weekday: 3, startTime: "17:00", durationMin: 60 },
+      ],
+    },
+    {
+      name: "Árabe avanzado",
+      discipline: "Árabe",
+      price: 24000,
+      slots: [{ weekday: 4, startTime: "20:00", durationMin: 90 }],
+    },
+    {
+      name: "Funcional mañanas",
+      discipline: "Funcional",
+      price: 16000,
+      slots: [{ weekday: 2, startTime: "08:30", durationMin: 45 }],
+    },
+    {
+      name: "Canto grupal",
+      discipline: "Canto",
+      price: 19000,
+      active: false,
+      slots: [{ weekday: 5, startTime: "18:30", durationMin: 60 }],
+    },
+  ],
+};
+
 async function main() {
   // Import dinámico y no estático: db.ts y auth.ts leen process.env al importarse,
   // así que tienen que cargarse DESPUÉS de dotenv (los import se hoistean).
@@ -135,6 +205,84 @@ async function main() {
       }
     }
 
+    // Grupos y franjas (S2). Como Student: sin unique natural, la idempotencia se
+    // resuelve buscando por [orgId, name] — si el grupo existe, se saltea entero.
+    for (const [orgId, groups] of Object.entries(SEED_GROUPS)) {
+      for (const { name, discipline, price, active, slots } of groups) {
+        const existing = await db.classGroup.findFirst({ where: { orgId, name } });
+        if (existing) continue;
+
+        const disciplineRow = await db.discipline.findUniqueOrThrow({
+          where: { orgId_name: { orgId, name: discipline } },
+        });
+
+        await db.classGroup.create({
+          data: {
+            orgId,
+            name,
+            disciplineId: disciplineRow.id,
+            defaultPrice: price,
+            active: active ?? true,
+            slots: { create: slots.map((slot) => ({ ...slot, orgId })) },
+          },
+        });
+      }
+    }
+
+    // Excepciones de ESTA semana, con los helpers reales del dominio: el DoD de S2 es
+    // "la semana del profe se ve correcta, feriado cancelado incluido". El upsert por
+    // [slotId, date] las hace idempotentes; corridas en semanas distintas van dejando
+    // historial realista.
+    const { addDays, civilToDb, mondayOf, todayInTz } = await import("../src/lib/dates");
+
+    async function seedException(
+      orgId: string,
+      groupName: string,
+      weekday: number,
+      changes: {
+        status: "SCHEDULED" | "CANCELLED";
+        note?: string;
+        movedTo?: { days: number; startTime: string };
+      },
+    ) {
+      const org = await db.organization.findUniqueOrThrow({ where: { id: orgId } });
+      const weekStart = mondayOf(todayInTz(org.timezone));
+
+      const group = await db.classGroup.findFirstOrThrow({ where: { orgId, name: groupName } });
+      const slot = await db.scheduleSlot.findFirstOrThrow({
+        where: { groupId: group.id, weekday },
+      });
+
+      const date = addDays(weekStart, (weekday + 6) % 7);
+      const movedToDate = changes.movedTo ? addDays(weekStart, changes.movedTo.days) : null;
+
+      await db.classSession.upsert({
+        where: { slotId_date: { slotId: slot.id, date: civilToDb(date) } },
+        update: {},
+        create: {
+          orgId,
+          groupId: group.id,
+          slotId: slot.id,
+          date: civilToDb(date),
+          status: changes.status,
+          note: changes.note ?? null,
+          movedToDate: movedToDate ? civilToDb(movedToDate) : null,
+          movedToStartTime: changes.movedTo?.startTime ?? null,
+        },
+      });
+    }
+
+    // El feriado del DoD: el martes de "Árabe inicial", cancelado.
+    await seedException(ORG_INDEPENDIENTE, "Árabe inicial", 2, {
+      status: "CANCELLED",
+      note: "Feriado",
+    });
+    // Una reprogramada para QA manual: el lunes de "Contemporáneo juvenil" → jueves 18:00.
+    await seedException(ORG_ESTUDIO, "Contemporáneo juvenil", 1, {
+      status: "SCHEDULED",
+      movedTo: { days: 3, startTime: "18:00" },
+    });
+
     const orgs = await db.organization.findMany({
       orderBy: { name: "asc" },
       include: {
@@ -162,7 +310,10 @@ async function main() {
         `usuarios: ${await db.user.count()} · ` +
         `membresías: ${await db.membership.count()} · ` +
         `disciplinas: ${await db.discipline.count()} · ` +
-        `alumnos: ${await db.student.count()}\n` +
+        `alumnos: ${await db.student.count()} · ` +
+        `grupos: ${await db.classGroup.count()} · ` +
+        `franjas: ${await db.scheduleSlot.count()} · ` +
+        `sesiones (excepciones): ${await db.classSession.count()}\n` +
         `Contraseña de desarrollo: ${DEV_PASSWORD}\n`,
     );
   } finally {
