@@ -1,26 +1,68 @@
 import type { Metadata } from "next";
-import { CalendarDays } from "lucide-react";
+
+import { requireSession } from "@/lib/auth";
+import { DEFAULT_TIMEZONE, isCivilDate, mondayOf, todayInTz } from "@/lib/dates";
+import { getOrgSettings } from "@/server/organizations";
+import { listGroups } from "@/server/services/groups";
+import { weekData } from "@/server/services/sessions";
 
 import { AppBar } from "../_components/app-bar";
-import { EmptyState } from "../_components/empty-state";
+import { AgendaScreen } from "./_components/agenda-screen";
 
 export const metadata: Metadata = {
   title: "Agenda · Ritma",
 };
 
 /**
- * Placeholder: la agenda de verdad (grupos, horarios, sesiones) es F1·S2.
- * El CTA de "nuevo grupo" llega con ella; acá no ponemos un botón que no lleve a ningún lado.
+ * La agenda (HU3.2): semana y día, server-first.
+ *
+ * La URL es el estado de navegación — `?semana=<lunes>`, `?vista=dia&dia=<fecha>` — así
+ * que moverse entre semanas son `<Link>` prefetcheables y "Hoy" es volver a `/agenda`.
+ * Un param inválido no explota: cae en silencio a la semana de hoy. "Hoy" es el de la
+ * ZONA DE LA ORG (RN10), no el del servidor.
  */
-export default function AgendaPage() {
+export default async function AgendaPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const session = await requireSession();
+  const orgId = session.activeOrgId!;
+  const params = await searchParams;
+
+  const first = (value: string | string[] | undefined) => (Array.isArray(value) ? value[0] : value);
+
+  const settings = await getOrgSettings(orgId);
+  const today = todayInTz(settings?.timezone ?? DEFAULT_TIMEZONE);
+
+  const diaParam = first(params.dia);
+  const semanaParam = first(params.semana);
+  const isDayView = first(params.vista) === "dia";
+
+  // `?dia` manda sobre `?semana`: la vista día define su propia semana.
+  const day = diaParam && isCivilDate(diaParam) ? diaParam : undefined;
+  const weekAnchor = day ?? (semanaParam && isCivilDate(semanaParam) ? semanaParam : today);
+  const weekStart = mondayOf(weekAnchor);
+
+  const selectedDay = isDayView
+    ? (day ?? (mondayOf(today) === weekStart ? today : weekStart))
+    : null;
+
+  const [{ occurrences }, groups] = await Promise.all([
+    weekData(orgId, weekStart),
+    listGroups(orgId, { includeInactive: true }),
+  ]);
+
   return (
     <>
       <AppBar title="Agenda" />
 
-      <EmptyState
-        icon={CalendarDays}
-        title="Tu semana está vacía"
-        description="Acá va a vivir tu agenda: cada grupo con su horario, y las clases generadas solas. Estamos armándola."
+      <AgendaScreen
+        weekStart={weekStart}
+        today={today}
+        selectedDay={selectedDay}
+        occurrences={occurrences}
+        hasGroups={groups.length > 0}
       />
     </>
   );
