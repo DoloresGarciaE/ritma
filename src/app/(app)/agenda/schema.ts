@@ -43,7 +43,10 @@ export const groupSchema = z.object({
   disciplineId: z.string().min(1, "Elegí una disciplina."),
   defaultPrice: z
     .number({ error: "Poné la tarifa de referencia." })
-    .min(0, "La tarifa no puede ser negativa."),
+    .min(0, "La tarifa no puede ser negativa.")
+    // Decimal(12,2): sin tope, un número gigante desborda en Prisma y revienta la action
+    // en vez de dar error de campo.
+    .max(9_999_999_999, "Esa tarifa es demasiado alta."),
   slots: z.array(slotSchema).min(1, "Agregá al menos una franja."),
 });
 

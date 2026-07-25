@@ -167,7 +167,12 @@ del diagnóstico. Se pueden borrar con Prisma Studio apuntando al branch de prod
   `(slotId, fecha original)`, restablecer = borrar la fila; vistas semana/día con toggle,
   navegación por `<Link>` y "Hoy"; crear/editar grupo con editor de franjas (§3.15 nueva) y
   disciplina al vuelo; cancelar (con el copy canónico de §3.8) / reprogramar / restablecer;
-  acceso "Grupos" en la app bar; seed con 7 grupos y el feriado cancelado del DoD. **167 tests**
+  acceso "Grupos" en la app bar; seed con 7 grupos y el feriado cancelado del DoD. Antes del PR,
+  una pasada de review adversarial (multi-agente) sobre el diff completo dejó un endurecimiento:
+  cerrar el sheet de grupo con cambios sin guardar ahora pide confirmación (§3.8 lo exigía y ni
+  S1 ni S2 lo tenían), las actions de sesión toleran datos viejos de otra pestaña (toast de error
+  en vez de pantalla rota), el switch optimista tiene rollback, la tarifa tiene tope (desbordaba
+  Decimal(12,2)), y el guard de `activeOrgId` nulo dejó de depender de un `!`. **168 tests**
   (venían 80).
 - **Trabado:** nada bloqueante, pero tres hallazgos. Uno: **Coral 400 no puede existir** — el
   interpolado da 2.58:1 y reprueba el 3:1 de no-texto (verificado con `contrast.js`); la barra de

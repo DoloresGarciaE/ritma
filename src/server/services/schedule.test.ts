@@ -301,6 +301,34 @@ describe("occurrencesForRange — reprogramaciones (HU3.3)", () => {
     expect(result[1].originalDate).toBe("2026-07-07");
   });
 
+  it("dos movidas del mismo slot a la misma fecha y hora: orden estable por fecha original", () => {
+    const slots = [slot({ id: "martes", weekday: 2 })];
+    // Adrede en orden inverso: el desempate no puede depender del orden de las filas.
+    const exceptions = [
+      exception({
+        slotId: "martes",
+        date: "2026-07-14",
+        status: "SCHEDULED",
+        movedToDate: "2026-07-21",
+        movedToStartTime: "19:00",
+      }),
+      exception({
+        slotId: "martes",
+        date: "2026-07-07",
+        status: "SCHEDULED",
+        movedToDate: "2026-07-21",
+        movedToStartTime: "19:00",
+      }),
+    ];
+
+    const result = occurrencesForRange(slots, exceptions, {
+      from: "2026-07-20",
+      to: "2026-07-26",
+    });
+    // La ocurrencia normal del 21 + las dos entrantes, todas a las 19:00 del mismo día.
+    expect(result.map((o) => o.originalDate)).toEqual(["2026-07-07", "2026-07-14", "2026-07-21"]);
+  });
+
   it("dentro de la misma semana no se duplica: origen y destino en el rango = UNA ocurrencia", () => {
     const slots = [slot({ id: "martes", weekday: 2 })];
     const exceptions = [

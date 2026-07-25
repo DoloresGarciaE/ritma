@@ -145,11 +145,14 @@ export function occurrencesForRange(
     emit(slot, ex, ex.date);
   }
 
+  // El último desempate (originalDate) cubre a dos movidas del MISMO slot que caen en la
+  // misma fecha y hora: sin él, el orden dependería del orden de filas de la base.
   out.sort(
     (x, y) =>
       x.date.localeCompare(y.date) ||
       x.startTime.localeCompare(y.startTime) ||
-      x.slotId.localeCompare(y.slotId),
+      x.slotId.localeCompare(y.slotId) ||
+      x.originalDate.localeCompare(y.originalDate),
   );
 
   return out;

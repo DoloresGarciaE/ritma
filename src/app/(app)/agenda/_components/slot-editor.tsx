@@ -1,6 +1,7 @@
 "use client";
 
 import { Plus, X } from "lucide-react";
+import { useId } from "react";
 
 import { Button } from "@/components/ui/button";
 import { fullWeekday } from "@/lib/format";
@@ -66,8 +67,15 @@ export function SlotEditor({
     onChange(slots.map((slot) => (slot.key === key ? { ...slot, ...changes } : slot)));
   };
 
+  const errorId = useId();
+
   return (
-    <div className="flex flex-col gap-3">
+    <div
+      role="group"
+      aria-label="Horarios"
+      aria-describedby={error ? errorId : undefined}
+      className="flex flex-col gap-3"
+    >
       <span className="text-sm font-medium text-text">Horarios</span>
 
       {slots.map((slot, index) => {
@@ -83,7 +91,7 @@ export function SlotEditor({
             aria-label={`Franja ${index + 1}`}
             className="flex flex-col gap-2.5 rounded-card border border-border bg-surface p-3"
           >
-            <div className="flex flex-wrap gap-1.5" role="group" aria-label="Día de la semana">
+            <div className="flex flex-wrap gap-2" role="group" aria-label="Día de la semana">
               {WEEKDAY_PILLS.map((day) => (
                 <button
                   key={day.value}
@@ -108,7 +116,7 @@ export function SlotEditor({
               />
 
               <div
-                className="flex flex-1 flex-wrap items-center gap-1.5"
+                className="flex flex-1 flex-wrap items-center gap-2"
                 role="group"
                 aria-label="Duración"
               >
@@ -178,7 +186,11 @@ export function SlotEditor({
         Agregar franja
       </Button>
 
-      {error ? <p className="text-xs text-danger">{error}</p> : null}
+      {error ? (
+        <p id={errorId} className="text-xs text-danger">
+          {error}
+        </p>
+      ) : null}
 
       {showEditWarning ? (
         <p className="text-xs text-text-secondary">

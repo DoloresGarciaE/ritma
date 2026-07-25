@@ -41,8 +41,9 @@ export function AgendaNav({
   const dayHref = (date: string) =>
     date === today ? "/agenda?vista=dia" : `/agenda?vista=dia&dia=${date}`;
 
-  // El toggle a Día muestra hoy si la semana visible lo contiene; si no, su lunes.
-  const dayForToggle = currentWeek === weekStart ? today : weekStart;
+  // El toggle a Día conserva el día ya elegido; si venís de Semana, muestra hoy si la
+  // semana visible lo contiene y si no su lunes. (Un toggle activo no te saca de donde estás.)
+  const dayForToggle = selectedDay ?? (currentWeek === weekStart ? today : weekStart);
 
   const prevHref = isDayView ? dayHref(addDays(selectedDay, -1)) : weekHref(addDays(weekStart, -7));
   const nextHref = isDayView ? dayHref(addDays(selectedDay, 1)) : weekHref(addDays(weekStart, 7));
@@ -72,7 +73,7 @@ export function AgendaNav({
 
       <nav
         aria-label={isDayView ? "Cambiar de día" : "Cambiar de semana"}
-        className="flex items-center gap-1"
+        className="flex items-center gap-2"
       >
         <Link
           href={prevHref}

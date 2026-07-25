@@ -10,6 +10,7 @@ import {
   DialogDescription,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Field, Input } from "@/components/ui/input";
 import { ActionSheet, ActionSheetBody } from "@/components/ui/sheet";
 import { useToast } from "@/components/ui/toast";
 import { formatFullDayDate, formatListDate, formatMoney, formatTimeRange } from "@/lib/format";
@@ -39,7 +40,10 @@ export function SessionDetailSheet({
   onEditGroup: (groupId: string) => void;
 }) {
   const toast = useToast();
-  const [pending, startAction] = useTransition();
+  // Transiciones separadas: que "Mover sesión" no dibuje spinners en los otros botones.
+  const [cancelling, startCancel] = useTransition();
+  const [moving, startMove] = useTransition();
+  const [restoring, startRestore] = useTransition();
 
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
@@ -52,11 +56,29 @@ export function SessionDetailSheet({
   const cancelled = occurrence.status === "CANCELLED";
   const ref = { slotId: occurrence.slotId, date: occurrence.originalDate };
 
-  const close = () => {
+  const resetPanels = () => {
     setConfirmOpen(false);
     setRescheduleOpen(false);
+    setErrors({});
+  };
+
+  const close = () => {
+    resetPanels();
     onOpenChange(false);
   };
+
+  // Cerrar por gesto/backdrop también resetea: reabrir la MISMA ocurrencia no puede
+  // encontrarse el panel de reprogramar pegado de la vez anterior.
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) resetPanels();
+    onOpenChange(nextOpen);
+  };
+
+  // La agenda es colaborativa con uno mismo (dos pestañas, el teléfono y la compu): una
+  // action puede rechazar porque la franja ya no existe o la excepción ya fue borrada.
+  // Eso NO puede tirar la app entera: se avisa y la vista se refresca sola al reintentar.
+  const actionFailedToast = () =>
+    toast.error("No se pudo guardar. La agenda puede haber cambiado: actualizá y probá de nuevo.");
 
   const openReschedule = () => {
     // Defaults: la posición actual de la sesión — mover suele ser "otro día, misma hora".
@@ -67,8 +89,14 @@ export function SessionDetailSheet({
   };
 
   const handleCancel = () => {
-    startAction(async () => {
-      await cancelSessionAction(ref);
+    startCancel(async () => {
+      try {
+        await cancelSessionAction(ref);
+      } catch {
+        close();
+        actionFailedToast();
+        return;
+      }
       close();
       toast.notify(`Cancelaste la sesión del ${formatListDate(occurrence.date)}`);
     });
@@ -83,8 +111,15 @@ export function SessionDetailSheet({
       return;
     }
 
-    startAction(async () => {
-      const state = await rescheduleSessionAction(input);
+    startMove(async () => {
+      let state;
+      try {
+        state = await rescheduleSessionAction(input);
+      } catch {
+        close();
+        actionFailedToast();
+        return;
+      }
 
       if (state.errors) {
         setErrors(state.errors);
@@ -97,8 +132,14 @@ export function SessionDetailSheet({
   };
 
   const handleRestore = () => {
-    startAction(async () => {
-      await restoreSessionAction(ref);
+    startRestore(async () => {
+      try {
+        await restoreSessionAction(ref);
+      } catch {
+        close();
+        actionFailedToast();
+        return;
+      }
       close();
       toast.notify(
         occurrence.moved
@@ -111,7 +152,7 @@ export function SessionDetailSheet({
   return (
     <ActionSheet
       open={open}
-      onOpenChange={onOpenChange}
+      onOpenChange={handleOpenChange}
       title={occurrence.groupName}
       description={`${formatFullDayDate(occurrence.date)} · ${formatTimeRange(occurrence.startTime, occurrence.durationMin)} · ${occurrence.disciplineName}`}
     >
@@ -144,47 +185,39 @@ export function SessionDetailSheet({
           <div className="flex flex-col gap-3 rounded-card border border-border bg-surface p-3">
             <span className="text-sm font-medium text-text">Mover solo esta sesión</span>
 
-            <div className="flex flex-wrap items-start gap-2">
-              <div className="flex flex-col gap-1">
-                <input
+            <div className="grid grid-cols-2 items-start gap-2">
+              <Field label="Nueva fecha" error={errors.movedToDate}>
+                <Input
                   type="date"
-                  aria-label="Nueva fecha"
                   value={movedToDate}
+                  className="font-display tabular-nums"
                   onChange={(event) => {
                     setMovedToDate(event.target.value);
                     if (errors.movedToDate)
                       setErrors((prev) => ({ ...prev, movedToDate: undefined }));
                   }}
-                  className="h-11 rounded-control border border-border-strong bg-surface px-3 font-display text-base text-text tabular-nums transition-[border-color]"
                 />
-                {errors.movedToDate ? (
-                  <p className="text-xs text-danger">{errors.movedToDate}</p>
-                ) : null}
-              </div>
+              </Field>
 
-              <div className="flex flex-col gap-1">
-                <input
+              <Field label="Nueva hora" error={errors.movedToStartTime}>
+                <Input
                   type="time"
-                  aria-label="Nueva hora"
                   value={movedToStartTime}
+                  className="font-display tabular-nums"
                   onChange={(event) => {
                     setMovedToStartTime(event.target.value);
                     if (errors.movedToStartTime)
                       setErrors((prev) => ({ ...prev, movedToStartTime: undefined }));
                   }}
-                  className="h-11 rounded-control border border-border-strong bg-surface px-3 font-display text-base text-text tabular-nums transition-[border-color]"
                 />
-                {errors.movedToStartTime ? (
-                  <p className="text-xs text-danger">{errors.movedToStartTime}</p>
-                ) : null}
-              </div>
+              </Field>
             </div>
 
             <p className="text-xs text-text-secondary">
               El resto de las semanas no cambia. Para mover el horario de todas, editá el grupo.
             </p>
 
-            <Button size="md" loading={pending} onClick={handleReschedule}>
+            <Button size="md" loading={moving} onClick={handleReschedule}>
               Mover sesión
             </Button>
           </div>
@@ -192,7 +225,7 @@ export function SessionDetailSheet({
 
         <div className="flex flex-col gap-2">
           {cancelled ? (
-            <Button variant="secondary" size="lg" loading={pending} onClick={handleRestore}>
+            <Button variant="secondary" size="lg" loading={restoring} onClick={handleRestore}>
               Restablecer sesión
             </Button>
           ) : (
@@ -204,7 +237,7 @@ export function SessionDetailSheet({
               ) : null}
 
               {occurrence.moved ? (
-                <Button variant="secondary" size="lg" loading={pending} onClick={handleRestore}>
+                <Button variant="secondary" size="lg" loading={restoring} onClick={handleRestore}>
                   Volver al horario original
                 </Button>
               ) : null}
@@ -232,7 +265,7 @@ export function SessionDetailSheet({
               variant="destructive"
               size="lg"
               className="w-full"
-              loading={pending}
+              loading={cancelling}
               onClick={handleCancel}
             >
               Cancelar sesión

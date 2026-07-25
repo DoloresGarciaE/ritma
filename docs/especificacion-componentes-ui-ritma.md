@@ -161,6 +161,8 @@ Validación en `blur` y en submit, nunca al tipear la primera letra. Errores con
 
 Formato único en toda la app: `$20.000` (miles con punto, sin decimales salvo necesidad real); fechas `mar 12/05` en listas y `12 de mayo de 2026` en documentos; períodos como "Marzo 2026". Los montos siempre en `tabular-nums`; los negativos de liquidaciones con signo explícito, no solo color.
 
+*(S2)* Dos formatos nuevos que la agenda necesitó, fijados acá y en `lib/format.ts`: **rangos de hora** `19:00–20:30` (guion corto sin espacios; el fin sale de la duración) y **rangos de semana** `12–18 may` — cruzando mes, cada punta con su mes: `27 jul – 2 ago`. En confirmaciones que nombran el objeto (§3.8) el día va completo: `martes 12/05`.
+
 ### 4.3 Permisos en la UI
 
 Lo que el rol no puede hacer **no se muestra** (un teacher no ve el módulo de liquidaciones ajenas ni Ajustes de la org); deshabilitado se reserva para acciones temporalmente no disponibles con motivo visible en tooltip o texto. La UI nunca es el único guardián: el server valida siempre (Plan §10).

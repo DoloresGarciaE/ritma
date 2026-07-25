@@ -1,9 +1,16 @@
 "use client";
 
 import { Check, Plus } from "lucide-react";
-import { useRef, useState, useTransition } from "react";
+import { useId, useRef, useState, useTransition } from "react";
 
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { AmountInput, Field, Input } from "@/components/ui/input";
 import { ActionSheet, ActionSheetBody, ActionSheetFooter } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
@@ -71,8 +78,10 @@ export function GroupSheet({
   const [disciplineError, setDisciplineError] = useState<string | null>(null);
 
   const [errors, setErrors] = useState<NonNullable<GroupFormState["errors"]>>({});
+  const [discardOpen, setDiscardOpen] = useState(false);
 
   const nameRef = useRef<HTMLInputElement>(null);
+  const fieldErrorId = useId();
 
   const allDisciplines = [
     ...disciplines,
@@ -91,6 +100,25 @@ export function GroupSheet({
     })),
   });
 
+  // §3.8: cerrar con cambios sin guardar pide confirmación. El snapshot inicial se toma
+  // al montar (el padre re-montea con key en cada apertura, así que siempre es fresco).
+  // El switch "Grupo activo" no cuenta: aplica al instante, no es un cambio pendiente.
+  const initialInput = useRef(JSON.stringify(buildInput()));
+  const isDirty = () => JSON.stringify(buildInput()) !== initialInput.current;
+
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen && isDirty()) {
+      setDiscardOpen(true);
+      return;
+    }
+    onOpenChange(nextOpen);
+  };
+
+  // El mismo aviso que el detalle de sesión: un rechazo de action (datos viejos, red,
+  // membresía revocada) no puede tirar la app entera.
+  const actionFailedToast = () =>
+    toast.error("No se pudo guardar. Revisá la conexión y probá de nuevo.");
+
   // El CTA nunca se deshabilita por errores (Componentes §4.1): al tocarlo valida y
   // lleva el foco (o la vista) al primer problema.
   const handleSubmit = () => {
@@ -107,9 +135,15 @@ export function GroupSheet({
 
     startSubmit(async () => {
       const savedName = result.data.name;
-      const state = group
-        ? await updateGroupAction(group.id, buildInput())
-        : await createGroupAction(buildInput());
+      let state;
+      try {
+        state = group
+          ? await updateGroupAction(group.id, buildInput())
+          : await createGroupAction(buildInput());
+      } catch {
+        actionFailedToast();
+        return;
+      }
 
       if (state.errors || state.formError) {
         setErrors(state.errors ?? {});
@@ -117,6 +151,7 @@ export function GroupSheet({
         return;
       }
 
+      // Directo al padre (no handleOpenChange): lo guardado ya no es "cambio sin guardar".
       onOpenChange(false);
       toast.notify(group ? `Guardaste ${savedName}` : `Creaste ${savedName}`);
     });
@@ -130,7 +165,13 @@ export function GroupSheet({
     }
 
     startCreateDiscipline(async () => {
-      const created = await createDisciplineAction(trimmed);
+      let created;
+      try {
+        created = await createDisciplineAction(trimmed);
+      } catch {
+        actionFailedToast();
+        return;
+      }
 
       if ("error" in created) {
         setDisciplineError(created.error);
@@ -153,7 +194,15 @@ export function GroupSheet({
     setActive(next);
 
     startToggleActive(async () => {
-      await setGroupActiveAction(group.id, next);
+      try {
+        await setGroupActiveAction(group.id, next);
+      } catch {
+        // Optimista con rollback: el switch no puede quedar mintiendo un estado que el
+        // server no tiene.
+        setActive(!next);
+        actionFailedToast();
+        return;
+      }
       toast.notify(next ? `${group.name} vuelve a tu agenda` : `${group.name} salió de tu agenda`);
     });
   };
@@ -161,7 +210,7 @@ export function GroupSheet({
   return (
     <ActionSheet
       open={open}
-      onOpenChange={onOpenChange}
+      onOpenChange={handleOpenChange}
       title={group ? "Editar grupo" : "Nuevo grupo"}
       description={
         group
@@ -194,7 +243,12 @@ export function GroupSheet({
 
           <div className="flex flex-col gap-1.5">
             <span className="text-sm font-medium text-text">Disciplina</span>
-            <div className="flex flex-wrap gap-1.5">
+            <div
+              role="group"
+              aria-label="Disciplina"
+              aria-describedby={errors.disciplineId ? `${fieldErrorId}-disciplina` : undefined}
+              className="flex flex-wrap gap-2"
+            >
               {allDisciplines.map((discipline) => {
                 const selected = disciplineId === discipline.id;
                 return (
@@ -260,7 +314,9 @@ export function GroupSheet({
             ) : null}
 
             {errors.disciplineId ? (
-              <p className="text-xs text-danger">{errors.disciplineId}</p>
+              <p id={`${fieldErrorId}-disciplina`} className="text-xs text-danger">
+                {errors.disciplineId}
+              </p>
             ) : null}
           </div>
 
@@ -313,6 +369,35 @@ export function GroupSheet({
           </Button>
         </ActionSheetFooter>
       </form>
+
+      {/* §3.8: cerrar con cambios sin guardar pide confirmación. */}
+      <Dialog open={discardOpen} onOpenChange={setDiscardOpen}>
+        <DialogContent className="gap-4 p-4">
+          <DialogTitle>¿Descartar los cambios?</DialogTitle>
+          <DialogDescription>Lo que escribiste en este grupo se pierde.</DialogDescription>
+
+          <div className="flex flex-col gap-2">
+            <Button
+              variant="destructive"
+              size="lg"
+              className="w-full"
+              onClick={() => {
+                setDiscardOpen(false);
+                onOpenChange(false);
+              }}
+            >
+              Descartar
+            </Button>
+            <DialogClose
+              render={
+                <Button variant="ghost" size="lg" className="w-full">
+                  Seguir editando
+                </Button>
+              }
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
     </ActionSheet>
   );
 }

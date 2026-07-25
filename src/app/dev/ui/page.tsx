@@ -14,6 +14,7 @@ import type { StudentListItem } from "@/server/services/students";
 
 import { StudentRow } from "../../(app)/alumnos/_components/student-row";
 import { OverlaysDemo } from "./overlays-demo";
+import { SlotEditorDemo } from "./slot-editor-demo";
 
 /** Alumnos del dominio real (Marca §4): nada de lorem ipsum. */
 const DEMO_STUDENTS: StudentListItem[] = [
@@ -242,6 +243,10 @@ function Showcase({ title }: { title: string }) {
           <span className="text-sm font-medium">Grupo activo</span>
           <Switch defaultChecked aria-label="Grupo activo" />
         </div>
+      </Section>
+
+      <Section title="Editor de franjas (§3.15)">
+        <SlotEditorDemo />
       </Section>
     </div>
   );
