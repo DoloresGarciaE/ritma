@@ -124,9 +124,9 @@ ritma/
 - **DoD:** cargar 20 alumnos reales toma < 10 minutos desde el teléfono.
 
 ### S2 — Agenda
-- [ ] Modelos `ClassGroup`, `ScheduleSlot`, `ClassSession`; creación de grupo con múltiples franjas (HU3.1). (`Discipline` ya llegó en F0.5: el wizard la necesitaba.)
-- [ ] Generación de sesiones on-demand para las semanas visibles (servicio puro + tests); cancelar/reprogramar sesión puntual (HU3.3).
-- [ ] Vistas semana y día mobile-first con el bloque de sesión (Componentes §3.7).
+- [x] Modelos `ClassGroup`, `ScheduleSlot`, `ClassSession`; creación de grupo con múltiples franjas (HU3.1). (`Discipline` ya llegó en F0.5: el wizard la necesitaba.) `ClassGroup` nació sin `teacherId`/`spaceId` — llegan con S9/S8; ver la nota S2 del Plan §7. El test de teacher-scope diferido de F0.6 se re-difiere a S9 con ellas.
+- [x] Generación de sesiones on-demand para las semanas visibles (servicio puro + tests); cancelar/reprogramar sesión puntual (HU3.3). Patrón de excepciones: una fila `ClassSession` SOLO si la ocurrencia se desvió, identidad `(slotId, fecha original)`; restablecer = borrar la fila.
+- [x] Vistas semana y día mobile-first con el bloque de sesión (Componentes §3.7): toggle Semana|Día, navegación por `<Link>`, "Hoy" a un tap. Extra chico acordado: acceso "Grupos" en la app bar (sin él, un grupo desactivado quedaba inalcanzable hasta S3).
 - **DoD:** la semana del profe se ve correcta con feriado cancelado incluido.
 
 ### S3 — Cobranzas: inscripciones y cuotas

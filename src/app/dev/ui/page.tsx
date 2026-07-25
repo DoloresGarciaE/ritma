@@ -6,12 +6,15 @@ import { Button } from "@/components/ui/button";
 import { Card, MetricCard } from "@/components/ui/card";
 import { Fab } from "@/components/ui/fab";
 import { AmountInput, Field, Input } from "@/components/ui/input";
+import { SessionBlock } from "@/components/ui/session-block";
 import { StatusBadge, type InstallmentStatus } from "@/components/ui/status-badge";
+import { Switch } from "@/components/ui/switch";
 import { formatMoney } from "@/lib/format";
 import type { StudentListItem } from "@/server/services/students";
 
 import { StudentRow } from "../../(app)/alumnos/_components/student-row";
 import { OverlaysDemo } from "./overlays-demo";
+import { SlotEditorDemo } from "./slot-editor-demo";
 
 /** Alumnos del dominio real (Marca §4): nada de lorem ipsum. */
 const DEMO_STUDENTS: StudentListItem[] = [
@@ -171,6 +174,79 @@ function Showcase({ title }: { title: string }) {
         <div className="flex">
           <Fab label="Nuevo alumno" className="static" />
         </div>
+      </Section>
+
+      {/* ── S2 ───────────────────────────────────────────────────────────────── */}
+
+      <Section title="Bloque de sesión (§3.7) · los 3 colores de disciplina">
+        <div className="flex flex-col gap-2">
+          <SessionBlock
+            dateLabel="martes 14/07"
+            session={{
+              startTime: "18:00",
+              groupName: "Árabe inicial",
+              status: "SCHEDULED",
+              moved: false,
+              colorIndex: 0,
+            }}
+          />
+          <SessionBlock
+            dateLabel="lunes 13/07"
+            session={{
+              startTime: "17:00",
+              groupName: "Contemporáneo juvenil",
+              status: "SCHEDULED",
+              moved: false,
+              colorIndex: 1,
+            }}
+          />
+          <SessionBlock
+            dateLabel="sábado 18/07"
+            session={{
+              startTime: "10:00",
+              groupName: "Funcional mañanas",
+              status: "SCHEDULED",
+              moved: false,
+              colorIndex: 2,
+            }}
+          />
+        </div>
+      </Section>
+
+      <Section title="Bloque de sesión · cancelada (tachada, sin barra) y reprogramada">
+        <div className="flex flex-col gap-2">
+          <SessionBlock
+            dateLabel="martes 14/07"
+            session={{
+              startTime: "18:00",
+              groupName: "Árabe inicial",
+              status: "CANCELLED",
+              moved: false,
+              colorIndex: 0,
+            }}
+          />
+          <SessionBlock
+            dateLabel="jueves 16/07"
+            session={{
+              startTime: "18:00",
+              groupName: "Contemporáneo juvenil",
+              status: "SCHEDULED",
+              moved: true,
+              colorIndex: 1,
+            }}
+          />
+        </div>
+      </Section>
+
+      <Section title="Switch (§3.2: solo estados que aplican al instante)">
+        <div className="flex items-center justify-between rounded-card border border-border bg-surface p-3">
+          <span className="text-sm font-medium">Grupo activo</span>
+          <Switch defaultChecked aria-label="Grupo activo" />
+        </div>
+      </Section>
+
+      <Section title="Editor de franjas (§3.15)">
+        <SlotEditorDemo />
       </Section>
     </div>
   );

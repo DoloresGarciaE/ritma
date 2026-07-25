@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { toFieldErrors as genericToFieldErrors } from "@/lib/forms";
 import { toE164 } from "@/lib/students";
 
 /**
@@ -79,14 +80,7 @@ export type StudentFormState = {
 
 export const EMPTY_STATE: StudentFormState = {};
 
-/** Primer mensaje por campo. Mismo mapeo del lado del cliente y del servidor. */
+/** Primer mensaje por campo (lib/forms). Mismo mapeo del lado del cliente y del servidor. */
 export function toFieldErrors(error: z.ZodError): StudentFormState["errors"] {
-  const errors: NonNullable<StudentFormState["errors"]> = {};
-
-  for (const issue of error.issues) {
-    const field = issue.path[0] as StudentField | undefined;
-    if (field) errors[field] ??= issue.message;
-  }
-
-  return errors;
+  return genericToFieldErrors<StudentField>(error);
 }

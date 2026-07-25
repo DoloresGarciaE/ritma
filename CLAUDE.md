@@ -141,10 +141,40 @@ orden**, y la seguridad va primero:
 - **Búsqueda de texto:** se busca contra una columna normalizada (`searchName`: minúsculas y sin
   tildes, ver [`src/lib/students.ts`](src/lib/students.ts)), no con `unaccent` de Postgres — eso
   exigiría SQL crudo, que se saltea `withOrg`.
+- **Referencias cruzadas y escrituras anidadas** (los dos límites de `withOrg`, y desde S2 con
+  patrón fijo): un FK no distingue tenants, así que todo id que viene del cliente y referencia
+  otra tabla (`disciplineId`, `slotId`…) se **verifica contra la org vía `withOrg` ANTES de
+  escribir**; y las escrituras anidadas llevan el `orgId` **explícito** en cada hijo (el hook no
+  las cubre). Los dos casos tienen tests (groups/sessions).
 - **Teléfonos:** se guardan en **E.164** (`+541155554433`) con `libphonenumber-js`, default AR. El
   profe tipea "11 5555-4433"; el formato lindo es cosa de la vista (`formatPhone`).
 - **Bajas (RN9):** siempre **lógicas** (`active = false`). Nunca se borra una fila de negocio: el
   historial queda consultable.
+
+## Agenda (desde S2)
+
+- **Las sesiones NO se materializan.** Las ocurrencias se calculan al vuelo desde `ScheduleSlot`
+  para el rango visible (motor puro: [`src/server/services/schedule.ts`](src/server/services/schedule.ts));
+  una fila `ClassSession` existe **solo** si esa ocurrencia se desvió (cancelada / reprogramada /
+  anotada). Identidad: `(slotId, date)` con `date` = fecha civil **original** — no cambia al
+  reprogramar (la nueva posición vive en `movedToDate`/`movedToStartTime`, el status no se toca).
+  **Restablecer = borrar la fila**: la verdad vuelve a ser la calculada. Sin crons, sin RRULE.
+- **Fechas civiles como strings.** Todo el dominio de agenda maneja `"yyyy-MM-dd"` y `"HH:mm"`
+  (RN10): la aritmética vive en [`src/lib/dates.ts`](src/lib/dates.ts) (pura, anclada en UTC) y
+  la zona de la org interviene en UN lugar: `todayInTz`. Cero `Date` cruzando a cliente; el par
+  `civilToDb`/`dbToCivil` es la única frontera con Prisma (`@db.Date`). ⚠️ No usar librerías que
+  operen en el huso del servidor para fechas civiles; `@date-fns/tz` (TZDate) solo para "hoy".
+- **`weekday` es 0–6 convención JS (0 = domingo)** para calzar con `Date.getDay()`; la UI es
+  lunes-primero (la traducción es `(weekday + 6) % 7`, ya encapsulada donde hace falta).
+- **El diff de franjas protege las excepciones** (`updateGroup`): cambiar hora/duración es update
+  in place (las excepciones sobreviven); cambiar el weekday o borrar la franja es identidad nueva
+  y **las excepciones se van por cascada** — deliberado, testeado, y la UI lo advierte (§3.15).
+- **Colores de disciplina**: tokens `discipline-1..N` (Color §4), asignación estable por orden de
+  creación de la disciplina, cíclica módulo N ([`src/lib/discipline-colors.ts`](src/lib/discipline-colors.ts)).
+  No existe Coral 400: reprueba el contraste (el claro usa Coral 500 — Color, changelog 1.4).
+- **`ClassGroup` sin `teacherId`/`spaceId` hasta S9/S8** (nota S2 del Plan §7): en Fase 1 un
+  TEACHER de estudio ve/gestiona todos los grupos de su org; el test de teacher-scope se escribe
+  en S9, cuando exista la FK.
 
 ## CI/CD y observabilidad (desde F0.7)
 

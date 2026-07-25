@@ -105,7 +105,9 @@ Anatomía de izquierda a derecha: avatar de iniciales (ver §3.11) · nombre en 
 
 ### 3.7 Bloque de sesión (agenda)
 
-Chip de la vista semanal/diaria: barra de acento de 3 px a la izquierda con el color de la disciplina (asignado de la escala Violeta/Coral/Verde en stops 400, configurable), hora en `tabular-nums`, nombre del grupo, salón en `text-secondary` (solo estudios). Sesión cancelada: texto tachado, todo en Neutro 400, sin barra de color. El tap abre el detalle de la sesión con sus inscriptos.
+Chip de la vista semanal/diaria: barra de acento de 3 px a la izquierda con el color de la disciplina — **tokens `discipline-1..N`** (Color §4), asignación estable por orden de creación de la disciplina, cíclica —, hora en `tabular-nums`, nombre del grupo, salón en `text-secondary` (solo estudios; llega con `Space` en S8). Sesión cancelada: texto tachado, todo en `text-muted`, sin barra de color. Sesión **reprogramada**: el bloque se pinta en su NUEVA posición con la etiqueta "Reprogramada" (texto, no color); el horario original lo muestra el detalle. El tap abre el detalle de la sesión con sus inscriptos (la lista de inscriptos llega en S3). Todo el bloque es un solo target táctil ≥ 44 px.
+
+*(S2)* Esta sección decía "stops 400 de Violeta/Coral/Verde, configurable". Dos problemas al construirla: **Coral 400 y Verde 400 no existían** en la spec de color (y el coral interpolado reprueba el contraste de no-texto — Color, changelog 1.4), y Color §8 prohíbe que un componente consuma stops — el mismo motivo por el que ya se había corregido §3.10. Los colores son ahora los tokens `discipline-*`, verificados en los dos modos. "Configurable" queda post-MVP: hoy la asignación es automática y estable.
 
 ### 3.8 Sheet y Dialog
 
@@ -141,6 +143,12 @@ Solo existe en dos pantallas: Alumnos (alta express) y Agenda (nuevo grupo). Cí
 
 Bloques Neutro 100 (claro) / `#292833` (oscuro) con pulso de opacidad de 1.5 s, replicando la silueta real del contenido. Carga de pantalla completa (splash de PWA): isotipo con la animación del **pulso** de Marca §8 — única aparición animada del logo. Todo respeta `prefers-reduced-motion`.
 
+### 3.15 Editor de franjas (S2)
+
+El editor de horarios recurrentes del formulario de grupo (HU3.1): una fila por franja, franjas agregables y eliminables. Anatomía de cada fila: **pills de día** lunes-primero (`Lu Ma Mi Ju Vi Sá Do`, single-select, `aria-pressed`, target ≥ 44 px), **hora** con `<input type="time">` estilado con los tokens de §3.2 (la rueda nativa del sistema es lo correcto para el pulgar), y **duración** como pills de valores comunes (45′ · 60′ · 90′) más "Otra", que revela un input numérico en minutos (15–480). "Agregar franja" es botón secundario; eliminar, botón fantasma por fila. Un grupo necesita al menos una franja.
+
+En edición, el editor advierte con un helpText fijo: **si eliminás una franja o le cambiás el día, se pierden sus sesiones canceladas o movidas** — la franja con otro día es otra identidad. Cambiar solo la hora o la duración conserva las excepciones. No valida solapamientos: eso llega con los espacios (S8). Reprogramar una sesión sobre otra ocurrencia del mismo grupo está permitido a propósito, por lo mismo.
+
 ## 4. Patrones
 
 ### 4.1 Formularios
@@ -152,6 +160,8 @@ Validación en `blur` y en submit, nunca al tipear la primera letra. Errores con
 ### 4.2 Montos, fechas y períodos
 
 Formato único en toda la app: `$20.000` (miles con punto, sin decimales salvo necesidad real); fechas `mar 12/05` en listas y `12 de mayo de 2026` en documentos; períodos como "Marzo 2026". Los montos siempre en `tabular-nums`; los negativos de liquidaciones con signo explícito, no solo color.
+
+*(S2)* Dos formatos nuevos que la agenda necesitó, fijados acá y en `lib/format.ts`: **rangos de hora** `19:00–20:30` (guion corto sin espacios; el fin sale de la duración) y **rangos de semana** `12–18 may` — cruzando mes, cada punta con su mes: `27 jul – 2 ago`. En confirmaciones que nombran el objeto (§3.8) el día va completo: `martes 12/05`.
 
 ### 4.3 Permisos en la UI
 
@@ -185,7 +195,8 @@ Confirmación breve → toast. Error de acción → toast persistente o mensaje 
 | Tabla | `Table` | Colapso a cards en mobile |
 | Avatar | `Avatar` | Iniciales, Violeta 100/800 |
 | Skeleton | `Skeleton` | Pulso 1.5 s |
-| Bottom nav / Bloque de sesión / FAB / Input de monto | — (propios) | Según §3.6, §3.7, §3.13, §3.2 |
+| Switch | `Switch` de Base UI | Solo estados que aplican al instante (§3.2) |
+| Bottom nav / Bloque de sesión / FAB / Input de monto / Editor de franjas | — (propios) | Según §3.6, §3.7, §3.13, §3.2, §3.15 |
 
 **Nota 1 (S1).** El `sheet` del registry de shadcn está construido sobre `Dialog` y **no tiene
 cierre por gesto**, que §3.8 exige. Se usa el **`Drawer` de Base UI** (que sí lo trae) para mobile

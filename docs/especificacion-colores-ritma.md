@@ -1,7 +1,9 @@
 # Ritma — Especificación de color
 
 > Documento normativo. Operacionaliza la paleta definida en la Especificación de marca (§6) para producto y comunicaciones.
-> Versión 1.3 · Julio 2026 · Todos los ratios de contraste fueron calculados según WCAG 2.1.
+> Versión 1.4 · Julio 2026 · Todos los ratios de contraste fueron calculados según WCAG 2.1.
+
+> **Cambios de la 1.4** (S2, al construir la agenda): nace el stop **Verde 400** y los tokens `discipline-1/-2/-3` para la barra de disciplina del bloque de sesión (Componentes §3.7). Hallazgo: **Coral 400 no puede existir** — el interpolado entre 300 y 500 (`#F18269`) da 2.58:1 sobre blanco y reprueba el 3:1 de no-texto, porque el propio Coral 500 apenas pasa (3.09). El token claro de la segunda disciplina usa Coral 500 ◆, ya aprobado. Componentes §3.7 pedía "stops 400 de Violeta/Coral/Verde", que además violaba §8 (los componentes no consumen stops): esa spec se corrigió en el mismo PR.
 
 > **Cambios de la 1.3** (S1, al construir el padrón de alumnos): se agregan `avatar-bg` / `avatar-text` (Componentes §3.11 solo definía el modo claro) y `scrim`, el velo de sheets y dialogs, que era un hueco de esta spec — sin él los componentes traían `bg-black/10`, o sea color suelto. Sin colores nuevos: las dos recetas reusan pares ya verificados.
 
@@ -90,6 +92,8 @@ Neutro 400 y Neutro 500 no se usan como texto sobre fondos claros: dan 2.15:1 y 
 | Ámbar (atención) | `#F7E4C2` | `#EBB868` | 700 `#B26A0B` · 800 ◆ `#8F5300` | `#3B2A08` |
 | Rojo (alerta) | `#F8D6D6` | `#EE9A9A` | 600 ◆ `#CC4141` · 700 `#B03030` | `#3C1414` |
 
+**Verde 400** `#3FA173` (S2): existe solo para la barra de disciplina (`discipline-3`, §4). Interpolado entre 300 y 600, 3.20:1 sobre blanco — apto no-texto, **no usarlo como texto**.
+
 ## 4. Tokens semánticos de la UI
 
 Los componentes consumen tokens, nunca stops directos. Definición por modo:
@@ -114,6 +118,7 @@ Los componentes consumen tokens, nunca stops directos. Definición por modo:
 | `destructive` / `on-destructive` | Rojo 600 / Blanco | Rojo 600 / Blanco (no cambian) |
 | `nav-active-bg` / `nav-active-text` | Violeta 50 / Violeta 600 | Violeta 900 / Violeta 200 |
 | `avatar-bg` / `avatar-text` | Violeta 100 / Violeta 800 | Violeta 900 / Violeta 200 |
+| `discipline-1/-2/-3` | Violeta 400 / Coral 500 / Verde 400 | Violeta 300 / Coral 300 / Verde 300 |
 | `scrim` | Tinta oscura al 40 % | Negro al 60 % |
 
 Nota del botón primario en oscuro: fondo Violeta 300 con texto Tinta oscura (5.47:1) — no blanco, que quedaría por debajo de AA.
@@ -128,6 +133,8 @@ colores nuevos.
 Nota de `scrim` (S1): el velo de sheets y dialogs (Componentes §3.8). Era un hueco de esta spec —
 no había token de velo— y sin él los componentes traían `bg-black/10`, que es color suelto. En
 oscuro el velo es más denso porque el fondo ya es oscuro y al 40 % no separaría.
+
+Nota de `discipline-*` (S2): la barra de 3 px del bloque de sesión (Componentes §3.7) — señal de **categoría**, no de acción, no-texto (≥ 3:1 contra `surface`). La **asignación es estable**: índice de la disciplina por orden de creación en la org (`createdAt` asc, desempate `id` asc — las disciplinas del wizard nacen juntas y comparten timestamp), cíclica módulo N. N = cantidad de tokens de esta fila; **ampliar la paleta** = una entrada acá + el token en `globals.css` + una entrada en `DISCIPLINE_COLOR_CLASSES` (`src/lib/discipline-colors.ts`). El "configurable" que prometía §3.7 queda post-MVP. Excepción documentada al principio 2 ("el violeta es acción"): `discipline-1` es violeta pero la barra no es interactiva ni compite con un CTA.
 
 Nota de `destructive`: es el único token que no cambia entre modos. `danger` es color de **texto** y por eso sube a Rojo 300 en oscuro (§7.2); una superficie destructiva sólida no puede usarlo, porque Rojo 300 con texto blanco no llega a AA. El botón destructivo es Rojo 600 con blanco en los dos modos (4.77:1), que es lo que ya pedían Componentes §3.1 y §9.5 de este documento. Su hover es Rojo 700 (6.34:1).
 
@@ -156,6 +163,8 @@ Aprobados solo para texto grande, íconos y gráficos (≥ 3:1): Coral 500/blanc
 Verificados en F0.2, al implementar los componentes: blanco/Rojo 700 6.34 (hover del botón destructivo) · Neutro 600/blanco 6.39 (placeholders) · `#A5A29A`/`#292833` 5.70 (badge pendiente en oscuro, el "≥ 4.5" de §5) · Violeta 300/Tinta oscura 5.47 (anillo de foco en oscuro, ≥ 3).
 
 Verificados en F0.5 (navegación): Violeta 600/Violeta 50 5.73 (ítem activo, claro) · Violeta 200/Violeta 900 8.21 (ítem activo, oscuro).
+
+Verificados en S2 (barra de disciplina, no-texto ≥ 3): Violeta 400/blanco 4.57 · Coral 500/blanco 3.09 · Verde 400/blanco 3.20 · Violeta 300/`#201F28` 4.96 · Coral 300/`#201F28` 7.69 · Verde 300/`#201F28` 8.34. **Reprobado: el coral interpolado `#F18269` sobre blanco 2.58** — por eso no existe Coral 400 (ver changelog 1.4).
 
 **Reprobados, no usar como texto sobre fondos claros:** Neutro 400/blanco 2.15 · Neutro 500/blanco 3.60.
 

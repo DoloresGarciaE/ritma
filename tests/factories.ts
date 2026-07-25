@@ -32,6 +32,70 @@ export async function makeDiscipline(orgId: string, name: string) {
   return db.discipline.create({ data: { orgId, name } });
 }
 
+/** Un grupo en una org, por el camino crudo. Crea su propia disciplina si no le dan una. */
+export async function makeGroup(
+  orgId: string,
+  name: string,
+  extra: { disciplineId?: string; defaultPrice?: number; active?: boolean } = {},
+) {
+  const disciplineId =
+    extra.disciplineId ?? (await makeDiscipline(orgId, `Disciplina ${randomUUID()}`)).id;
+
+  return db.classGroup.create({
+    data: {
+      orgId,
+      disciplineId,
+      name,
+      defaultPrice: extra.defaultPrice ?? 20000,
+      active: extra.active ?? true,
+    },
+  });
+}
+
+/** Una franja de un grupo, por el camino crudo. Default: martes 19:00, 60 minutos. */
+export async function makeSlot(
+  orgId: string,
+  groupId: string,
+  extra: { weekday?: number; startTime?: string; durationMin?: number } = {},
+) {
+  return db.scheduleSlot.create({
+    data: {
+      orgId,
+      groupId,
+      weekday: extra.weekday ?? 2,
+      startTime: extra.startTime ?? "19:00",
+      durationMin: extra.durationMin ?? 60,
+    },
+  });
+}
+
+/** Una excepción de sesión, por el camino crudo. `date` es la fecha civil "yyyy-MM-dd". */
+export async function makeSession(
+  orgId: string,
+  groupId: string,
+  slotId: string,
+  date: string,
+  extra: {
+    status?: "SCHEDULED" | "CANCELLED" | "DONE";
+    note?: string | null;
+    movedToDate?: string | null;
+    movedToStartTime?: string | null;
+  } = {},
+) {
+  return db.classSession.create({
+    data: {
+      orgId,
+      groupId,
+      slotId,
+      date: new Date(`${date}T00:00:00.000Z`),
+      status: extra.status ?? "CANCELLED",
+      note: extra.note ?? null,
+      movedToDate: extra.movedToDate ? new Date(`${extra.movedToDate}T00:00:00.000Z`) : null,
+      movedToStartTime: extra.movedToStartTime ?? null,
+    },
+  });
+}
+
 /** Un alumno en una org, por el camino crudo. `searchName` se calcula igual que el servicio. */
 export async function makeStudent(
   orgId: string,

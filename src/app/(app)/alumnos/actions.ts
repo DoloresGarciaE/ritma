@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { requireSession } from "@/lib/auth";
 import { requireMember } from "@/server/authz";
+import { ForbiddenError } from "@/server/services/permissions";
 import {
   createStudent,
   deactivateStudent,
@@ -24,7 +25,10 @@ import { quickCreateSchema, studentSchema, toFieldErrors, type StudentFormState 
  */
 async function currentOrgId(): Promise<string> {
   const session = await requireSession();
-  const actor = await requireMember(session.activeOrgId!);
+  // Sin org activa no hay nada que autorizar: el mismo error controlado que "no sos
+  // miembro" (un `!` acá dejaría pasar un null a Prisma, que revienta con un 500 crudo).
+  if (!session.activeOrgId) throw new ForbiddenError("La sesión no tiene organización activa.");
+  const actor = await requireMember(session.activeOrgId);
   return actor.orgId;
 }
 

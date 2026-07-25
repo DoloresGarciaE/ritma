@@ -260,28 +260,35 @@ model Discipline { id String @id @default(cuid()); orgId String; name String }
 model ClassGroup {
   id           String  @id @default(cuid())
   orgId        String
-  teacherId    String
+  teacherId    String   // DIFERIDO a S9 (TeacherProfile) — ver nota S2 al pie de §7
   disciplineId String
-  spaceId      String?
+  spaceId      String?  // DIFERIDO a S8 (Space) — ver nota S2
   name         String
-  defaultPrice Decimal
+  defaultPrice Decimal  // @db.Decimal(12, 2) desde S2: el precedente de precisión de montos
   active       Boolean @default(true)
 }
 
 model ScheduleSlot {
   id          String @id @default(cuid())
+  orgId       String   // S2: la convención de abajo aplica también a las tablas hijas
   groupId     String
-  weekday     Int      // 0..6
+  weekday     Int      // 0..6, convención JS (0 = domingo); la UI es lunes-primero
   startTime   String   // "19:00" hora local de la org
   durationMin Int
 }
 
 model ClassSession {
   id      String  @id @default(cuid())
+  orgId   String
   groupId String
-  date    DateTime
+  slotId  String         // S2: la identidad de la ocurrencia es (slotId, date) — ver nota
+  date    DateTime       // @db.Date: fecha CIVIL original; no cambia al reprogramar
   status  SessionStatus  // SCHEDULED | CANCELLED | DONE
   note    String?
+  movedToDate      DateTime? // @db.Date: si se reprogramó, dónde se muestra ahora
+  movedToStartTime String?
+
+  @@unique([slotId, date])
 }
 
 model Student {
@@ -377,6 +384,13 @@ model ReminderLog {
 Convenciones: toda tabla de negocio lleva `orgId` con índice; se accede solo a través de helpers que fuerzan el scoping por organización (nunca `prisma.x.findMany` "a mano" en código de aplicación).
 
 Toda tabla lleva además `createdAt` (`@default(now())`) y `updatedAt` (`@updatedAt`) — omitidos en el borrador de arriba por brevedad, igual que las relaciones. Better Auth los exige en `User` (F0.4), y sin ellos no hay forma de auditar ni depurar nada. Los ids son `cuid()`.
+
+**Nota S2 (al construir la agenda).** Cuatro correcciones al borrador, ya reflejadas arriba:
+
+1. **`ClassGroup` nació SIN `teacherId` ni `spaceId`** — deuda registrada: `TeacherProfile` es S9 y `Space` es S8, y en la Fase 1 la org independiente tiene un solo profe implícito. Las FKs llegan con sus migraciones en esos bloques. Consecuencia: el test diferido de F0.6 ("un teacher no accede a grupos ajenos") se **re-difiere a S9** — sin `teacherId` no existe "sus grupos" — y mientras tanto un TEACHER de estudio ve y gestiona todos los grupos de su org (`groups:manage`, §4). Aceptable en Fase 1; se cierra en S9.
+2. **`orgId` también en `ScheduleSlot` y `ClassSession`**: el borrador lo omitía, pero la convención de arriba ("toda tabla de negocio lleva `orgId`") es la que hace funcionar `withOrg` y los tests de aislamiento.
+3. **`ClassSession.slotId` + `@@unique([slotId, date])`**: `(groupId, date)` no identifica una ocurrencia — nada impide que un grupo tenga dos franjas el mismo día. `date` es la fecha civil ORIGINAL: la identidad no cambia al reprogramar.
+4. **Reprogramación como `movedToDate`/`movedToStartTime`** con `status` intacto (el enum no se amplía). Una fila de `ClassSession` existe SOLO si la ocurrencia se desvió (las sesiones se calculan al vuelo desde las franjas — plan de implementación S2); restablecerla = borrar la fila.
 
 ## 8. Reglas de negocio
 
