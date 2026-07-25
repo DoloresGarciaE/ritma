@@ -138,3 +138,22 @@ deje de ser un momento de riesgo.
 **Basura en la base de producción:** el smoke deja un usuario y una organización de prueba
 (`malena+<timestamp>@ritma.test`, org "Danzas Malena"), más un usuario suelto `diag-<timestamp>@ritma.test`
 del diagnóstico. Se pueden borrar con Prisma Studio apuntando al branch de producción.
+
+## Semana 8 (julio 2026) — alumnos (S1)
+
+- **Hecho:** arranca la Fase 1. `feat/s1-students`: modelo `Student` (y su bloque de tests de
+  aislamiento, que queda como **el patrón** para todo modelo nuevo: schema → `SCOPE` → tests →
+  servicio → UI); servicios con búsqueda insensible a mayúsculas y acentos, y baja **lógica** (RN9);
+  pantalla de Alumnos con búsqueda al tipear, filtro activos/todos y estado vacío; alta express con
+  FAB + bottom sheet (HU2.1); y ficha v1 editable con baja/reactivación (HU2.2–2.3). Cinco
+  componentes nuevos: sheet, toast, avatar, FAB e ítem de lista. **80 tests** (venían 53).
+- **Trabado:** nada bloqueante, pero tres decisiones que valen la pena. Una: la **búsqueda sin
+  acentos** no se hizo con `unaccent` de Postgres sino con una columna `searchName` normalizada,
+  porque `unaccent` exige SQL crudo — y el SQL crudo se saltea `withOrg`. Es una desnormalización
+  deliberada; §7 quedó versionado. Dos: **sonner no entra** (el item de shadcn depende de
+  `next-themes`, que Ritma no usa a propósito) y el `sheet` del registry **no tiene cierre por
+  gesto**, que §3.8 exige: se usó el Drawer de Base UI. Tres: en Tailwind v4 **no hay color de borde
+  por defecto**, así que un `border` pelado se pinta del color del texto — hay que escribir
+  `border-border` siempre. Verificado en un navegador real, en viewport de teléfono.
+- **Próximo:** S2 — Agenda (`ClassGroup`, `ScheduleSlot`, `ClassSession`), y con ella el test que
+  quedó pendiente desde F0.6: "un teacher no accede a grupos ajenos".

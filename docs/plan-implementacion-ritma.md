@@ -117,9 +117,10 @@ ritma/
 **Objetivo:** un profe real opera un mes completo sin su planilla. Cada bloque ≈ una semana part-time y termina deployado.
 
 ### S1 — Alumnos
-- [ ] Modelo `Student` + migración; CRUD con búsqueda al tipear (Plan HU2.1–2.3).
-- [ ] Alta express: FAB + bottom sheet con nombre y teléfono; validación E.164 (`libphonenumber-js`), default +54.
-- [ ] Ficha de alumno v1 (datos + notas); baja lógica conservando historial.
+- [x] Modelo `Student` + migración; CRUD con búsqueda al tipear (Plan HU2.1–2.3). El modelo entra a `SCOPE` de `withOrg` y trae su bloque de **tests de aislamiento** (el patrón para todo modelo nuevo).
+- [x] Alta express: FAB + bottom sheet con nombre y teléfono; validación E.164 (`libphonenumber-js`), default +54.
+- [x] Ficha de alumno v1 (datos + notas); baja lógica conservando historial (RN9), con confirmación que nombra al alumno.
+- [x] Componentes nuevos: bottom sheet (Base UI Drawer), toast (Base UI), avatar de iniciales, FAB e ítem de lista. Spec de componentes §6 y de color 1.3 versionadas.
 - **DoD:** cargar 20 alumnos reales toma < 10 minutos desde el teléfono.
 
 ### S2 — Agenda

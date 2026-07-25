@@ -292,6 +292,13 @@ model Student {
   email  String?
   note   String?
   active Boolean @default(true)
+
+  // S1: `name` normalizado (minúsculas, sin tildes) para la búsqueda de HU2.2.
+  // Se calcula en el servicio en cada escritura. Es una desnormalización deliberada:
+  // la alternativa era la extensión `unaccent` de Postgres, que exige SQL crudo — y el
+  // SQL crudo se saltea `withOrg`, así que está prohibido fuera de src/lib (F0.6).
+  // Así la búsqueda es una query normal de Prisma, indexada y testeable.
+  searchName String
 }
 
 model Enrollment {

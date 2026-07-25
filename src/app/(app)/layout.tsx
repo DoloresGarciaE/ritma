@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 
+import { ToastProvider } from "@/components/ui/toast";
 import { requireSession } from "@/lib/auth";
 import { requireMember } from "@/server/authz";
 import { ForbiddenError } from "@/server/services/permissions";
@@ -35,15 +36,17 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (!org) redirect("/crear-organizacion");
 
   return (
-    <div className="min-h-screen bg-background">
-      <Sidebar orgName={org.name} />
+    <ToastProvider>
+      <div className="min-h-screen bg-background">
+        <Sidebar orgName={org.name} />
 
-      {/* Despeja la bottom nav fija en mobile, y la sidebar en desktop. */}
-      <div className="pb-[calc(3.5rem_+_env(safe-area-inset-bottom))] md:pb-0 md:pl-64">
-        {children}
+        {/* Despeja la bottom nav fija en mobile, y la sidebar en desktop. */}
+        <div className="pb-[calc(3.5rem_+_env(safe-area-inset-bottom))] md:pb-0 md:pl-64">
+          {children}
+        </div>
+
+        <BottomNav />
       </div>
-
-      <BottomNav />
-    </div>
+    </ToastProvider>
   );
 }

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { db, withOrg } from "@/lib/db";
 
-import { makeDiscipline, makeMember, makeOrg } from "./factories";
+import { makeDiscipline, makeMember, makeOrg, makeStudent } from "./factories";
 
 /**
  * El corazón de F0.6: un cliente `withOrg(A)` no puede leer NI escribir datos de la org B.
@@ -117,6 +117,81 @@ describe("aislamiento org × org — Discipline (escrituras)", () => {
     const bAfter = await db.discipline.findUniqueOrThrow({ where: { id: bDiscipline.id } });
     expect(bAfter.name).toBe("Folklore");
     expect(await db.discipline.count({ where: { orgId: b.id } })).toBe(1);
+  });
+});
+
+/**
+ * Student es el primer modelo de negocio de la Fase 1. Estos casos son el PATRÓN: todo
+ * modelo nuevo entra a `SCOPE` en withOrg y trae su bloque de aislamiento acá. No es
+ * opcional.
+ */
+describe("aislamiento org × org — Student", () => {
+  it("A no ve los alumnos de B; solo los propios", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+    await makeStudent(a.id, "Sofía Herrera");
+    await makeStudent(b.id, "Malena Ríos");
+
+    const seenByA = await withOrg(a.id).student.findMany();
+    expect(seenByA.map((s) => s.name)).toEqual(["Sofía Herrera"]);
+  });
+
+  it("findUnique por el id de un alumno de B, desde A, devuelve null", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+    const bStudent = await makeStudent(b.id, "Malena Ríos");
+
+    expect(await withOrg(a.id).student.findUnique({ where: { id: bStudent.id } })).toBeNull();
+  });
+
+  it("A no puede editar un alumno de B (P2025), ni darlo de baja", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+    const bStudent = await makeStudent(b.id, "Malena Ríos");
+
+    await expect(
+      withOrg(a.id).student.update({
+        where: { id: bStudent.id },
+        data: { name: "Hackeada" },
+      }),
+    ).rejects.toMatchObject({ code: "P2025" });
+
+    // La baja lógica es un update: tampoco alcanza a B.
+    await expect(
+      withOrg(a.id).student.update({
+        where: { id: bStudent.id },
+        data: { active: false },
+      }),
+    ).rejects.toMatchObject({ code: "P2025" });
+
+    const after = await db.student.findUniqueOrThrow({ where: { id: bStudent.id } });
+    expect(after.name).toBe("Malena Ríos");
+    expect(after.active).toBe(true);
+  });
+
+  it("A no puede borrar un alumno de B; un deleteMany desde A no lo alcanza", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+    const bStudent = await makeStudent(b.id, "Malena Ríos");
+
+    await expect(
+      withOrg(a.id).student.delete({ where: { id: bStudent.id } }),
+    ).rejects.toMatchObject({ code: "P2025" });
+
+    await withOrg(a.id).student.deleteMany({}); // "borrá todos los míos"
+    expect(await db.student.count({ where: { orgId: b.id } })).toBe(1);
+  });
+
+  it("un alumno creado vía withOrg(A) no puede aterrizar en B: el orgId se fuerza", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+
+    const created = await withOrg(a.id).student.create({
+      data: { name: "Iñaki Pérez", searchName: "inaki perez", orgId: b.id },
+    });
+
+    expect(created.orgId).toBe(a.id);
+    expect(await db.student.count({ where: { orgId: b.id } })).toBe(0);
   });
 });
 

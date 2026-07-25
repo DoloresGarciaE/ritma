@@ -53,6 +53,44 @@ model Organization {
 
   memberships Membership[]
   disciplines Discipline[]
+  students    Student[]
+}
+
+/// Alumno del padrón (Plan §7, HU2.1–2.3).
+///
+/// Los alumnos NO son usuarios: no tienen login ni reciben invitaciones (Plan §3, §4).
+/// Son datos de la organización, y punto.
+model Student {
+  id     String  @id @default(cuid())
+  orgId  String
+  name   String
+  /// Guardado en E.164 ("+5491155554433") para que wa.me funcione (S5). Se normaliza en
+  /// el servicio con libphonenumber-js, default AR. Opcional: el alta express pide lo
+  /// mínimo, y hay alumnos sin teléfono.
+  phone  String?
+  email  String?
+  note   String?
+  /// RN9: la baja es LÓGICA. Nunca se borra un alumno: deja de aparecer en las listas
+  /// activas pero su ficha y su historial de pagos quedan consultables.
+  active Boolean @default(true)
+
+  /// `name` normalizado para buscar: minúsculas y sin tildes ("Iñaki Pérez" → "inaki perez").
+  /// Lo calcula el servicio en cada escritura (ver server/services/students.ts).
+  ///
+  /// Por qué una columna y no `unaccent` de Postgres: la extensión exigiría SQL crudo, que
+  /// se saltea `withOrg` y está prohibido fuera de src/lib/ (F0.6). Así la búsqueda es una
+  /// query normal de Prisma, indexada, testeable y sin extensiones.
+  searchName String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  /// El índice líder por orgId cumple la convención de §7 y sirve a la vez para la lista
+  /// (filtrada por org + activos) y para la búsqueda por prefijo/substring.
+  @@index([orgId, active])
+  @@index([orgId, searchName])
 }
 
 /// Catálogo de disciplinas de la organización: árabe, folklore, canto… (Plan §3, §7).

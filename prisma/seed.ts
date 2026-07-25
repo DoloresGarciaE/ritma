@@ -33,6 +33,28 @@ const SEED_DISCIPLINES: Record<string, string[]> = {
   [ORG_ESTUDIO]: ["Árabe", "Contemporáneo", "Funcional", "Canto"],
 };
 
+/**
+ * El padrón de alumnos (S1). Hay de todo a propósito, porque es lo que hay en la vida real:
+ * alguien sin teléfono, alguien dado de baja, y nombres con tilde y con ñ para que la
+ * búsqueda se pueda probar de verdad.
+ */
+const SEED_STUDENTS: Record<string, { name: string; phone?: string; active?: boolean }[]> = {
+  [ORG_INDEPENDIENTE]: [
+    { name: "Sofía Herrera", phone: "+541155554433" },
+    { name: "Camila Peña", phone: "+541144332211" },
+    { name: "Julieta Ibáñez", phone: "+541166778899" },
+    { name: "Valentina Ruiz" }, // sin teléfono: se anotó por Instagram
+    { name: "Martina Álvarez", phone: "+541122334455", active: false }, // dejó en marzo
+  ],
+  [ORG_ESTUDIO]: [
+    { name: "Lucía Fernández", phone: "+541133224455" },
+    { name: "Iñaki Gómez", phone: "+541199887766" },
+    { name: "Renata Do Santos", phone: "+541155667788" },
+    { name: "Tomás Quiroga" }, // sin teléfono
+    { name: "Agustina Bianchi", phone: "+541177889900", active: false },
+  ],
+};
+
 async function main() {
   // Import dinámico y no estático: db.ts y auth.ts leen process.env al importarse,
   // así que tienen que cargarse DESPUÉS de dotenv (los import se hoistean).
@@ -92,6 +114,27 @@ async function main() {
       });
     }
 
+    // Alumnos (S1). Student no tiene un unique natural (dos alumnos pueden llamarse igual),
+    // así que la idempotencia se resuelve buscando por [orgId, name] antes de crear.
+    const { normalizeForSearch } = await import("../src/lib/students");
+
+    for (const [orgId, students] of Object.entries(SEED_STUDENTS)) {
+      for (const { name, phone, active } of students) {
+        const existing = await db.student.findFirst({ where: { orgId, name } });
+        if (existing) continue;
+
+        await db.student.create({
+          data: {
+            orgId,
+            name,
+            searchName: normalizeForSearch(name),
+            phone: phone ?? null,
+            active: active ?? true,
+          },
+        });
+      }
+    }
+
     const orgs = await db.organization.findMany({
       orderBy: { name: "asc" },
       include: {
@@ -118,7 +161,8 @@ async function main() {
       `Totales — organizaciones: ${await db.organization.count()} · ` +
         `usuarios: ${await db.user.count()} · ` +
         `membresías: ${await db.membership.count()} · ` +
-        `disciplinas: ${await db.discipline.count()}\n` +
+        `disciplinas: ${await db.discipline.count()} · ` +
+        `alumnos: ${await db.student.count()}\n` +
         `Contraseña de desarrollo: ${DEV_PASSWORD}\n`,
     );
   } finally {

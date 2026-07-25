@@ -1,7 +1,9 @@
 # Ritma — Especificación de color
 
 > Documento normativo. Operacionaliza la paleta definida en la Especificación de marca (§6) para producto y comunicaciones.
-> Versión 1.2 · Julio 2026 · Todos los ratios de contraste fueron calculados según WCAG 2.1.
+> Versión 1.3 · Julio 2026 · Todos los ratios de contraste fueron calculados según WCAG 2.1.
+
+> **Cambios de la 1.3** (S1, al construir el padrón de alumnos): se agregan `avatar-bg` / `avatar-text` (Componentes §3.11 solo definía el modo claro) y `scrim`, el velo de sheets y dialogs, que era un hueco de esta spec — sin él los componentes traían `bg-black/10`, o sea color suelto. Sin colores nuevos: las dos recetas reusan pares ya verificados.
 
 > **Cambios de la 1.2** (F0.5, al construir la navegación): se agrega el par `nav-active-bg` / `nav-active-text` para el ítem activo de la navegación. Componentes §3.6 lo definía como "fondo Violeta 50 y texto `primary`", que solo funciona en modo claro: en oscuro, `primary` (Violeta 300) sobre cualquier fondo violeta reprueba AA (4.19:1 sobre Violeta 900). Sin colores nuevos.
 
@@ -111,10 +113,21 @@ Los componentes consumen tokens, nunca stops directos. Definición por modo:
 | `success / warning / danger` | Verde 700 / Ámbar 800 / Rojo 600 | Verde 300 / Ámbar 300 / Rojo 300 |
 | `destructive` / `on-destructive` | Rojo 600 / Blanco | Rojo 600 / Blanco (no cambian) |
 | `nav-active-bg` / `nav-active-text` | Violeta 50 / Violeta 600 | Violeta 900 / Violeta 200 |
+| `avatar-bg` / `avatar-text` | Violeta 100 / Violeta 800 | Violeta 900 / Violeta 200 |
+| `scrim` | Tinta oscura al 40 % | Negro al 60 % |
 
 Nota del botón primario en oscuro: fondo Violeta 300 con texto Tinta oscura (5.47:1) — no blanco, que quedaría por debajo de AA.
 
 Nota de `nav-active-*`: en claro es lo que pide Componentes §3.6 (fondo Violeta 50, texto `primary`, 5.73:1). En oscuro **el texto no es `primary`**: Violeta 300 sobre Violeta 900 da 4.19:1 y no llega a AA, igual que cualquier fondo violeta translúcido. Con Violeta 200 el par da 8.21:1 y el violeta sigue siendo la señal de "seleccionado". Es el mismo patrón (fondo + texto por modo) que las recetas de §5.
+
+Nota de `avatar-*` (S1): Componentes §3.11 pedía "Violeta 100 con texto Violeta 800", que en claro
+da 8.82:1. En oscuro esa receta no sirve (el fondo claro rompería la superficie oscura), así que se
+reusa el mismo par que `nav-active-*` y `state-waived-*`: Violeta 900 con Violeta 200, 8.21:1. Sin
+colores nuevos.
+
+Nota de `scrim` (S1): el velo de sheets y dialogs (Componentes §3.8). Era un hueco de esta spec —
+no había token de velo— y sin él los componentes traían `bg-black/10`, que es color suelto. En
+oscuro el velo es más denso porque el fondo ya es oscuro y al 40 % no separaría.
 
 Nota de `destructive`: es el único token que no cambia entre modos. `danger` es color de **texto** y por eso sube a Rojo 300 en oscuro (§7.2); una superficie destructiva sólida no puede usarlo, porque Rojo 300 con texto blanco no llega a AA. El botón destructivo es Rojo 600 con blanco en los dos modos (4.77:1), que es lo que ya pedían Componentes §3.1 y §9.5 de este documento. Su hover es Rojo 700 (6.34:1).
 

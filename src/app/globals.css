@@ -145,6 +145,13 @@
   --nav-active-bg: #f6f4fd;
   --nav-active-text: #5a4bd1;
 
+  /* Avatar de iniciales (Componentes §3.11). Violeta 800 sobre Violeta 100: 8.82:1 */
+  --avatar-bg: #edeafb;
+  --avatar-text: #3a2f94;
+
+  /* Velo de sheets y dialogs (Componentes §3.8). Tinta oscura al 40 %. */
+  --scrim: rgb(23 22 29 / 0.4);
+
   /* Fondo de hover neutro (Componentes §2.3) y mapeo shadcn --muted (Color §8) */
   --muted: #f4f2ed;
 
@@ -196,6 +203,13 @@
   --nav-active-bg: #2a2268;
   --nav-active-text: #c9c2f6;
 
+  /* Avatar: misma receta que --nav-active-* y --state-waived-*. Violeta 200 sobre 900: 8.21:1 */
+  --avatar-bg: #2a2268;
+  --avatar-text: #c9c2f6;
+
+  /* En oscuro el velo es más denso: el fondo ya es oscuro y con 40 % no se separaría. */
+  --scrim: rgb(0 0 0 / 0.6);
+
   --muted: #292833;
 
   /* En oscuro la superficie elevada se aclara, no se le agrega sombra (Componentes §2.2) */
@@ -244,6 +258,11 @@
 
     --nav-active-bg: #2a2268;
     --nav-active-text: #c9c2f6;
+
+    --avatar-bg: #2a2268;
+    --avatar-text: #c9c2f6;
+
+    --scrim: rgb(0 0 0 / 0.6);
 
     --muted: #292833;
     --elevation-float: none;
@@ -296,6 +315,10 @@
 
   --color-nav-active-bg: var(--nav-active-bg);
   --color-nav-active-text: var(--nav-active-text);
+
+  --color-avatar-bg: var(--avatar-bg);
+  --color-avatar-text: var(--avatar-text);
+  --color-scrim: var(--scrim);
 
   /* Mapeo a shadcn/ui (Color §8). Ojo: shadcn usa --accent como fondo de hover;
      en Ritma accent es el coral, así que los componentes de shadcn que traigamos

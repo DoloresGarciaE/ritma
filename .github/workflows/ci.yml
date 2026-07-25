@@ -53,11 +53,11 @@ jobs:
           # El sufijo _test es parte de la guarda de tests/db.ts.
           POSTGRES_DB: ritma_test
         ports:
-          # 55432 en el runner → 5432 en el contenedor. El job NO corre dentro de un
-          # container, así que el service se ve en localhost:55432: exactamente la URL
+          # 15432 en el runner → 5432 en el contenedor. El job NO corre dentro de un
+          # container, así que el service se ve en localhost:15432: exactamente la URL
           # que ya trae .env.test, que se usa TAL CUAL (host local + base *_test = la
           # guarda pasa sin tocarla).
-          - 55432:5432
+          - 15432:5432
         options: >-
           --health-cmd "pg_isready -U ritma -d ritma_test"
           --health-interval 2s
@@ -97,7 +97,7 @@ jobs:
           POSTGRES_PASSWORD: ritma
           POSTGRES_DB: ritma_test
         ports:
-          - 55432:5432
+          - 15432:5432
         options: >-
           --health-cmd "pg_isready -U ritma -d ritma_test"
           --health-interval 2s
@@ -106,8 +106,8 @@ jobs:
 
     env:
       # La app del E2E habla con el Postgres efímero de ESTE job, nunca con producción.
-      DATABASE_URL: postgresql://ritma:ritma@localhost:55432/ritma_test
-      DIRECT_URL: postgresql://ritma:ritma@localhost:55432/ritma_test
+      DATABASE_URL: postgresql://ritma:ritma@localhost:15432/ritma_test
+      DIRECT_URL: postgresql://ritma:ritma@localhost:15432/ritma_test
       # No es un secreto: la base y el server viven lo que dura el job. Pero tiene que
       # existir: en un build de producción, Better Auth se niega a arrancar con el secret
       # por defecto ("You are using the default secret") y muere la autenticación entera.

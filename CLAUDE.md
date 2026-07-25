@@ -87,12 +87,21 @@ ritma/
 - `BETTER_AUTH_URL` tiene que coincidir con el origen que sirve la app, o Better Auth
   responde `INVALID_ORIGIN`. Sin `GOOGLE_CLIENT_ID`/`SECRET`, el botón de Google no se
   muestra y el resto anda igual.
-- ⚠️ **`INVALID_ORIGIN` es la trampa recurrente de esta base**: ya rompió el login de Google
-  (`redirect_uri`), el dev en otro puerto y el primer deploy con el dominio definitivo cargado
-  antes de que propagara. Por eso `auth.ts` declara **`trustedOrigins`** con el apex, el www y la
-  URL de Vercel — más `VERCEL_URL`, que Vercel inyecta sola y hace que la auth también funcione en
-  los preview deployments. Si aparece un origen nuevo (otro dominio, otro puerto), **agregalo ahí**;
-  no alcanza con cambiar `BETTER_AUTH_URL`.
+- ⚠️ **La configuración de orígenes es la trampa recurrente de esta base**: ya rompió el login de
+  Google (`redirect_uri`), el dev en otro puerto, el primer deploy con el dominio definitivo antes
+  de que propagara, y los previews de los PRs. Está fijada con tests en
+  [`tests/auth-origins.test.ts`](tests/auth-origins.test.ts) — si tocás `auth.ts`, corrélos.
+- **`baseURL` se DERIVA, no se carga a mano** ([`src/lib/auth.ts`](src/lib/auth.ts)): es
+  `BETTER_AUTH_URL` si está, y si no la URL de la rama (`VERCEL_BRANCH_URL`, que Vercel inyecta
+  sola en los previews). Si no se la das, **Better Auth cae a `http://localhost:3000`** y en un
+  deploy eso hace que Google reciba un redirect_uri de localhost: login imposible, sin ningún error
+  que lo explique.
+- **`trustedOrigins`** lista el apex, el www, la URL de producción y —en preview— la de la rama
+  **y** la del deploy: un preview se puede abrir por cualquiera de las dos. Si aparece un origen
+  nuevo, **agregalo ahí**; no alcanza con cambiar `BETTER_AUTH_URL`.
+- **Google se apaga en los previews** aunque haya credenciales: su `redirect_uri` sería el de la
+  rama, que Google no tiene autorizado (habría que cargar una por rama). En preview se entra con
+  email y contraseña.
 
 ## Organización y shell (desde F0.5)
 
@@ -113,6 +122,30 @@ ritma/
 - La app bar la compone **cada página** (`<AppBar title=… />`), no el layout: así el título puede
   salir de los datos y cada pantalla trae su propia acción.
 
+## El patrón para un modelo de negocio nuevo (desde S1)
+
+`Student` (S1) es la plantilla. Todo modelo de negocio que llegue después se construye **en este
+orden**, y la seguridad va primero:
+
+1. **Schema + migración.** Toda tabla de negocio lleva `orgId` con índice, `createdAt`/`updatedAt`.
+2. **Clasificarlo en `SCOPE`** ([`src/lib/db.ts`](src/lib/db.ts)) como `orgId`. Si te lo olvidás,
+   **no compila** — esa es la red de F0.6, no la desactives.
+3. **Tests de aislamiento** en [`tests/isolation.test.ts`](tests/isolation.test.ts), copiando el
+   bloque de `Student`: A no lee, no edita, no borra lo de B; y una escritura vía `withOrg(A)` no
+   puede aterrizar en B. **No es opcional.**
+4. **Servicio** en `server/services/`, que recibe `orgId` y usa `withOrg`. Nunca `db` crudo.
+5. **Server actions** con `requireMember(orgId)` **cada una**: el layout de `(app)` NO las protege
+   (se invocan por POST directo, sin pasar por él).
+6. **UI** al final, y los componentes nuevos van a [`/dev/ui`](src/app/dev/ui/page.tsx).
+
+- **Búsqueda de texto:** se busca contra una columna normalizada (`searchName`: minúsculas y sin
+  tildes, ver [`src/lib/students.ts`](src/lib/students.ts)), no con `unaccent` de Postgres — eso
+  exigiría SQL crudo, que se saltea `withOrg`.
+- **Teléfonos:** se guardan en **E.164** (`+541155554433`) con `libphonenumber-js`, default AR. El
+  profe tipea "11 5555-4433"; el formato lindo es cosa de la vista (`formatPhone`).
+- **Bajas (RN9):** siempre **lógicas** (`active = false`). Nunca se borra una fila de negocio: el
+  historial queda consultable.
+
 ## CI/CD y observabilidad (desde F0.7)
 
 - **Un branch de Neon por entorno.** `production` → Vercel Production; `dev` → tu `.env.local`
@@ -125,7 +158,7 @@ ritma/
   sin ella, el deploy falla en el build.
 - **CI sin secretos** ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)): en cada PR corren
   lint + typecheck + `format:check` + Vitest; al pushear a `main`, además el smoke de Playwright.
-  El Postgres de los tests es un `services:` container mapeado a `localhost:55432`, o sea la misma
+  El Postgres de los tests es un `services:` container mapeado a `localhost:15432`, o sea la misma
   URL que ya trae `.env.test` — sirve tal cual, sin editar nada y sin tocar la guarda de
   [`tests/db.ts`](tests/db.ts).
 - **El E2E nunca toca producción**: Playwright corre contra `next build` + `next start` apuntando
@@ -188,7 +221,7 @@ ritma/
   sin abstracción vacía. El test "un teacher no accede a grupos ajenos" se escribe en S2.
 - **Tests de aislamiento** (Vitest contra Postgres real, nunca mockeando Prisma): levantá la base
   con `npm run test:db:up` (Docker) y corré `npm test`. La base es un contenedor efímero
-  (`docker-compose.test.yml`, puerto 55432); [`tests/db.ts`](tests/db.ts) tiene una guarda de 4
+  (`docker-compose.test.yml`, puerto 15432); [`tests/db.ts`](tests/db.ts) tiene una guarda de 4
   capas (incluida una tabla centinela) para que sea **imposible** truncar dev o producción por un
   `TEST_DATABASE_URL` mal puesto. `.env.test` está commiteado a propósito (solo credenciales de
   localhost, sin secretos).
