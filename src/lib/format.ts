@@ -68,6 +68,20 @@ const MONTHS_SHORT = [
   "nov",
   "dic",
 ] as const;
+const MONTHS_FULL = [
+  "Enero",
+  "Febrero",
+  "Marzo",
+  "Abril",
+  "Mayo",
+  "Junio",
+  "Julio",
+  "Agosto",
+  "Septiembre",
+  "Octubre",
+  "Noviembre",
+  "Diciembre",
+] as const;
 
 /** `2` → `"mar"` — para resúmenes de franjas ("mar 19:00 · jue 19:00"). */
 export function shortWeekday(weekday: number): string {
@@ -105,6 +119,12 @@ export function formatWeekRange(from: string, to: string): string {
     return `${f.day}–${t.day} ${MONTHS_SHORT[t.monthIndex]}`;
   }
   return `${f.day} ${MONTHS_SHORT[f.monthIndex]} – ${t.day} ${MONTHS_SHORT[t.monthIndex]}`;
+}
+
+/** `"2026-03"` → `"Marzo 2026"` — el formato de períodos (§4.2), en título y selector. */
+export function formatPeriod(period: string): string {
+  const [year, month] = period.split("-");
+  return `${MONTHS_FULL[Number(month) - 1]} ${year}`;
 }
 
 /** `("19:00", 90)` → `"19:00–20:30"`. Cruza medianoche sin drama: `("23:30", 90)` → `"23:30–01:00"`. */

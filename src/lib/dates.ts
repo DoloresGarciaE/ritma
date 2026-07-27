@@ -65,6 +65,49 @@ export function dbToCivil(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Períodos "YYYY-MM" (S3, RN1/RN10): el mes de facturación es un dato de
+// calendario, igual que la fecha civil — mismo trato, misma aritmética entera.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const PERIOD = /^\d{4}-(0[1-9]|1[0-2])$/;
+
+/** Forma válida "YYYY-MM" con mes real (01–12). */
+export function isPeriod(value: string): boolean {
+  return PERIOD.test(value);
+}
+
+/** `"2026-07-15"` → `"2026-07"`: el período al que pertenece una fecha civil. */
+export function periodOf(date: string): string {
+  return date.slice(0, 7);
+}
+
+/** `("2026-07", -1)` → `"2026-06"` · `("2026-12", 1)` → `"2027-01"`. */
+export function addMonths(period: string, months: number): string {
+  const [year, month] = period.split("-").map(Number);
+  const total = year * 12 + (month - 1) + months;
+  const newYear = Math.floor(total / 12);
+  const newMonth = (total % 12) + 1;
+  return `${newYear}-${String(newMonth).padStart(2, "0")}`;
+}
+
+/** Cantidad de días del período (`"2026-02"` → 28; `"2028-02"` → 29). */
+export function daysInPeriod(period: string): number {
+  const [year, month] = period.split("-").map(Number);
+  // Día 0 del mes siguiente = último día de este mes (aritmética UTC, como todo acá).
+  return new Date(Date.UTC(year, month, 0)).getUTCDate();
+}
+
+/**
+ * El día `day` del período como fecha civil, CLAMPEADO al rango real del mes:
+ * `("2026-04", 31)` → `"2026-04-30"`. Es la regla del vencimiento (RN1): una org con
+ * `dueDay` 31 vence el último día de los meses cortos, no nunca.
+ */
+export function dateInPeriod(period: string, day: number): string {
+  const clamped = Math.min(Math.max(1, Math.trunc(day)), daysInPeriod(period));
+  return `${period}-${String(clamped).padStart(2, "0")}`;
+}
+
 /**
  * "Hoy" como fecha civil EN LA ZONA DE LA ORG — no en la del servidor: a las 02:30 UTC
  * en Buenos Aires todavía es el día anterior. Zona inválida → default AR, sin tirar.
