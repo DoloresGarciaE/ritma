@@ -55,6 +55,8 @@ const SCOPE: Record<Prisma.ModelName, Scope> = {
   ClassGroup: "orgId",
   ScheduleSlot: "orgId",
   ClassSession: "orgId",
+  Enrollment: "orgId",
+  Charge: "orgId",
   // Membership tiene orgId y es dato del tenant. La lee la capa de permisos
   // (requireMember) a través de withOrg; el arranque de sesión la lee cruda en auth.ts.
   Membership: "orgId",
