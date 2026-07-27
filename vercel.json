@@ -1,4 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "npm run vercel-build"
+  "buildCommand": "npm run vercel-build",
+  "crons": [
+    { "path": "/api/cron/generate-charges", "schedule": "0 6 1 * *" },
+    { "path": "/api/cron/mark-overdue", "schedule": "30 6 * * *" }
+  ]
 }

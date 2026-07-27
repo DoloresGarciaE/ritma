@@ -162,6 +162,27 @@ export function withOrg(orgId: string): OrgClient {
 }
 
 /**
+ * Puerta de SISTEMA (S3): el acceso cross-org de los jobs programados.
+ *
+ * Los crons (generar cuotas, marcar vencidas) operan sobre TODAS las organizaciones: no
+ * hay sesión, no hay actor, no hay un solo orgId — `withOrg` no puede representarlos. En
+ * vez de dejar que cada job importe el `db` crudo (y borrar la línea entre "query de
+ * sistema" y "query que se saltea el scoping"), esta función es la ÚNICA puerta:
+ *
+ * - ESLint la permite SOLO en `src/server/system/` (donde viven los jobs) — importarla
+ *   desde una page, una action o un servicio de negocio es error de lint.
+ * - Los jobs iteran org por org y le pasan los datos a los servicios PUROS
+ *   (`services/billing.ts`), que no saben de esta distinción: reciben datos, devuelven
+ *   resultados. La escritura vuelve por acá, con el `orgId` de la org que se está
+ *   procesando puesto explícito.
+ * - Devuelve el mismo cliente crudo (mismo pool); el nombre existe para que la intención
+ *   quede en el código y el lint pueda distinguirla.
+ */
+export function forSystem() {
+  return db;
+}
+
+/**
  * Crea una organización con su dueño y sus disciplinas en UNA transacción.
  *
  * No puede pasar por `withOrg`: todavía no hay `orgId` (se está creando el tenant). Vive
