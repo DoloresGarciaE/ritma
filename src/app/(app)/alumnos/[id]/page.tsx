@@ -3,12 +3,16 @@ import { notFound } from "next/navigation";
 
 import { requireSession } from "@/lib/auth";
 import { todayInTz } from "@/lib/dates";
+import { requireMember } from "@/server/authz";
 import { getOrgSettings } from "@/server/organizations";
+import { listChargesForStudent } from "@/server/services/charges";
 import { listEnrollmentsForStudent } from "@/server/services/enrollments";
 import { listGroups } from "@/server/services/groups";
+import { can } from "@/server/services/permissions";
 import { getStudent } from "@/server/services/students";
 
 import { AppBar } from "../../_components/app-bar";
+import { AccountStatementCard } from "./_components/account-statement-card";
 import { EnrollmentsCard } from "./_components/enrollments-card";
 import { StudentDetail } from "./_components/student-detail";
 
@@ -36,9 +40,13 @@ export default async function StudentPage({ params }: Params) {
   const session = await requireSession();
   const orgId = session.activeOrgId!;
 
-  const [student, enrollments, groups, settings] = await Promise.all([
+  // La membresía revalidada trae el ROL: editar montos y exonerar es de owner/admin, y lo
+  // que un rol no puede hacer no se le muestra (§4.3) — el server lo valida igual.
+  const [actor, student, enrollments, charges, groups, settings] = await Promise.all([
+    requireMember(orgId),
     getStudent(orgId, id),
     listEnrollmentsForStudent(orgId, id),
+    listChargesForStudent(orgId, id),
     listGroups(orgId),
     getOrgSettings(orgId),
   ]);
@@ -53,16 +61,24 @@ export default async function StudentPage({ params }: Params) {
       <StudentDetail
         student={student}
         billing={
-          <EnrollmentsCard
-            student={{ id: student.id, name: student.name }}
-            enrollments={enrollments}
-            groups={groups.map((g) => ({
-              id: g.id,
-              name: g.name,
-              defaultPrice: g.defaultPrice,
-            }))}
-            today={today}
-          />
+          <>
+            <EnrollmentsCard
+              student={{ id: student.id, name: student.name }}
+              enrollments={enrollments}
+              groups={groups.map((g) => ({
+                id: g.id,
+                name: g.name,
+                defaultPrice: g.defaultPrice,
+              }))}
+              today={today}
+            />
+            <AccountStatementCard
+              studentId={student.id}
+              studentName={student.name}
+              charges={charges}
+              canManage={can(actor, "org:configure")}
+            />
+          </>
         }
       />
     </>

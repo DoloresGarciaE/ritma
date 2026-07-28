@@ -7,11 +7,13 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Fab } from "@/components/ui/fab";
 import { useToast } from "@/components/ui/toast";
+import type { GroupEnrollmentItem } from "@/server/services/enrollments";
 import type { GroupListItem } from "@/server/services/groups";
 import type { AgendaOccurrence } from "@/server/services/sessions";
 
 import { AppBar } from "../../_components/app-bar";
 import { EmptyState } from "../../_components/empty-state";
+import { EnrollSheet, type EnrollStudentOption } from "../../cobranzas/_components/enroll-sheet";
 import { AgendaNav } from "./agenda-nav";
 import { GroupSheet } from "./group-sheet";
 import { GroupsSheet } from "./groups-sheet";
@@ -33,6 +35,8 @@ export function AgendaScreen({
   occurrences,
   groups,
   disciplines,
+  students,
+  roster,
   autoOpenCreate,
 }: {
   weekStart: string;
@@ -42,6 +46,10 @@ export function AgendaScreen({
   occurrences: AgendaOccurrence[];
   groups: GroupListItem[];
   disciplines: { id: string; name: string }[];
+  /** Alumnos ACTIVOS: opciones del sheet de inscripción (S3). */
+  students: EnrollStudentOption[];
+  /** Inscriptos vigentes por grupo (S3): pinta el detalle de sesión. */
+  roster: Record<string, GroupEnrollmentItem[]>;
   autoOpenCreate: boolean;
 }) {
   const router = useRouter();
@@ -53,6 +61,8 @@ export function AgendaScreen({
   const [groupsListOpen, setGroupsListOpen] = useState(false);
   const [selected, setSelected] = useState<AgendaOccurrence | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
+  const [enrollGroupId, setEnrollGroupId] = useState<string | null>(null);
+  const [enrollKey, setEnrollKey] = useState(0);
 
   // Limpia el `?nuevo=grupo` de la URL (solo navegación, sin setState: el estado inicial
   // del sheet ya salió del prop).
@@ -86,6 +96,21 @@ export function AgendaScreen({
     setSelected(occurrence);
     setDetailOpen(true);
   };
+
+  /** Desde el detalle de sesión: cierra el detalle y abre inscribir con el grupo fijo. */
+  const openEnroll = (groupId: string) => {
+    toast.closeAll();
+    setDetailOpen(false);
+    setEnrollKey((key) => key + 1);
+    setEnrollGroupId(groupId);
+  };
+
+  const enrollGroup = enrollGroupId ? groups.find((g) => g.id === enrollGroupId) : undefined;
+  // Los ya inscriptos no son opciones: inscribirlos de nuevo solo puede fallar.
+  const enrolledIds = new Set(
+    (enrollGroupId ? (roster[enrollGroupId] ?? []) : []).map((e) => e.student.id),
+  );
+  const enrollOptions = students.filter((s) => !enrolledIds.has(s.id));
 
   const days = selectedDay ? [selectedDay] : weekDays(weekStart);
   const shownOccurrences = selectedDay
@@ -147,11 +172,30 @@ export function AgendaScreen({
         open={detailOpen}
         onOpenChange={setDetailOpen}
         occurrence={selected}
+        enrolled={selected ? (roster[selected.groupId] ?? []) : []}
         onEditGroup={(groupId) => {
           const group = groups.find((g) => g.id === groupId);
           if (group) openEdit(group);
         }}
+        onEnroll={openEnroll}
       />
+
+      {enrollGroup ? (
+        <EnrollSheet
+          key={`${enrollGroup.id}-${enrollKey}`}
+          open={enrollGroupId !== null}
+          onOpenChange={(open) => {
+            if (!open) setEnrollGroupId(null);
+          }}
+          group={{
+            id: enrollGroup.id,
+            name: enrollGroup.name,
+            defaultPrice: enrollGroup.defaultPrice,
+          }}
+          students={enrollOptions}
+          today={today}
+        />
+      ) : null}
     </>
   );
 }

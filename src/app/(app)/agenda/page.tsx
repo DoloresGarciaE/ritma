@@ -3,8 +3,10 @@ import type { Metadata } from "next";
 import { requireSession } from "@/lib/auth";
 import { DEFAULT_TIMEZONE, isCivilDate, mondayOf, todayInTz } from "@/lib/dates";
 import { getDisciplines, getOrgSettings } from "@/server/organizations";
+import { activeRosterByGroup } from "@/server/services/enrollments";
 import { listGroups } from "@/server/services/groups";
 import { weekData } from "@/server/services/sessions";
+import { listStudents } from "@/server/services/students";
 
 import { AgendaScreen } from "./_components/agenda-screen";
 
@@ -47,10 +49,12 @@ export default async function AgendaPage({
     ? (day ?? (mondayOf(today) === weekStart ? today : weekStart))
     : null;
 
-  const [{ occurrences }, groups, disciplines] = await Promise.all([
+  const [{ occurrences }, groups, disciplines, students, roster] = await Promise.all([
     weekData(orgId, weekStart),
     listGroups(orgId, { includeInactive: true }),
     getDisciplines(orgId),
+    listStudents(orgId),
+    activeRosterByGroup(orgId, today),
   ]);
 
   // La app bar la compone la screen (client): su acción "Grupos" abre un sheet.
@@ -62,6 +66,8 @@ export default async function AgendaPage({
       occurrences={occurrences}
       groups={groups}
       disciplines={disciplines}
+      students={students.map((s) => ({ id: s.id, name: s.name }))}
+      roster={roster}
       autoOpenCreate={first(params.nuevo) === "grupo"}
     />
   );

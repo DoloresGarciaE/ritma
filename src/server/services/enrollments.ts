@@ -122,6 +122,33 @@ export async function listActiveEnrollmentsForGroup(
   return rows;
 }
 
+/**
+ * El roster VIGENTE de toda la org en una sola query, agrupado por grupo: la agenda lo
+ * necesita para pintar los inscriptos de cualquier sesión sin una query por grupo.
+ * Misma regla de vigencia que `listActiveEnrollmentsForGroup`.
+ */
+export async function activeRosterByGroup(
+  orgId: string,
+  today: string,
+): Promise<Record<string, GroupEnrollmentItem[]>> {
+  const rows = await withOrg(orgId).enrollment.findMany({
+    where: { OR: [{ endDate: null }, { endDate: { gte: civilToDb(today) } }] },
+    orderBy: { student: { searchName: "asc" } },
+    select: {
+      id: true,
+      plan: true,
+      groupId: true,
+      student: { select: { id: true, name: true, active: true } },
+    },
+  });
+
+  const byGroup: Record<string, GroupEnrollmentItem[]> = {};
+  for (const { groupId, ...item } of rows) {
+    (byGroup[groupId] ??= []).push(item);
+  }
+  return byGroup;
+}
+
 /** `throw` genérico: a este punto solo se llega con una request forjada (groups.ts). */
 async function assertRefsInOrg(orgId: string, studentId: string, groupId: string): Promise<void> {
   const org = withOrg(orgId);

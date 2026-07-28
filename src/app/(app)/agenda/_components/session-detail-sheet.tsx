@@ -2,6 +2,8 @@
 
 import { useState, useTransition } from "react";
 
+import Link from "next/link";
+
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -14,6 +16,7 @@ import { Field, Input } from "@/components/ui/input";
 import { ActionSheet, ActionSheetBody } from "@/components/ui/sheet";
 import { useToast } from "@/components/ui/toast";
 import { formatFullDayDate, formatListDate, formatMoney, formatTimeRange } from "@/lib/format";
+import type { GroupEnrollmentItem } from "@/server/services/enrollments";
 import type { AgendaOccurrence } from "@/server/services/sessions";
 
 import { cancelSessionAction, rescheduleSessionAction, restoreSessionAction } from "../actions";
@@ -32,12 +35,18 @@ export function SessionDetailSheet({
   open,
   onOpenChange,
   occurrence,
+  enrolled,
   onEditGroup,
+  onEnroll,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   occurrence: AgendaOccurrence | null;
+  /** Los inscriptos vigentes del grupo (S3). */
+  enrolled: GroupEnrollmentItem[];
   onEditGroup: (groupId: string) => void;
+  /** Abre el sheet de inscripción con este grupo fijo (HU4.1 desde la agenda). */
+  onEnroll: (groupId: string) => void;
 }) {
   const toast = useToast();
   // Transiciones separadas: que "Mover sesión" no dibuje spinners en los otros botones.
@@ -179,7 +188,39 @@ export function SessionDetailSheet({
           </span>
         </div>
 
-        {/* Los inscriptos del grupo van acá cuando exista Enrollment (S3, HU3.2). */}
+        {/* Inscriptos del grupo (S3): tap a la ficha; inscribir abre el sheet de HU4.1. */}
+        <div className="flex flex-col gap-2 rounded-card border border-border bg-surface p-3">
+          <span className="text-sm font-medium text-text">
+            Inscriptos{enrolled.length > 0 ? ` · ${enrolled.length}` : ""}
+          </span>
+
+          {enrolled.length === 0 ? (
+            <p className="text-sm text-text-secondary">
+              Nadie todavía. Inscribí a tus alumnos y las cuotas se generan solas.
+            </p>
+          ) : (
+            <ul className="flex flex-col">
+              {enrolled.map((enrollment) => (
+                <li key={enrollment.id}>
+                  <Link
+                    href={`/alumnos/${enrollment.student.id}`}
+                    className="flex min-h-11 items-center justify-between gap-2 text-sm text-text"
+                  >
+                    <span className="truncate">{enrollment.student.name}</span>
+                    <span className="shrink-0 text-xs text-text-secondary">
+                      {enrollment.plan === "DROP_IN" ? "Clase suelta" : ""}
+                      {enrollment.student.active ? "" : " Alumno de baja"}
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <Button variant="secondary" size="md" onClick={() => onEnroll(occurrence.groupId)}>
+            Inscribir alumno
+          </Button>
+        </div>
 
         {rescheduleOpen && !cancelled ? (
           <div className="flex flex-col gap-3 rounded-card border border-border bg-surface p-3">
