@@ -32,7 +32,14 @@ import { studentSchema, toFieldErrors, type StudentField } from "../../schema";
  * guarda con un botón. La baja pide confirmación nombrando al alumno y la consecuencia
  * (Componentes §3.8).
  */
-export function StudentDetail({ student }: { student: Student }) {
+export function StudentDetail({
+  student,
+  billing,
+}: {
+  student: Student;
+  /** Inscripciones y estado de cuenta (S3): la página los compone como server components. */
+  billing?: React.ReactNode;
+}) {
   const router = useRouter();
   const toast = useToast();
 
@@ -152,10 +159,8 @@ export function StudentDetail({ student }: { student: Student }) {
         </Button>
       </Card>
 
-      {/*
-        Acá abajo van, en sus bloques: inscripciones (S3), estado de cuenta (S3–S4) e
-        historial de recordatorios (S5). No se dibujan placeholders de lo que no existe.
-      */}
+      {/* Inscripciones y estado de cuenta (S3). El historial de recordatorios llega en S5. */}
+      {billing}
 
       <Card className="flex flex-col gap-3">
         <h3 className="font-medium text-text">{student.active ? "Dar de baja" : "Reactivar"}</h3>
