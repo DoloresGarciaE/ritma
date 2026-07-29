@@ -3,9 +3,10 @@
 import { useState, useTransition } from "react";
 
 import { Button } from "@/components/ui/button";
-import { AmountInput, Field } from "@/components/ui/input";
+import { AmountInput, Field, Input } from "@/components/ui/input";
 import { ActionSheet, ActionSheetBody, ActionSheetFooter } from "@/components/ui/sheet";
 import { useToast } from "@/components/ui/toast";
+import { normalizeForSearch } from "@/lib/students";
 import { cn } from "@/lib/utils";
 
 import { createEnrollmentAction } from "../actions";
@@ -13,9 +14,10 @@ import { enrollSchema, toEnrollFieldErrors, type EnrollFormState } from "../sche
 
 /**
  * Inscribir alumno (HU4.1) — el sheet §3.8 compartido por los DOS orígenes:
- * - ficha del alumno: `student` fijo, se elige el grupo (chips);
- * - detalle de sesión: `group` fijo, se elige el alumno (select nativo: un padrón puede
- *   tener docenas — la rueda del sistema es lo correcto para el pulgar, como §3.15).
+ * - ficha del alumno: `student` fijo, se elige el grupo (chips, como las disciplinas);
+ * - detalle de sesión: `group` fijo, se elige el alumno con el combobox de §3.2 —
+ *   búsqueda EN LÍNEA dentro del sheet (insensible a tildes, la misma de HU2.2): un
+ *   padrón tiene docenas y un select simple no sirve; un sheet sobre otro sheet, tampoco.
  *
  * El precio hereda la tarifa del grupo y es editable POR ALUMNO (CA de HU4.1): se
  * sincroniza con el grupo elegido hasta que la profe lo toca. La fecha de alta define
@@ -64,6 +66,7 @@ export function EnrollSheet({
   const [pending, startSubmit] = useTransition();
 
   const [studentId, setStudentId] = useState(student?.id ?? "");
+  const [studentQuery, setStudentQuery] = useState("");
   const [groupId, setGroupId] = useState(group?.id ?? "");
   const [plan, setPlan] = useState<"MONTHLY" | "DROP_IN">("MONTHLY");
   const [price, setPrice] = useState<number | null>(group?.defaultPrice ?? null);
@@ -75,6 +78,9 @@ export function EnrollSheet({
   const groupOptions = group ? [group] : groups;
   const selectedGroup = groupOptions.find((g) => g.id === groupId);
   const selectedStudent = student ?? students.find((s) => s.id === studentId);
+  const filteredStudents = students.filter((option) =>
+    normalizeForSearch(option.name).includes(normalizeForSearch(studentQuery)),
+  );
 
   const pickGroup = (option: EnrollGroupOption) => {
     setGroupId(option.id);
@@ -125,28 +131,59 @@ export function EnrollSheet({
       description={group ? group.name : undefined}
     >
       <ActionSheetBody className="flex flex-col gap-4 pb-4">
-        {student ? null : (
+        {student ? null : selectedStudent ? (
+          <div className="flex flex-col gap-1.5">
+            <span className="text-sm font-medium text-text">Alumno</span>
+            <div className="flex items-center justify-between gap-2">
+              <span className={chipStyles(true)}>{selectedStudent.name}</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setStudentId("");
+                  setStudentQuery("");
+                }}
+              >
+                Cambiar
+              </Button>
+            </div>
+          </div>
+        ) : (
           <Field label="Alumno" error={errors.studentId}>
-            <select
-              value={studentId}
-              onChange={(event) => {
-                setStudentId(event.target.value);
-                if (errors.studentId) setErrors((prev) => ({ ...prev, studentId: undefined }));
-              }}
-              className={cn(
-                "h-11 w-full rounded-control border border-border-strong bg-surface px-3",
-                "text-base text-text",
-                "aria-invalid:border-danger",
-              )}
-              aria-invalid={errors.studentId ? true : undefined}
-            >
-              <option value="">Elegí un alumno…</option>
-              {students.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.name}
-                </option>
-              ))}
-            </select>
+            <div className="flex flex-col gap-2">
+              <Input
+                type="search"
+                placeholder="Buscá por nombre…"
+                value={studentQuery}
+                onChange={(event) => setStudentQuery(event.target.value)}
+              />
+              <ul className="max-h-48 overflow-y-auto rounded-control border border-border">
+                {filteredStudents.map((option) => (
+                  <li key={option.id} className="border-b border-border last:border-b-0">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStudentId(option.id);
+                        if (errors.studentId)
+                          setErrors((prev) => ({ ...prev, studentId: undefined }));
+                      }}
+                      className="flex min-h-11 w-full cursor-pointer items-center px-3 text-left text-sm text-text hover:bg-muted"
+                    >
+                      {option.name}
+                    </button>
+                  </li>
+                ))}
+                {students.length === 0 ? (
+                  <li className="px-3 py-2.5 text-sm text-text-secondary">
+                    No queda nadie sin inscribir en este grupo.
+                  </li>
+                ) : filteredStudents.length === 0 ? (
+                  <li className="px-3 py-2.5 text-sm text-text-secondary">
+                    Nadie se llama así en tu padrón.
+                  </li>
+                ) : null}
+              </ul>
+            </div>
           </Field>
         )}
 
