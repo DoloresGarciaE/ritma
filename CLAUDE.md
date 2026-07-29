@@ -176,6 +176,46 @@ orden**, y la seguridad va primero:
   TEACHER de estudio ve/gestiona todos los grupos de su org; el test de teacher-scope se escribe
   en S9, cuando exista la FK.
 
+## Cobranzas (desde S3)
+
+- **El motor de cuotas es puro** ([`src/server/services/billing.ts`](src/server/services/billing.ts)):
+  `generateCharges` (RN1–RN2), `dropInCharge` (propuesta RN11) y `markOverdue` (RN3) reciben
+  datos y devuelven resultados. **El monto viaja como tipo opaco** (`<A>`; Prisma Decimal en
+  producción): el motor no puede hacer aritmética con él — dinero sin flotantes POR
+  CONSTRUCCIÓN. Cuando una regla necesite sumar plata (S4), es con `Prisma.Decimal`, jamás
+  `number`; a `number` se convierte solo al borde, para mostrar (patrón `defaultPrice` de S2).
+- **Idempotencia por diseño:** la garantía dura es el unique `(enrollmentId, period)`; todo el
+  que genera upsertea sobre él con `update: {}`. Correr el cron N veces deja las mismas filas y
+  NO pisa una cuota editada a mano (RN2). Hay un test explícito de las dos cosas.
+- **`forSystem()` es la puerta de sistema** ([`src/lib/db.ts`](src/lib/db.ts)): los crons operan
+  cross-org — sin sesión, sin actor, sin un orgId — y `withOrg` no puede representarlos. ESLint
+  la permite SOLO en `src/server/system/` (donde el `db` crudo sigue prohibido): así "query de
+  sistema" es una categoría con nombre y lint, no un `db` crudo suelto. Los jobs iteran org por
+  org, alimentan al motor puro (que no sabe de esta distinción) y escriben con el `orgId`
+  explícito. Servicios de negocio, pages y actions JAMÁS la importan.
+- **Períodos y relojes (RN10):** el período (`"YYYY-MM"`) y el "hoy" de cada org se calculan en
+  SU zona (`periodOf(todayInTz(tz))`); `dueDate` = día `dueDay` de la org **clampeado** al largo
+  real del mes (`dateInPeriod`: dueDay 31 en abril → 30). Helpers de período en
+  [`src/lib/dates.ts`](src/lib/dates.ts); "Julio 2026" sale de `formatPeriod` (§4.2). Los
+  schedules de [`vercel.json`](vercel.json) están en UTC corridos a madrugada argentina
+  (06:00 el día 1 y 06:30 diario = 03:00/03:30 en AR).
+- **`/api/cron/*` es fail-closed:** sin `CRON_SECRET` responde 401 SIEMPRE (un endpoint que
+  genera deuda no queda abierto por una env olvidada); la comparación del Bearer es
+  `timingSafeEqual`. Vercel manda el header solo. En local no hace falta el secreto:
+  `npm run cron:dev -- <job> [período]` dispara el job contra la base de dev — así se simula el
+  cambio de mes (el DoD de S3; el seed hace exactamente eso con los jobs reales).
+- **Inscribir crea la cuota inicial en la MISMA escritura anidada** (orgId explícito en la
+  cuota) y con el MISMO motor que el cron: mensual → la del período en curso si corresponde;
+  clase suelta → cargo único con vencimiento a 7 días (RN11, pendiente de aprobar en Plan §8).
+  **Alta retroactiva genera SOLO el período en curso** — la deuda vieja se cobró fuera de Ritma
+  (caso onboarding); fabricarla sorprendería. Decisión S3.
+- **Baja de inscripción = `endDate`** (RN9): el período que contiene la baja todavía genera; los
+  siguientes no; las cuotas ya generadas persisten (exonerables). Dos inscripciones ABIERTAS del
+  mismo alumno al mismo grupo no se puede; cerrada y re-inscribirse, sí.
+- **Mutaciones manuales con reglas de estado:** editar el monto solo en PENDING/OVERDUE (RN2);
+  exonerar jamás una PAID (RN3). Las dos son de owner/admin: `assertRole` en la action, y la UI
+  ni siquiera se las muestra a un teacher (§4.3) — nunca es la única guardia.
+
 ## CI/CD y observabilidad (desde F0.7)
 
 - **Un branch de Neon por entorno.** `production` → Vercel Production; `dev` → tu `.env.local`

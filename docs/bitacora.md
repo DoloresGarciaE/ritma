@@ -187,3 +187,32 @@ del diagnóstico. Se pueden borrar con Prisma Studio apuntando al branch de prod
   pasadas (inherente al patrón on-the-fly; se revisita cuando RN7/F2 lo exija).
 - **Próximo:** S3 — Cobranzas: inscripciones y cuotas (`Enrollment`, `Charge`), la lista de
   inscriptos en el detalle de sesión, y el primer cron (RN1).
+
+## Semana 10 (julio 2026) — cobranzas: inscripciones y cuotas (S3)
+
+- **Hecho:** `feat/s3-enrollments-charges`: `Enrollment` y `Charge` con sus bloques de
+  aislamiento (+ el caso crítico nuevo: generar una cuota ES un upsert por
+  `(enrollmentId, period)` — un upsert de A sobre la cuota de B cae al create y queda en A);
+  el **motor puro de cobranzas** (`billing.ts`, RN1–RN3 con cobertura total) donde el monto es
+  un **tipo opaco** que el motor no puede operar — dinero sin flotantes por construcción; la
+  **puerta de sistema `forSystem()`** para los crons cross-org, permitida por ESLint solo en
+  `server/system/` (ahí el `db` crudo sigue prohibido); los dos jobs (mensual + diario)
+  idempotentes sobre el unique —la re-corrida no pisa una cuota editada a mano (RN2), testeado—
+  detrás de `/api/cron/*` con `CRON_SECRET` **fail-closed** y comparación en tiempo constante,
+  y `npm run cron:dev` para dispararlos a mano; inscribir desde la ficha y desde el detalle de
+  sesión (la cuota inicial la genera EL MISMO motor: mensual del período en curso, o clase
+  suelta a 7 días); baja con `endDate` (RN9); estado de cuenta en la ficha con el badge §3.3
+  (su primer uso real), editar monto (RN2) y exonerar (RN3) solo owner/admin; **Deudores por
+  período** con filtro por grupo y el total sumado en Decimal; seed que simula el cambio de mes
+  **con los jobs reales** (dos períodos generados + vencidas marcadas + una beca exonerada),
+  idempotente. **241 tests** (venían 168).
+- **Trabado:** nada bloqueante, pero cuatro decisiones/hallazgos. Uno: RN10 pide la moneda "en
+  cada monto" y el borrador de §7 no la tenía — `Charge.currency` se copia de la org al generar
+  (nota S3 en §7). Dos: §3.2 exige combobox CON BÚSQUEDA para elegir alumno y la primera
+  versión era un select nativo — quedó búsqueda en línea dentro del propio sheet (nota S3 en
+  §3.2). Tres: `PlanType` nace sin `PACK` (depende de asistencia, fase 3+). Cuatro: **alta
+  retroactiva genera solo el período en curso** — fabricar deuda de meses ya cobrados fuera de
+  Ritma (onboarding) sorprendería; si hace falta, será acción explícita. Propuesta **RN11**
+  (clase suelta: un cargo único al inscribir, vence a 7 días) elevada para aprobar en §8.
+- **Próximo:** S4 — pagos e imputaciones (RN4–RN5): `Payment` + `PaymentAllocation`, el sheet
+  "Registrar pago" en <15 segundos, y los estados PARTIAL/PAID que este bloque dejó listos.
