@@ -2,10 +2,15 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   addDays,
+  addMonths,
   civilToDb,
+  dateInPeriod,
+  daysInPeriod,
   dbToCivil,
   isCivilDate,
+  isPeriod,
   mondayOf,
+  periodOf,
   todayInTz,
   weekdayOf,
 } from "./dates";
@@ -79,6 +84,47 @@ describe("civilToDb / dbToCivil", () => {
     const db = civilToDb("2026-07-13");
     expect(db.toISOString()).toBe("2026-07-13T00:00:00.000Z");
     expect(dbToCivil(db)).toBe("2026-07-13");
+  });
+});
+
+describe("períodos (S3)", () => {
+  it("isPeriod: forma YYYY-MM con mes real", () => {
+    expect(isPeriod("2026-07")).toBe(true);
+    expect(isPeriod("2026-12")).toBe(true);
+    expect(isPeriod("2026-13")).toBe(false);
+    expect(isPeriod("2026-00")).toBe(false);
+    expect(isPeriod("2026-7")).toBe(false);
+    expect(isPeriod("2026-07-01")).toBe(false);
+    expect(isPeriod("")).toBe(false);
+  });
+
+  it("periodOf: el período de una fecha civil", () => {
+    expect(periodOf("2026-07-15")).toBe("2026-07");
+    expect(periodOf("2026-01-01")).toBe("2026-01");
+  });
+
+  it("addMonths: suma y resta, cruzando año en las dos direcciones", () => {
+    expect(addMonths("2026-07", 1)).toBe("2026-08");
+    expect(addMonths("2026-07", -1)).toBe("2026-06");
+    expect(addMonths("2026-12", 1)).toBe("2027-01");
+    expect(addMonths("2026-01", -1)).toBe("2025-12");
+    expect(addMonths("2026-07", -12)).toBe("2025-07");
+    expect(addMonths("2026-07", 0)).toBe("2026-07");
+  });
+
+  it("daysInPeriod: meses cortos, largos y el febrero bisiesto", () => {
+    expect(daysInPeriod("2026-07")).toBe(31);
+    expect(daysInPeriod("2026-04")).toBe(30);
+    expect(daysInPeriod("2026-02")).toBe(28);
+    expect(daysInPeriod("2028-02")).toBe(29);
+  });
+
+  it("dateInPeriod: clampea al rango real del mes (la regla del dueDay 31)", () => {
+    expect(dateInPeriod("2026-07", 10)).toBe("2026-07-10");
+    expect(dateInPeriod("2026-04", 31)).toBe("2026-04-30");
+    expect(dateInPeriod("2026-02", 31)).toBe("2026-02-28");
+    expect(dateInPeriod("2026-07", 1)).toBe("2026-07-01");
+    expect(dateInPeriod("2026-07", 0)).toBe("2026-07-01"); // defensivo: nunca día 0
   });
 });
 

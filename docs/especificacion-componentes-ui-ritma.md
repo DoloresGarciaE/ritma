@@ -67,6 +67,8 @@ Tamaños: sm 32 px, md 40 px (default), lg 48 px. En mobile, el CTA de un formul
 
 **Select / Combobox.** Para elegir alumno, grupo o disciplina: combobox con búsqueda (shadcn Command) — a partir de 10 alumnos un select simple no sirve. En mobile abre como bottom sheet.
 
+*(S3)* Primer uso real (inscribir alumno, HU4.1), con un ajuste: como el formulario YA es un bottom sheet, la búsqueda filtra **en línea adentro del propio sheet** (input + lista scrolleable, insensible a tildes como la de HU2.2) en vez de abrir un segundo sheet encima — el alumno elegido colapsa a un chip con "Cambiar". Para listas cortas (grupo, disciplina, plan) siguen los chips single-select del formulario de grupo (S2): con un puñado de opciones, verlas todas gana.
+
 **Checkbox, radio y switch.** Switch solo para estados que aplican al instante (ej. "Grupo activo"); checkbox para opciones dentro de formularios que se confirman con un botón.
 
 ### 3.3 Badge de estado de cuota — componente firma

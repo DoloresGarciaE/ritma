@@ -130,10 +130,10 @@ ritma/
 - **DoD:** la semana del profe se ve correcta con feriado cancelado incluido.
 
 ### S3 — Cobranzas: inscripciones y cuotas
-- [ ] Modelos `Enrollment` y `Charge`; inscribir alumno a grupo con plan y precio (HU4.1).
-- [ ] Servicio `generateCharges(period)` (RN1–RN2) como función pura + tests; ídem `markOverdue` (RN3, HU4.5).
-- [ ] Vercel Cron (mensual y diario) protegido con `CRON_SECRET`; pantalla Deudores por período.
-- **DoD:** al simular el cambio de mes en seed, las cuotas correctas aparecen con el estado correcto.
+- [x] Modelos `Enrollment` y `Charge` (ver nota S3 del Plan §7: orgId, currency, sin PACK); inscribir alumno a grupo con plan y precio (HU4.1) desde la ficha y desde el detalle de sesión, con la cuota inicial creada por el mismo motor que el cron; baja con `endDate` (RN9).
+- [x] Servicio `generateCharges` (RN1–RN2) como función pura + tests; ídem `markOverdue` (RN3, HU4.5). El monto es un tipo opaco: el motor no puede hacer aritmética de plata. Idempotencia probada sobre el unique `(enrollmentId, period)` — la re-corrida no pisa una cuota editada.
+- [x] Vercel Cron (mensual y diario, madrugada AR) protegido con `CRON_SECRET` (fail-closed, comparación en tiempo constante) vía la puerta `forSystem()` (solo `server/system/`, lo obliga ESLint); `npm run cron:dev` para dispararlos localmente; pantalla Deudores por período con filtro por grupo y total en Decimal; estado de cuenta en la ficha (badge §3.3) con editar monto (RN2) y exonerar (RN3), solo owner/admin.
+- **DoD:** al simular el cambio de mes en seed, las cuotas correctas aparecen con el estado correcto. ✓ (el seed corre `runGenerateCharges` para el período anterior y el actual + `runMarkOverdue`, los jobs reales.)
 
 ### S4 — Cobranzas: pagos
 - [ ] Modelos `Payment` y `PaymentAllocation`; servicio de imputación automática (RN4) con suite de tests exhaustiva: parciales, multi-cuota, excedente a favor.

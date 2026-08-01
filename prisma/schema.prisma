@@ -57,6 +57,8 @@ model Organization {
   groups      ClassGroup[]
   slots       ScheduleSlot[]
   sessions    ClassSession[]
+  enrollments Enrollment[]
+  charges     Charge[]
 }
 
 /// Alumno del padrón (Plan §7, HU2.1–2.3).
@@ -89,6 +91,8 @@ model Student {
   updatedAt DateTime @updatedAt
 
   org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  enrollments Enrollment[]
 
   /// El índice líder por orgId cumple la convención de §7 y sirve a la vez para la lista
   /// (filtrada por org + activos) y para la búsqueda por prefijo/substring.
@@ -142,8 +146,9 @@ model ClassGroup {
   // huérfanos en silencio.
   discipline Discipline   @relation(fields: [disciplineId], references: [id], onDelete: Restrict)
 
-  slots    ScheduleSlot[]
-  sessions ClassSession[]
+  slots       ScheduleSlot[]
+  sessions    ClassSession[]
+  enrollments Enrollment[]
 
   @@index([orgId, active])
 }
@@ -209,6 +214,91 @@ model ClassSession {
   @@index([orgId, date])
   @@index([orgId, movedToDate])
   @@index([groupId])
+}
+
+/// Planes de inscripción (Plan §7). PACK (N clases) queda fuera del MVP —depende de tomar
+/// asistencia (Plan §5)— y el valor del enum se agrega recién cuando exista la lógica:
+/// un valor sin código detrás sería un estado imposible de manejar.
+enum PlanType {
+  MONTHLY
+  DROP_IN
+}
+
+enum ChargeStatus {
+  PENDING
+  PARTIAL
+  PAID
+  OVERDUE
+  WAIVED
+}
+
+/// Inscripción de un alumno a un grupo, con plan y precio pactado (HU4.1).
+///
+/// RN9: la baja de una inscripción es ponerle `endDate`, nunca borrarla — desde el período
+/// siguiente no se generan cuotas, y las ya generadas persisten. Un alumno puede tener
+/// varias inscripciones históricas al mismo grupo (se fue y volvió); el servicio impide
+/// dos ABIERTAS (sin endDate) a la vez.
+model Enrollment {
+  id        String   @id @default(cuid())
+  orgId     String
+  studentId String
+  groupId   String
+  plan      PlanType
+  /// Precio PACTADO de esta inscripción: hereda `defaultPrice` del grupo como sugerencia,
+  /// pero es editable por alumno (HU4.1). RN1 genera cada cuota con ESTE monto.
+  price     Decimal  @db.Decimal(12, 2)
+  /// Fecha civil de alta (@db.Date, RN10): define desde qué período se generan cuotas.
+  startDate DateTime @db.Date
+  /// RN9: fecha civil de baja. El período que la contiene todavía genera su cuota.
+  endDate   DateTime? @db.Date
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  org     Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  student Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  group   ClassGroup   @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  charges Charge[]
+
+  // La ficha del alumno y los inscriptos del grupo, siempre filtrados por org (withOrg).
+  @@index([orgId, studentId])
+  @@index([orgId, groupId])
+  @@index([studentId])
+  @@index([groupId])
+}
+
+/// Cuota generada (RN1–RN3).
+///
+/// El unique `(enrollmentId, period)` es la GARANTÍA DURA de idempotencia del cron
+/// (decisión S3): `generateCharges` upsertea sobre él con `update: {}`, así que correrlo
+/// N veces deja exactamente las mismas filas — y no pisa una cuota editada a mano (RN2).
+model Charge {
+  id           String       @id @default(cuid())
+  orgId        String
+  enrollmentId String
+  /// Período "YYYY-MM", calculado en la zona horaria de la org (RN10).
+  period       String
+  amount       Decimal      @db.Decimal(12, 2)
+  /// RN10: cada monto guarda su moneda (copiada de la org al generar), para no bloquear
+  /// multi-moneda futura. La org sigue siendo mono-moneda en el MVP.
+  currency     String
+  /// Fecha civil de vencimiento (@db.Date): día `dueDay` de la org en ese período,
+  /// clampeado al último día del mes (dueDay 31 en abril → 30).
+  dueDate      DateTime     @db.Date
+  status       ChargeStatus @default(PENDING)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  org        Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  enrollment Enrollment   @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+
+  @@unique([enrollmentId, period])
+  // Deudores por período (query por org) y el cron diario de vencidas (cross-org, por
+  // estado + vencimiento).
+  @@index([orgId, period])
+  @@index([status, dueDate])
 }
 
 /// Persona con cuenta y login. Puede pertenecer a varias organizaciones.

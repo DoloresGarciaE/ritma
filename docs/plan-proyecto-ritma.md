@@ -310,23 +310,25 @@ model Student {
 
 model Enrollment {
   id        String   @id @default(cuid())
+  orgId     String       // S3: la convención de §7 aplica también acá — ver nota S3
   studentId String
   groupId   String
-  plan      PlanType     // MONTHLY | PACK | DROP_IN
-  price     Decimal
-  startDate DateTime
-  endDate   DateTime?
+  plan      PlanType     // MONTHLY | DROP_IN (PACK diferido a fase 3 — ver nota S3)
+  price     Decimal      // @db.Decimal(12, 2): precio PACTADO; hereda defaultPrice, editable
+  startDate DateTime     // @db.Date: fecha civil de alta — define el primer período (HU4.1)
+  endDate   DateTime?    // @db.Date: la baja RN9 — su período aún genera; la fila nunca se borra
 }
 
 model Charge {
   id           String @id @default(cuid())
   orgId        String
   enrollmentId String
-  period       String       // "2026-07"
-  amount       Decimal
-  dueDate      DateTime
+  period       String       // "2026-07", calculado en la ZONA de la org (RN10)
+  amount       Decimal      // @db.Decimal(12, 2)
+  currency     String       // S3: RN10 pide la moneda en cada monto — ver nota S3
+  dueDate      DateTime     // @db.Date: día dueDay de la org, clampeado al largo del mes
   status       ChargeStatus // PENDING | PARTIAL | PAID | OVERDUE | WAIVED
-  @@unique([enrollmentId, period])
+  @@unique([enrollmentId, period])  // S3: la garantía dura de idempotencia del cron
 }
 
 model Payment {
@@ -391,6 +393,13 @@ Toda tabla lleva además `createdAt` (`@default(now())`) y `updatedAt` (`@update
 2. **`orgId` también en `ScheduleSlot` y `ClassSession`**: el borrador lo omitía, pero la convención de arriba ("toda tabla de negocio lleva `orgId`") es la que hace funcionar `withOrg` y los tests de aislamiento.
 3. **`ClassSession.slotId` + `@@unique([slotId, date])`**: `(groupId, date)` no identifica una ocurrencia — nada impide que un grupo tenga dos franjas el mismo día. `date` es la fecha civil ORIGINAL: la identidad no cambia al reprogramar.
 4. **Reprogramación como `movedToDate`/`movedToStartTime`** con `status` intacto (el enum no se amplía). Una fila de `ClassSession` existe SOLO si la ocurrencia se desvió (las sesiones se calculan al vuelo desde las franjas — plan de implementación S2); restablecerla = borrar la fila.
+
+**Nota S3 (al construir las cobranzas).** Cuatro decisiones sobre el borrador, ya reflejadas arriba:
+
+1. **`orgId` también en `Enrollment`** (la misma corrección que la nota S2): la convención de §7 es la que hace funcionar `withOrg` y los tests de aislamiento.
+2. **`Charge.currency`**: RN10 pide la moneda "guardada en cada monto" y el borrador la omitía — se copia de la org al generar la cuota. `Enrollment.price` no la lleva: es un acuerdo en la moneda de la org, y cada cuota la congela al nacer.
+3. **`PlanType` nace sin `PACK`**: los packs dependen de tomar asistencia (§5, fase 3+), y un valor de enum sin lógica detrás sería un estado imposible de manejar. Sumar un valor a un enum de Postgres es una migración trivial cuando llegue.
+4. **Fechas civiles como `@db.Date`** (patrón S2, RN10): `startDate`, `endDate` y `dueDate`; `dueDate` = día `dueDay` de la org clampeado al último día real del mes (dueDay 31 en abril → 30). La idempotencia del cron es el unique `(enrollmentId, period)`: generar es un upsert con `update: {}`, así que re-correr no duplica ni pisa una cuota editada a mano (RN2).
 
 ## 8. Reglas de negocio
 

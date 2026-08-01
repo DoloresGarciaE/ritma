@@ -96,6 +96,58 @@ export async function makeSession(
   });
 }
 
+/** Una inscripción, por el camino crudo. Default: mensual, $18.000, alta 2026-07-01. */
+export async function makeEnrollment(
+  orgId: string,
+  studentId: string,
+  groupId: string,
+  extra: {
+    plan?: "MONTHLY" | "DROP_IN";
+    price?: number;
+    startDate?: string;
+    endDate?: string | null;
+  } = {},
+) {
+  return db.enrollment.create({
+    data: {
+      orgId,
+      studentId,
+      groupId,
+      plan: extra.plan ?? "MONTHLY",
+      price: extra.price ?? 18000,
+      startDate: new Date(`${extra.startDate ?? "2026-07-01"}T00:00:00.000Z`),
+      endDate: extra.endDate ? new Date(`${extra.endDate}T00:00:00.000Z`) : null,
+    },
+  });
+}
+
+/** Una cuota, por el camino crudo. Default: período 2026-07, $18.000 ARS, vence el 10. */
+export async function makeCharge(
+  orgId: string,
+  enrollmentId: string,
+  extra: {
+    period?: string;
+    amount?: number;
+    currency?: string;
+    dueDate?: string;
+    status?: "PENDING" | "PARTIAL" | "PAID" | "OVERDUE" | "WAIVED";
+  } = {},
+) {
+  const period = extra.period ?? "2026-07";
+
+  return db.charge.create({
+    data: {
+      orgId,
+      enrollmentId,
+      period,
+      amount: extra.amount ?? 18000,
+      currency: extra.currency ?? "ARS",
+      dueDate: new Date(`${extra.dueDate ?? `${period}-10`}T00:00:00.000Z`),
+      status: extra.status ?? "PENDING",
+    },
+  });
+}
+
 /** Un alumno en una org, por el camino crudo. `searchName` se calcula igual que el servicio. */
 export async function makeStudent(
   orgId: string,

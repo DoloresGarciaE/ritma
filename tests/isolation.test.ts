@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import { db, withOrg } from "@/lib/db";
 
 import {
+  makeCharge,
   makeDiscipline,
+  makeEnrollment,
   makeGroup,
   makeMember,
   makeOrg,
@@ -457,6 +459,214 @@ describe("aislamiento org × org — ClassSession", () => {
     const bAfter = await db.classSession.findUniqueOrThrow({ where: { id: bSession.id } });
     expect(bAfter.status).toBe("SCHEDULED");
     expect(bAfter.note).toBe("Nota de B");
+  });
+});
+
+/**
+ * S3: los dos modelos de cobranzas, con el mismo bloque que Student. Acá el aislamiento
+ * es PLATA: una cuota de la org A visible o mutable desde la org B destruye la confianza
+ * (Plan §13) — el rigor de F0.6 aplica entero.
+ */
+describe("aislamiento org × org — Enrollment", () => {
+  /** Un alumno inscripto a un grupo, todo dentro de la misma org. */
+  async function makeEnrolled(orgId: string, studentName: string) {
+    const student = await makeStudent(orgId, studentName);
+    const group = await makeGroup(orgId, `Grupo de ${studentName}`);
+    return makeEnrollment(orgId, student.id, group.id);
+  }
+
+  it("A no ve las inscripciones de B; solo las propias", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+    const aEnrollment = await makeEnrolled(a.id, "Sofía Herrera");
+    await makeEnrolled(b.id, "Malena Ríos");
+
+    const seenByA = await withOrg(a.id).enrollment.findMany();
+    expect(seenByA.map((e) => e.id)).toEqual([aEnrollment.id]);
+  });
+
+  it("findUnique por el id de una inscripción de B, desde A, devuelve null", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+    const bEnrollment = await makeEnrolled(b.id, "Malena Ríos");
+
+    expect(await withOrg(a.id).enrollment.findUnique({ where: { id: bEnrollment.id } })).toBeNull();
+  });
+
+  it("A no puede editar una inscripción de B (P2025), ni darla de baja con endDate", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+    const bEnrollment = await makeEnrolled(b.id, "Malena Ríos");
+
+    await expect(
+      withOrg(a.id).enrollment.update({
+        where: { id: bEnrollment.id },
+        data: { price: 1 },
+      }),
+    ).rejects.toMatchObject({ code: "P2025" });
+
+    // La baja (RN9) es un update de endDate: tampoco alcanza a B.
+    await expect(
+      withOrg(a.id).enrollment.update({
+        where: { id: bEnrollment.id },
+        data: { endDate: new Date("2026-07-31T00:00:00.000Z") },
+      }),
+    ).rejects.toMatchObject({ code: "P2025" });
+
+    const after = await db.enrollment.findUniqueOrThrow({ where: { id: bEnrollment.id } });
+    expect(after.price.toNumber()).toBe(18000);
+    expect(after.endDate).toBeNull();
+  });
+
+  it("A no puede borrar una inscripción de B; un deleteMany desde A no la alcanza", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+    const bEnrollment = await makeEnrolled(b.id, "Malena Ríos");
+
+    await expect(
+      withOrg(a.id).enrollment.delete({ where: { id: bEnrollment.id } }),
+    ).rejects.toMatchObject({ code: "P2025" });
+
+    await withOrg(a.id).enrollment.deleteMany({});
+    expect(await db.enrollment.count({ where: { orgId: b.id } })).toBe(1);
+  });
+
+  it("una inscripción creada vía withOrg(A) no puede aterrizar en B: el orgId se fuerza", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+    const aStudent = await makeStudent(a.id, "Sofía Herrera");
+    const aGroup = await makeGroup(a.id, "Árabe inicial");
+
+    const created = await withOrg(a.id).enrollment.create({
+      data: {
+        studentId: aStudent.id,
+        groupId: aGroup.id,
+        plan: "MONTHLY",
+        price: 18000,
+        startDate: new Date("2026-07-01T00:00:00.000Z"),
+        orgId: b.id,
+      },
+    });
+
+    expect(created.orgId).toBe(a.id);
+    expect(await db.enrollment.count({ where: { orgId: b.id } })).toBe(0);
+  });
+});
+
+describe("aislamiento org × org — Charge", () => {
+  /** Alumno + grupo + inscripción + cuota, todo dentro de la misma org. */
+  async function makeCharged(orgId: string, studentName: string) {
+    const student = await makeStudent(orgId, studentName);
+    const group = await makeGroup(orgId, `Grupo de ${studentName}`);
+    const enrollment = await makeEnrollment(orgId, student.id, group.id);
+    return { enrollment, charge: await makeCharge(orgId, enrollment.id) };
+  }
+
+  it("A no ve las cuotas de B; solo las propias", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+    const { charge: aCharge } = await makeCharged(a.id, "Sofía Herrera");
+    await makeCharged(b.id, "Malena Ríos");
+
+    const seenByA = await withOrg(a.id).charge.findMany();
+    expect(seenByA.map((c) => c.id)).toEqual([aCharge.id]);
+  });
+
+  it("findUnique por el id de una cuota de B, desde A, devuelve null", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+    const { charge: bCharge } = await makeCharged(b.id, "Malena Ríos");
+
+    expect(await withOrg(a.id).charge.findUnique({ where: { id: bCharge.id } })).toBeNull();
+  });
+
+  it("A no puede editar el monto ni exonerar una cuota de B (P2025)", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+    const { charge: bCharge } = await makeCharged(b.id, "Malena Ríos");
+
+    await expect(
+      withOrg(a.id).charge.update({
+        where: { id: bCharge.id },
+        data: { amount: 1 },
+      }),
+    ).rejects.toMatchObject({ code: "P2025" });
+
+    await expect(
+      withOrg(a.id).charge.update({
+        where: { id: bCharge.id },
+        data: { status: "WAIVED" },
+      }),
+    ).rejects.toMatchObject({ code: "P2025" });
+
+    const after = await db.charge.findUniqueOrThrow({ where: { id: bCharge.id } });
+    expect(after.amount.toNumber()).toBe(18000);
+    expect(after.status).toBe("PENDING");
+  });
+
+  it("A no puede borrar una cuota de B; un deleteMany desde A no la alcanza", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+    const { charge: bCharge } = await makeCharged(b.id, "Malena Ríos");
+
+    await expect(withOrg(a.id).charge.delete({ where: { id: bCharge.id } })).rejects.toMatchObject({
+      code: "P2025",
+    });
+
+    await withOrg(a.id).charge.deleteMany({});
+    expect(await db.charge.count({ where: { orgId: b.id } })).toBe(1);
+  });
+
+  it("una cuota creada vía withOrg(A) no puede aterrizar en B: el orgId se fuerza", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+    const { enrollment: aEnrollment } = await makeCharged(a.id, "Sofía Herrera");
+
+    const created = await withOrg(a.id).charge.create({
+      data: {
+        enrollmentId: aEnrollment.id,
+        period: "2026-08",
+        amount: 18000,
+        currency: "ARS",
+        dueDate: new Date("2026-08-10T00:00:00.000Z"),
+        orgId: b.id,
+      },
+    });
+
+    expect(created.orgId).toBe(a.id);
+    expect(await db.charge.count({ where: { orgId: b.id } })).toBe(0);
+  });
+
+  it("un upsert sobre la cuota de B no la toca: cae al create y queda en A", async () => {
+    // CRÍTICO: generar cuotas ES un upsert por (enrollmentId, period). Si el upsert de A
+    // matcheara la fila de B, el cron cruzaría deuda entre tenants.
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+    const { enrollment: aEnrollment } = await makeCharged(a.id, "Sofía Herrera");
+    const { enrollment: bEnrollment, charge: bCharge } = await makeCharged(b.id, "Malena Ríos");
+
+    // Mismo (enrollmentId, period) que la fila de B: el where inyecta orgId=A → no
+    // matchea → CREATE (y el hook pisa el orgId del create). El create apunta a la
+    // inscripción de A: un FK a la de B violaría además la verificación previa del
+    // servicio — acá se prueba solo la capa withOrg.
+    const result = await withOrg(a.id).charge.upsert({
+      where: { enrollmentId_period: { enrollmentId: bEnrollment.id, period: "2026-07" } },
+      create: {
+        enrollmentId: aEnrollment.id,
+        period: "2026-08",
+        amount: 999,
+        currency: "ARS",
+        dueDate: new Date("2026-08-10T00:00:00.000Z"),
+        orgId: b.id, // el hook también pisa esto
+      },
+      update: { amount: 999, status: "WAIVED" },
+    });
+
+    expect(result.orgId).toBe(a.id);
+    // La de B quedó exactamente igual: ni el monto ni el estado se movieron.
+    const bAfter = await db.charge.findUniqueOrThrow({ where: { id: bCharge.id } });
+    expect(bAfter.amount.toNumber()).toBe(18000);
+    expect(bAfter.status).toBe("PENDING");
   });
 });
 

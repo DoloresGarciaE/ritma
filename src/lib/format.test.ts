@@ -4,6 +4,7 @@ import {
   formatFullDayDate,
   formatListDate,
   formatMoney,
+  formatPeriod,
   formatTimeRange,
   formatWeekRange,
 } from "./format";
@@ -47,6 +48,14 @@ describe("formatWeekRange", () => {
 
   it("cruzando año: mismo patrón", () => {
     expect(formatWeekRange("2026-12-28", "2027-01-03")).toBe("28 dic – 3 ene");
+  });
+});
+
+describe("formatPeriod", () => {
+  it('es el "Marzo 2026" de §4.2', () => {
+    expect(formatPeriod("2026-03")).toBe("Marzo 2026");
+    expect(formatPeriod("2026-07")).toBe("Julio 2026");
+    expect(formatPeriod("2027-01")).toBe("Enero 2027");
   });
 });
 

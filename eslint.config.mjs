@@ -25,10 +25,41 @@ const eslintConfig = defineConfig([
                 "El cliente crudo `db` se salta el scoping por organización. Usá withOrg(orgId) (o, para queries sin tenant, escribí el acceso dentro de src/lib/).",
             },
             {
+              name: "@/lib/db",
+              importNames: ["forSystem"],
+              message:
+                "forSystem() es la puerta cross-org de los crons y vive SOLO en src/server/system/. Todo lo demás pasa por withOrg(orgId).",
+            },
+            {
               name: "@/generated/prisma/client",
               importNames: ["PrismaClient"],
               message:
                 "Instanciá el cliente solo en src/lib/db.ts. En el resto, usá withOrg(orgId).",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    // S3 — los jobs de sistema: acá forSystem() es legítimo (crons cross-org), pero el
+    // `db` crudo sigue prohibido — que la puerta tenga nombre es todo el punto.
+    files: ["src/server/system/**"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "@/lib/db",
+              importNames: ["db"],
+              message:
+                "También en los jobs de sistema: el acceso cross-org es forSystem(), no el `db` crudo.",
+            },
+            {
+              name: "@/generated/prisma/client",
+              importNames: ["PrismaClient"],
+              message: "Instanciá el cliente solo en src/lib/db.ts. En los jobs, usá forSystem().",
             },
           ],
         },

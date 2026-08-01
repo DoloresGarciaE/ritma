@@ -283,6 +283,153 @@ async function main() {
       movedTo: { days: 3, startTime: "18:00" },
     });
 
+    // ── Inscripciones y cuotas (S3) ──────────────────────────────────────────
+    //
+    // El DoD del bloque: "al simular el cambio de mes en seed, las cuotas correctas
+    // aparecen con el estado correcto". Acá se simula DE VERDAD: las inscripciones se
+    // siembran con altas relativas a hoy, y las cuotas de los DOS últimos períodos las
+    // generan LOS MISMOS jobs del cron (`runGenerateCharges` × 2 + `runMarkOverdue`) —
+    // idempotentes por el unique (enrollmentId, period), así que re-correr el seed no
+    // duplica nada. Estados resultantes: al día (el período actual, sin vencer), vencidas
+    // (el anterior, sin pagos hasta S4), una exonerada (beca), y una clase suelta.
+    const { addMonths, dateInPeriod, periodOf } = await import("../src/lib/dates");
+    const { runGenerateCharges } = await import("../src/server/system/generate-charges");
+    const { runMarkOverdue } = await import("../src/server/system/mark-overdue");
+    const { waiveCharge } = await import("../src/server/services/charges");
+
+    const todayAr = todayInTz("America/Argentina/Buenos_Aires");
+    const CUR = periodOf(todayAr);
+    const PREV = addMonths(CUR, -1);
+    const TWO_AGO = addMonths(CUR, -2);
+
+    /**
+     * Historias por org: quién, a qué grupo, con qué plan y desde cuándo. El precio
+     * hereda la tarifa del grupo salvo pacto distinto (HU4.1). `endDate` = baja RN9.
+     */
+    const SEED_ENROLLMENTS: Record<
+      string,
+      {
+        student: string;
+        group: string;
+        plan?: "MONTHLY" | "DROP_IN";
+        price?: number;
+        startDate: string;
+        endDate?: string;
+      }[]
+    > = {
+      [ORG_INDEPENDIENTE]: [
+        // Dos períodos de historia: la del mes pasado ya venció (no hay pagos hasta S4).
+        { student: "Sofía Herrera", group: "Árabe inicial", startDate: `${TWO_AGO}-01` },
+        // La misma alumna en dos grupos: dos conceptos en Deudores.
+        { student: "Camila Peña", group: "Árabe inicial", startDate: `${TWO_AGO}-01` },
+        { student: "Camila Peña", group: "Folklore adultos", startDate: `${PREV}-01` },
+        // La beca: su cuota del mes pasado se exonera más abajo (RN3).
+        { student: "Julieta Ibáñez", group: "Árabe intermedio", startDate: `${PREV}-01` },
+        // Alta a mitad de ESTE mes: cuota completa, editable (RN2).
+        { student: "Valentina Ruiz", group: "Árabe inicial", startDate: dateInPeriod(CUR, 15) },
+        // Clase suelta hace 3 días: cargo único, vence a los 7 (propuesta RN11).
+        {
+          student: "Valentina Ruiz",
+          group: "Folklore adultos",
+          plan: "DROP_IN",
+          price: 9000,
+          startDate: addDays(todayAr, -3),
+        },
+        // Se fue hace meses (RN9): la inscripción cerrada queda, sin cuotas nuevas.
+        {
+          student: "Martina Álvarez",
+          group: "Folklore adultos",
+          startDate: `${addMonths(CUR, -5)}-01`,
+          endDate: dateInPeriod(addMonths(CUR, -3), 28),
+        },
+      ],
+      [ORG_ESTUDIO]: [
+        { student: "Lucía Fernández", group: "Contemporáneo juvenil", startDate: `${TWO_AGO}-01` },
+        { student: "Iñaki Gómez", group: "Árabe avanzado", startDate: `${PREV}-01` },
+        // Precio pactado distinto de la tarifa del grupo (HU4.1: editable por alumno).
+        {
+          student: "Renata Do Santos",
+          group: "Funcional mañanas",
+          price: 14000,
+          startDate: dateInPeriod(CUR, 10),
+        },
+        // Baja a MITAD del mes pasado: ese período todavía generó su cuota (RN9).
+        {
+          student: "Tomás Quiroga",
+          group: "Contemporáneo juvenil",
+          startDate: `${TWO_AGO}-01`,
+          endDate: dateInPeriod(PREV, 15),
+        },
+      ],
+    };
+
+    for (const [orgId, enrollments] of Object.entries(SEED_ENROLLMENTS)) {
+      for (const { student, group, plan, price, startDate, endDate } of enrollments) {
+        const studentRow = await db.student.findFirstOrThrow({
+          where: { orgId, name: student },
+        });
+        const groupRow = await db.classGroup.findFirstOrThrow({ where: { orgId, name: group } });
+
+        // Sin unique natural (un alumno puede re-inscribirse): idempotencia por
+        // [orgId, studentId, groupId] — si existe, se saltea entera.
+        const existing = await db.enrollment.findFirst({
+          where: { orgId, studentId: studentRow.id, groupId: groupRow.id },
+        });
+        if (existing) continue;
+
+        await db.enrollment.create({
+          data: {
+            orgId,
+            studentId: studentRow.id,
+            groupId: groupRow.id,
+            plan: plan ?? "MONTHLY",
+            price: price ?? groupRow.defaultPrice,
+            startDate: civilToDb(startDate),
+            endDate: endDate ? civilToDb(endDate) : null,
+          },
+        });
+
+        // La clase suelta nace con su cargo único (RN11): el cron nunca la toca.
+        if (plan === "DROP_IN") {
+          const enrollment = await db.enrollment.findFirstOrThrow({
+            where: { orgId, studentId: studentRow.id, groupId: groupRow.id },
+          });
+          const org = await db.organization.findUniqueOrThrow({ where: { id: orgId } });
+          await db.charge.upsert({
+            where: {
+              enrollmentId_period: { enrollmentId: enrollment.id, period: periodOf(startDate) },
+            },
+            update: {},
+            create: {
+              orgId,
+              enrollmentId: enrollment.id,
+              period: periodOf(startDate),
+              amount: price ?? groupRow.defaultPrice,
+              currency: org.currency,
+              dueDate: civilToDb(addDays(startDate, 7)),
+            },
+          });
+        }
+      }
+    }
+
+    // El cambio de mes, simulado con los jobs REALES: el mes pasado (como si el cron
+    // hubiera corrido el día 1), este mes, y el chequeo diario de vencidas.
+    await runGenerateCharges(PREV);
+    await runGenerateCharges(CUR);
+    await runMarkOverdue();
+
+    // La beca (RN3): la cuota del mes pasado de Julieta, exonerada con el servicio real.
+    const becaCharge = await db.charge.findFirst({
+      where: {
+        orgId: ORG_INDEPENDIENTE,
+        period: PREV,
+        status: { in: ["PENDING", "PARTIAL", "OVERDUE"] },
+        enrollment: { student: { name: "Julieta Ibáñez" } },
+      },
+    });
+    if (becaCharge) await waiveCharge(ORG_INDEPENDIENTE, becaCharge.id);
+
     const orgs = await db.organization.findMany({
       orderBy: { name: "asc" },
       include: {
@@ -305,6 +452,11 @@ async function main() {
         })),
       ),
     );
+    const chargesByStatus = await db.charge.groupBy({ by: ["status"], _count: true });
+    const statusSummary = chargesByStatus
+      .map((row) => `${row.status.toLowerCase()}: ${row._count}`)
+      .join(" · ");
+
     console.log(
       `Totales — organizaciones: ${await db.organization.count()} · ` +
         `usuarios: ${await db.user.count()} · ` +
@@ -313,7 +465,9 @@ async function main() {
         `alumnos: ${await db.student.count()} · ` +
         `grupos: ${await db.classGroup.count()} · ` +
         `franjas: ${await db.scheduleSlot.count()} · ` +
-        `sesiones (excepciones): ${await db.classSession.count()}\n` +
+        `sesiones (excepciones): ${await db.classSession.count()} · ` +
+        `inscripciones: ${await db.enrollment.count()} · ` +
+        `cuotas: ${await db.charge.count()} (${statusSummary})\n` +
         `Contraseña de desarrollo: ${DEV_PASSWORD}\n`,
     );
   } finally {
