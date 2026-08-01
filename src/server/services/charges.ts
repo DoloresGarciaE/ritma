@@ -1,8 +1,14 @@
-import { Prisma } from "@/generated/prisma/client";
 import { withOrg } from "@/lib/db";
-import { dbToCivil } from "@/lib/dates";
+import { dbToCivil, todayInTz } from "@/lib/dates";
 
-import type { ChargeStatusValue } from "./billing";
+import {
+  money,
+  recomputeChargeStatus,
+  sumMoney,
+  ZERO,
+  type ChargeStatusValue,
+  type Money,
+} from "./billing";
 
 /**
  * Servicios de cuotas (RN2, RN3): el estado de cuenta de la ficha, la lista de deudores
@@ -31,7 +37,10 @@ export type ChargeListItem = {
 
 export type DebtorRow = {
   chargeId: string;
+  /** El monto ORIGINAL de la cuota. */
   amount: number;
+  /** Lo que FALTA pagar (monto − imputado, S4): lo que la pantalla muestra grande. */
+  remaining: number;
   status: ChargeStatusValue;
   dueDate: string;
   period: string;
@@ -128,6 +137,7 @@ export async function debtorsForPeriod(
       status: true,
       dueDate: true,
       period: true,
+      allocations: { select: { amount: true } },
       enrollment: {
         select: {
           student: { select: { id: true, name: true } },
@@ -137,13 +147,21 @@ export async function debtorsForPeriod(
     },
   });
 
-  const total = rows.reduce((acc, row) => acc.add(row.amount), new Prisma.Decimal(0));
+  // Desde S4 la deuda de una cuota es su REMANENTE (monto − imputado): una PARTIAL debe
+  // solo lo que le falta. La aritmética es del motor (sumMoney), nunca de acá.
+  const withRemaining = rows
+    .map((row) => ({
+      row,
+      remaining: (row.amount as Money).minus(sumMoney(row.allocations.map((a) => a.amount))),
+    }))
+    .filter(({ remaining }) => remaining.greaterThan(ZERO));
 
   return {
-    total: total.toNumber(),
-    debtors: rows.map((row) => ({
+    total: sumMoney(withRemaining.map(({ remaining }) => remaining)).toNumber(),
+    debtors: withRemaining.map(({ row, remaining }) => ({
       chargeId: row.id,
-      amount: row.amount.toNumber(),
+      amount: (row.amount as Money).toNumber(),
+      remaining: remaining.toNumber(),
       status: row.status,
       dueDate: dbToCivil(row.dueDate),
       period: row.period,
@@ -166,20 +184,53 @@ export async function updateChargeAmount(
 ): Promise<void> {
   const org = withOrg(orgId);
 
-  const charge = await org.charge.findUnique({
-    where: { id: chargeId },
-    select: { status: true },
-  });
-  if (!charge) throw new Error("La cuota no pertenece a esta organización.");
+  await org.$transaction(async (tx) => {
+    const scoped = tx as unknown as ReturnType<typeof withOrg>;
 
-  if (charge.status !== "PENDING" && charge.status !== "OVERDUE") {
-    throw new ChargeRuleError("Solo se puede editar el monto de una cuota impaga.");
-  }
+    const charge = await scoped.charge.findUnique({
+      where: { id: chargeId },
+      select: { status: true, dueDate: true, allocations: { select: { amount: true } } },
+    });
+    if (!charge) throw new Error("La cuota no pertenece a esta organización.");
 
-  await org.charge.update({
-    where: { id: chargeId },
-    data: { amount },
-    select: { id: true },
+    if (charge.status !== "PENDING" && charge.status !== "OVERDUE") {
+      throw new ChargeRuleError("Solo se puede editar el monto de una cuota impaga.");
+    }
+
+    // S4: una OVERDUE puede tener plata parcial imputada. El monto nunca puede quedar
+    // por debajo de lo ya pagado — eso inventaría un sobrepago retroactivo.
+    const allocated = sumMoney(charge.allocations.map((a) => a.amount));
+    const newAmount = money(amount);
+    if (newAmount.lessThan(allocated)) {
+      throw new ChargeRuleError(
+        "El monto no puede ser menor a lo ya pagado de esta cuota. Eliminá el pago primero.",
+      );
+    }
+
+    await scoped.charge.update({
+      where: { id: chargeId },
+      data: { amount: newAmount },
+      select: { id: true },
+    });
+
+    // El nuevo monto puede dejarla cubierta (== lo pagado): recalcula LA fuente de
+    // verdad, no una regla local.
+    const settings = await scoped.organization.findUniqueOrThrow({
+      where: { id: orgId },
+      select: { timezone: true },
+    });
+    const status = recomputeChargeStatus(
+      { amount: newAmount, status: charge.status, dueDate: dbToCivil(charge.dueDate) },
+      allocated,
+      todayInTz(settings.timezone),
+    );
+    if (status !== charge.status) {
+      await scoped.charge.update({
+        where: { id: chargeId },
+        data: { status },
+        select: { id: true },
+      });
+    }
   });
 }
 
@@ -192,7 +243,7 @@ export async function waiveCharge(orgId: string, chargeId: string): Promise<void
 
   const charge = await org.charge.findUnique({
     where: { id: chargeId },
-    select: { status: true },
+    select: { status: true, allocations: { select: { amount: true } } },
   });
   if (!charge) throw new Error("La cuota no pertenece a esta organización.");
 
@@ -201,6 +252,14 @@ export async function waiveCharge(orgId: string, chargeId: string): Promise<void
       charge.status === "WAIVED"
         ? "Esta cuota ya está exonerada."
         : "Una cuota pagada no se exonera.",
+    );
+  }
+
+  // S4: exonerada es "cierre SIN pago" (RN3). Con plata parcial imputada, exonerar
+  // congelaría esas imputaciones en una cuota cerrada y el alumno perdería su crédito.
+  if (charge.allocations.length > 0) {
+    throw new ChargeRuleError(
+      "Esta cuota tiene pagos imputados. Eliminá el pago primero si querés exonerarla.",
     );
   }
 

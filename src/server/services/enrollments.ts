@@ -2,6 +2,7 @@ import { withOrg } from "@/lib/db";
 import { civilToDb, dbToCivil, periodOf, todayInTz } from "@/lib/dates";
 
 import { dropInCharge, generateCharges, type ChargeDraft } from "./billing";
+import { applyStudentCredit } from "./payments";
 
 /**
  * Servicios de inscripciones (HU4.1, RN9).
@@ -234,6 +235,13 @@ export async function createEnrollment(
     },
     select: { id: true },
   });
+
+  // RN4 (S4): la cuota inicial también es "una cuota generada" — si el alumno tiene
+  // saldo a favor, se le aplica acá mismo. Transacción propia y posterior: si fallara,
+  // la inscripción y su cuota quedan consistentes y el crédito sigue disponible.
+  if (initialCharge) {
+    await applyStudentCredit(orgId, input.studentId, todayInTz(settings.timezone));
+  }
 
   return created;
 }
