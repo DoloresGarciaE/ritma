@@ -3,12 +3,14 @@ import { describe, expect, it } from "vitest";
 import { db, withOrg } from "@/lib/db";
 
 import {
+  makeAllocation,
   makeCharge,
   makeDiscipline,
   makeEnrollment,
   makeGroup,
   makeMember,
   makeOrg,
+  makePayment,
   makeSession,
   makeSlot,
   makeStudent,
@@ -667,6 +669,160 @@ describe("aislamiento org × org — Charge", () => {
     const bAfter = await db.charge.findUniqueOrThrow({ where: { id: bCharge.id } });
     expect(bAfter.amount.toNumber()).toBe(18000);
     expect(bAfter.status).toBe("PENDING");
+  });
+});
+
+/**
+ * S4: pagos e imputaciones. Acá el aislamiento es PLATA REGISTRADA: un pago de la org A
+ * visible, editable o borrable desde la B rompería el estado de cuenta de las dos.
+ */
+describe("aislamiento org × org — Payment", () => {
+  async function makePaid(orgId: string, studentName: string) {
+    const student = await makeStudent(orgId, studentName);
+    return { student, payment: await makePayment(orgId, student.id) };
+  }
+
+  it("A no ve los pagos de B; solo los propios", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+    const { payment: aPayment } = await makePaid(a.id, "Sofía Herrera");
+    await makePaid(b.id, "Malena Ríos");
+
+    const seenByA = await withOrg(a.id).payment.findMany();
+    expect(seenByA.map((p) => p.id)).toEqual([aPayment.id]);
+  });
+
+  it("findUnique por id ajeno devuelve null; por receiptToken ajeno, también", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+    const { payment: bPayment } = await makePaid(b.id, "Malena Ríos");
+
+    expect(await withOrg(a.id).payment.findUnique({ where: { id: bPayment.id } })).toBeNull();
+    expect(
+      await withOrg(a.id).payment.findUnique({
+        where: { receiptToken: bPayment.receiptToken },
+      }),
+    ).toBeNull();
+  });
+
+  it("A no puede editar un pago de B (P2025), ni cambiarle el adjunto", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+    const { payment: bPayment } = await makePaid(b.id, "Malena Ríos");
+
+    await expect(
+      withOrg(a.id).payment.update({ where: { id: bPayment.id }, data: { amount: 1 } }),
+    ).rejects.toMatchObject({ code: "P2025" });
+
+    // El adjunto es un pointer a R2: pisárselo a otra org sería robarle el comprobante.
+    await expect(
+      withOrg(a.id).payment.update({
+        where: { id: bPayment.id },
+        data: { attachmentKey: "hackeada/payments/x" },
+      }),
+    ).rejects.toMatchObject({ code: "P2025" });
+
+    const after = await db.payment.findUniqueOrThrow({ where: { id: bPayment.id } });
+    expect(after.amount.toNumber()).toBe(18000);
+    expect(after.attachmentKey).toBeNull();
+  });
+
+  it("A no puede borrar un pago de B; un deleteMany desde A no lo alcanza", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+    const { payment: bPayment } = await makePaid(b.id, "Malena Ríos");
+
+    await expect(
+      withOrg(a.id).payment.delete({ where: { id: bPayment.id } }),
+    ).rejects.toMatchObject({ code: "P2025" });
+
+    await withOrg(a.id).payment.deleteMany({});
+    expect(await db.payment.count({ where: { orgId: b.id } })).toBe(1);
+  });
+
+  it("un pago creado vía withOrg(A) no puede aterrizar en B: el orgId se fuerza", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+    const aStudent = await makeStudent(a.id, "Sofía Herrera");
+
+    const created = await withOrg(a.id).payment.create({
+      data: {
+        studentId: aStudent.id,
+        amount: 18000,
+        currency: "ARS",
+        method: "CASH",
+        paidAt: new Date("2026-07-05T00:00:00.000Z"),
+        receiptToken: "token-aislamiento-a",
+        orgId: b.id,
+      },
+    });
+
+    expect(created.orgId).toBe(a.id);
+    expect(await db.payment.count({ where: { orgId: b.id } })).toBe(0);
+  });
+});
+
+describe("aislamiento org × org — PaymentAllocation", () => {
+  /** Alumno + grupo + inscripción + cuota + pago + imputación, todo en la misma org. */
+  async function makeAllocated(orgId: string, studentName: string) {
+    const student = await makeStudent(orgId, studentName);
+    const group = await makeGroup(orgId, `Grupo de ${studentName}`);
+    const enrollment = await makeEnrollment(orgId, student.id, group.id);
+    const charge = await makeCharge(orgId, enrollment.id);
+    const payment = await makePayment(orgId, student.id);
+    const allocation = await makeAllocation(orgId, payment.id, charge.id);
+    return { student, charge, payment, allocation };
+  }
+
+  it("A no ve las imputaciones de B; solo las propias", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+    const { allocation: aAllocation } = await makeAllocated(a.id, "Sofía Herrera");
+    await makeAllocated(b.id, "Malena Ríos");
+
+    const seenByA = await withOrg(a.id).paymentAllocation.findMany();
+    expect(seenByA.map((al) => al.paymentId)).toEqual([aAllocation.paymentId]);
+  });
+
+  it("A no puede editar ni borrar una imputación de B (P2025 / deleteMany no alcanza)", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+    const { allocation: bAllocation } = await makeAllocated(b.id, "Malena Ríos");
+    const key = {
+      paymentId_chargeId: {
+        paymentId: bAllocation.paymentId,
+        chargeId: bAllocation.chargeId,
+      },
+    };
+
+    await expect(
+      withOrg(a.id).paymentAllocation.update({ where: key, data: { amount: 1 } }),
+    ).rejects.toMatchObject({ code: "P2025" });
+
+    await withOrg(a.id).paymentAllocation.deleteMany({});
+    expect(await db.paymentAllocation.count({ where: { orgId: b.id } })).toBe(1);
+
+    const after = await db.paymentAllocation.findUniqueOrThrow({ where: key });
+    expect(after.amount.toNumber()).toBe(18000);
+  });
+
+  it("una imputación creada vía withOrg(A) no puede aterrizar en B: el orgId se fuerza", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+    const { payment, charge } = await makeAllocated(a.id, "Sofía Herrera");
+    // Otra cuota de A para no chocar con la PK de la imputación ya creada.
+    const student2 = await makeStudent(a.id, "Iñaki Gómez");
+    const group2 = await makeGroup(a.id, "Otro grupo");
+    const enrollment2 = await makeEnrollment(a.id, student2.id, group2.id);
+    const charge2 = await makeCharge(a.id, enrollment2.id, { period: "2026-08" });
+    void charge;
+
+    const created = await withOrg(a.id).paymentAllocation.create({
+      data: { paymentId: payment.id, chargeId: charge2.id, amount: 5000, orgId: b.id },
+    });
+
+    expect(created.orgId).toBe(a.id);
+    expect(await db.paymentAllocation.count({ where: { orgId: b.id } })).toBe(0);
   });
 });
 

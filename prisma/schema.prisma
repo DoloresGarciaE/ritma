@@ -59,6 +59,8 @@ model Organization {
   sessions    ClassSession[]
   enrollments Enrollment[]
   charges     Charge[]
+  payments    Payment[]
+  allocations PaymentAllocation[]
 }
 
 /// Alumno del padrón (Plan §7, HU2.1–2.3).
@@ -93,6 +95,7 @@ model Student {
   org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
   enrollments Enrollment[]
+  payments    Payment[]
 
   /// El índice líder por orgId cumple la convención de §7 y sirve a la vez para la lista
   /// (filtrada por org + activos) y para la búsqueda por prefijo/substring.
@@ -294,11 +297,91 @@ model Charge {
   org        Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   enrollment Enrollment   @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
 
+  allocations PaymentAllocation[]
+
   @@unique([enrollmentId, period])
   // Deudores por período (query por org) y el cron diario de vencidas (cross-org, por
   // estado + vencimiento).
   @@index([orgId, period])
   @@index([status, dueDate])
+}
+
+enum PayMethod {
+  CASH
+  TRANSFER
+  OTHER
+}
+
+/// RN5: quién recibió la plata. No cambia el estado de cuenta del alumno; sí el
+/// resultado de la liquidación (S9). En una org independiente queda el default STUDIO
+/// y la UI ni lo muestra.
+enum ReceivedBy {
+  STUDIO
+  TEACHER
+}
+
+/// Pago registrado (HU4.3, RN4–RN5).
+///
+/// Sus imputaciones viven en `PaymentAllocation`; el SALDO A FAVOR del alumno no es una
+/// columna: es `sum(pagos) − sum(imputaciones)` — un derivado, imposible de desincronizar.
+/// Un pago sin liquidación (todas, en Fase 1) puede ELIMINARSE con confirmación
+/// (propuesta RN12): la transacción revierte imputaciones y recalcula estados. La
+/// inmutabilidad llega con el cierre de liquidaciones (RN6, S9).
+model Payment {
+  id        String     @id @default(cuid())
+  orgId     String
+  studentId String
+  amount    Decimal    @db.Decimal(12, 2)
+  /// RN10: cada monto lleva su moneda, copiada de la org al registrar (patrón Charge, S3).
+  currency  String
+  method    PayMethod
+  /// RN5. `receivedById` (QUÉ profe) llega con TeacherProfile en S9 — ver nota S4 en §7.
+  receivedBy ReceivedBy @default(STUDIO)
+  /// Fecha civil del pago (@db.Date, RN10), default hoy en la UI. El orden fino de
+  /// imputación lo desempata `createdAt`.
+  paidAt    DateTime   @db.Date
+  /// Key del comprobante en R2 (`{orgId}/payments/{paymentId}`), NUNCA una URL: las URLs
+  /// se firman cortas al momento de ver, previa verificación de permisos.
+  attachmentKey String?
+  /// Token opaco criptográficamente aleatorio del comprobante público (S5). Se genera
+  /// SIEMPRE al crear el pago; la página que lo consume llega en S5.
+  receiptToken  String  @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  org     Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  student Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  allocations PaymentAllocation[]
+
+  // La ficha del alumno y (S6) los totales del mes.
+  @@index([orgId, studentId])
+  @@index([orgId, paidAt])
+  @@index([studentId])
+}
+
+/// Imputación de un pago a una cuota (RN4): cuánta plata de ESTE pago cubre ESA cuota.
+///
+/// La PK compuesta impide dos imputaciones del mismo pago a la misma cuota. Invariantes
+/// (validadas en el servicio, dentro de la transacción): la suma de imputaciones de un
+/// pago nunca supera su monto; una imputación nunca supera el remanente de su cuota.
+model PaymentAllocation {
+  orgId     String
+  paymentId String
+  chargeId  String
+  amount    Decimal @db.Decimal(12, 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  org     Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  payment Payment      @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  charge  Charge       @relation(fields: [chargeId], references: [id], onDelete: Cascade)
+
+  @@id([paymentId, chargeId])
+  @@index([orgId])
+  @@index([chargeId])
 }
 
 /// Persona con cuenta y login. Puede pertenecer a varias organizaciones.
