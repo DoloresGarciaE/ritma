@@ -136,10 +136,10 @@ ritma/
 - **DoD:** al simular el cambio de mes en seed, las cuotas correctas aparecen con el estado correcto. ✓ (el seed corre `runGenerateCharges` para el período anterior y el actual + `runMarkOverdue`, los jobs reales.)
 
 ### S4 — Cobranzas: pagos
-- [ ] Modelos `Payment` y `PaymentAllocation`; servicio de imputación automática (RN4) con suite de tests exhaustiva: parciales, multi-cuota, excedente a favor.
-- [ ] Sheet "Registrar pago" (HU4.3): monto pre-cargado, método, fecha, imputación editable; input de monto según Componentes §3.2.
-- [ ] Adjunto de comprobante de transferencia a R2 con URL firmada.
-- **DoD:** cronometrado en el teléfono, registrar un pago toma < 15 segundos; los tests de imputación cubren los casos de RN4.
+- [x] Modelos `Payment` y `PaymentAllocation` (ver nota S4 del Plan §7); servicio de imputación automática (RN4) con la suite más exhaustiva del proyecto: parciales, multi-cuota, excedente a favor, crédito consumido por la generación siguiente (cron y cuota inicial del alta), eliminación con recálculo (propuesta RN12), invariantes de montos en Decimal — `recomputeChargeStatus` como única fuente de RN3, todo en transacción.
+- [x] Sheet "Registrar pago" (HU4.3): monto pre-cargado con la deuda, método, fecha, `receivedBy` solo en STUDIO (RN5), imputación automática visible con edición plegada (HU4.4); accesible desde la ficha y desde cada fila de Deudores (una acción por fila — nota S4 en Componentes §3.5). Estado de cuenta con cuotas y pagos intercalados y saldo a favor visible; Deudores muestra remanentes y estrena PARTIAL.
+- [x] Adjunto de comprobante a R2 con URL firmada (bucket privado, key `{orgId}/payments/{paymentId}`, verificación de tipo/tamaño contra el objeto real) — **detrás de `isR2Configured()`**: sin las env vars `R2_*`, el campo no existe y el resto anda igual.
+- **DoD:** cronometrado en el teléfono, registrar un pago toma < 15 segundos (pendiente de tu recorrido sobre el preview); los tests de imputación cubren los casos de RN4. ✓ (294 tests)
 
 ### S5 — Comprobantes y recordatorios
 - [ ] `receiptToken` firmado (HMAC con `RECEIPT_TOKEN_SECRET`); página pública `/r/[token]` según Marca §9.1, con pie "Generado con Ritma".

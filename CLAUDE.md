@@ -212,9 +212,42 @@ orden**, y la seguridad va primero:
 - **Baja de inscripción = `endDate`** (RN9): el período que contiene la baja todavía genera; los
   siguientes no; las cuotas ya generadas persisten (exonerables). Dos inscripciones ABIERTAS del
   mismo alumno al mismo grupo no se puede; cerrada y re-inscribirse, sí.
-- **Mutaciones manuales con reglas de estado:** editar el monto solo en PENDING/OVERDUE (RN2);
-  exonerar jamás una PAID (RN3). Las dos son de owner/admin: `assertRole` en la action, y la UI
-  ni siquiera se las muestra a un teacher (§4.3) — nunca es la única guardia.
+- **Mutaciones manuales con reglas de estado:** editar el monto solo en PENDING/OVERDUE (RN2), y
+  desde S4 **nunca por debajo de lo ya pagado**; exonerar jamás una PAID (RN3) **ni una cuota con
+  imputaciones**. Las dos son de owner/admin: `assertRole` en la action, y la UI ni siquiera se
+  las muestra a un teacher (§4.3) — nunca es la única guardia.
+
+## Pagos (desde S4)
+
+- **La aritmética de dinero vive SOLO en `services/billing.ts`** (regla dura S4): `money`,
+  `sumMoney`, `allocateGreedy`, `recomputeChargeStatus` — todo `Prisma.Decimal`, jamás `number`
+  (a `number` solo al borde, para mostrar). Si un módulo necesita sumar plata, importa los
+  helpers; no re-implementa.
+- **`recomputeChargeStatus` es LA fuente de verdad de RN3**: crear, editar o borrar un pago —o
+  editar el monto de una cuota— recalcula por esa única función. Una parcial VENCIDA es OVERDUE
+  (el badge no disfraza la mora); una vencida cubierta pasa DIRECTO a PAID; WAIVED no lo mueve
+  nada. Está probada su coincidencia con `markOverdue`.
+- **Transacción o nada:** pago + imputaciones + recálculo entran juntos (`$transaction`
+  interactivo del cliente `withOrg`; el hook de scoping aplica adentro). Invariantes del motor
+  (`validateAllocations`): la suma de imputaciones nunca supera el pago; una imputación nunca
+  supera el remanente de su cuota. Una imputación manual inválida deja CERO filas.
+- **El saldo a favor es un DERIVADO** (pagos − imputaciones), nunca una columna: imposible de
+  desincronizar. `allocateGreedy` sirve los DOS consumos de RN4 con una sola función en el orden
+  del caller: el pago nuevo contra las cuotas impagas (antigua-primero), y el crédito contra las
+  cuotas recién generadas — lo aplica `applyStudentCredit`, llamado por el cron de generación
+  (que sigue idempotente, testeado) y por la cuota inicial del alta.
+- **Eliminar un pago (propuesta RN12, pendiente de aprobar en Plan §8):** solo pagos sin
+  liquidación (todas en Fase 1), con confirmación que nombra monto y alumno; la transacción
+  revierte imputaciones y los estados vuelven solos por calendario. La inmutabilidad llega con el
+  cierre de liquidaciones (RN6, S9).
+- **Adjuntos (R2, [`src/lib/r2.ts`](src/lib/r2.ts)):** bucket privado; keys SIEMPRE
+  `{orgId}/payments/{paymentId}` armadas en el server desde la SESIÓN; URLs firmadas cortas (PUT
+  5 min / GET 60 s) previa verificación vía `withOrg`; `confirmAttachment` valida tipo y tamaño
+  contra lo que REALMENTE llegó al bucket (HeadObject). **Sin las 4 env `R2_*` el feature entero
+  se apaga** (`isR2Configured`): la UI no muestra el campo y el pago sin foto es el flujo
+  principal. `receiptToken` (S5) se genera SIEMPRE al crear el pago: opaco, 24 bytes aleatorios.
+- **`receivedBy` (RN5):** existe siempre con default STUDIO; el selector solo aparece en una org
+  STUDIO. `receivedById` (QUÉ profe) y `settlementId` llegan con S9.
 
 ## CI/CD y observabilidad (desde F0.7)
 

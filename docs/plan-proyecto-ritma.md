@@ -335,20 +335,22 @@ model Payment {
   id            String   @id @default(cuid())
   orgId         String
   studentId     String
-  amount        Decimal
+  amount        Decimal      // @db.Decimal(12, 2)
+  currency      String       // S4: RN10, el mismo criterio que Charge (nota S3)
   method        PayMethod    // CASH | TRANSFER | OTHER
-  receivedBy    ReceivedBy   // STUDIO | TEACHER
-  receivedById  String?      // teacherId si lo cobró el profe
-  paidAt        DateTime
-  attachmentUrl String?      // foto de la transferencia
-  receiptToken  String  @unique  // link público del comprobante
-  settlementId  String?      // set al cerrar la liquidación
+  receivedBy    ReceivedBy   // STUDIO | TEACHER, default STUDIO (RN5)
+  // receivedById llega con TeacherProfile en S9 — ver nota S4
+  paidAt        DateTime     // @db.Date: fecha civil del pago (RN10)
+  attachmentKey String?      // S4: la KEY de R2, no una URL — ver nota S4
+  receiptToken  String  @unique  // link público del comprobante (lo consume S5)
+  // settlementId llega con Settlement en S9 (RN6)
 }
 
 model PaymentAllocation {
+  orgId     String   // S4: la convención de §7, también acá (nota S2/S3)
   paymentId String
   chargeId  String
-  amount    Decimal
+  amount    Decimal  // @db.Decimal(12, 2)
   @@id([paymentId, chargeId])
 }
 
@@ -400,6 +402,14 @@ Toda tabla lleva además `createdAt` (`@default(now())`) y `updatedAt` (`@update
 2. **`Charge.currency`**: RN10 pide la moneda "guardada en cada monto" y el borrador la omitía — se copia de la org al generar la cuota. `Enrollment.price` no la lleva: es un acuerdo en la moneda de la org, y cada cuota la congela al nacer.
 3. **`PlanType` nace sin `PACK`**: los packs dependen de tomar asistencia (§5, fase 3+), y un valor de enum sin lógica detrás sería un estado imposible de manejar. Sumar un valor a un enum de Postgres es una migración trivial cuando llegue.
 4. **Fechas civiles como `@db.Date`** (patrón S2, RN10): `startDate`, `endDate` y `dueDate`; `dueDate` = día `dueDay` de la org clampeado al último día real del mes (dueDay 31 en abril → 30). La idempotencia del cron es el unique `(enrollmentId, period)`: generar es un upsert con `update: {}`, así que re-correr no duplica ni pisa una cuota editada a mano (RN2).
+
+**Nota S4 (al construir los pagos).** Cinco decisiones sobre el borrador, ya reflejadas arriba:
+
+1. **`orgId` también en `PaymentAllocation`** y `currency` en `Payment` (las mismas correcciones que las notas S2/S3): una imputación es dato de negocio y entra al aislamiento; cada monto lleva su moneda (RN10).
+2. **`attachmentKey` en vez de `attachmentUrl`**: el bucket de R2 es privado y las URLs se firman CORTAS al momento de ver, previa verificación de permisos — guardar una URL sería guardar algo vencido o, peor, algo público. La key lleva siempre el scope de la org: `{orgId}/payments/{paymentId}`.
+3. **`receivedById` y `settlementId` diferidos a S9** (misma lógica que `teacherId` en la nota S2): sin `TeacherProfile` ni `Settlement` no hay a qué apuntar. `receivedBy` (el enum, RN5) existe desde S4 con default STUDIO; en una org independiente la UI ni lo muestra.
+4. **`paidAt` como fecha civil** (`@db.Date`, RN10); el orden fino de imputación lo desempata `createdAt`.
+5. **El saldo a favor NO es una columna**: es `sum(pagos) − sum(imputaciones)`, un derivado imposible de desincronizar. La cuota además nunca guarda "cuánto le pagaron": se deriva de sus imputaciones y el estado lo recalcula UNA sola función (RN3) en cada escritura.
 
 ## 8. Reglas de negocio
 
