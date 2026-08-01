@@ -234,15 +234,18 @@ export async function createPayment(orgId: string, input: PaymentInput): Promise
  * pago (las imputaciones caen por cascada) y recalcula los estados: las cuotas vuelven
  * solas a PENDING/PARTIAL/OVERDUE según su calendario.
  */
-export async function deletePayment(orgId: string, paymentId: string): Promise<void> {
+export async function deletePayment(
+  orgId: string,
+  paymentId: string,
+): Promise<{ attachmentKey: string | null }> {
   const org = withOrg(orgId);
 
-  await org.$transaction(async (tx) => {
+  return org.$transaction(async (tx) => {
     const scoped = tx as unknown as OrgClient;
 
     const payment = await scoped.payment.findUnique({
       where: { id: paymentId },
-      select: { id: true, allocations: { select: { chargeId: true } } },
+      select: { id: true, attachmentKey: true, allocations: { select: { chargeId: true } } },
     });
     if (!payment) throw new Error("El pago no pertenece a esta organización.");
 
@@ -258,6 +261,33 @@ export async function deletePayment(orgId: string, paymentId: string): Promise<v
       payment.allocations.map((allocation) => allocation.chargeId),
       todayInTz(settings.timezone),
     );
+
+    // El caller borra el objeto de R2 (best-effort) DESPUÉS de que la base confirmó.
+    return { attachmentKey: payment.attachmentKey };
+  });
+}
+
+/** El adjunto del pago (lectura chica para las actions de R2). `null` si es ajeno. */
+export async function getPaymentAttachment(
+  orgId: string,
+  paymentId: string,
+): Promise<{ attachmentKey: string | null } | null> {
+  return withOrg(orgId).payment.findUnique({
+    where: { id: paymentId },
+    select: { attachmentKey: true },
+  });
+}
+
+/** Fija (o limpia) el pointer del comprobante. P2025 si el pago es ajeno. */
+export async function setPaymentAttachment(
+  orgId: string,
+  paymentId: string,
+  attachmentKey: string | null,
+): Promise<void> {
+  await withOrg(orgId).payment.update({
+    where: { id: paymentId },
+    data: { attachmentKey },
+    select: { id: true },
   });
 }
 
