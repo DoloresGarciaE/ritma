@@ -3,11 +3,13 @@ import { notFound } from "next/navigation";
 
 import { requireSession } from "@/lib/auth";
 import { todayInTz } from "@/lib/dates";
+import { isR2Configured } from "@/lib/r2";
 import { requireMember } from "@/server/authz";
-import { getOrgSettings } from "@/server/organizations";
+import { getOrgSettings, getShellOrganization } from "@/server/organizations";
 import { listChargesForStudent } from "@/server/services/charges";
 import { listEnrollmentsForStudent } from "@/server/services/enrollments";
 import { listGroups } from "@/server/services/groups";
+import { listPaymentsForStudent, paymentContext } from "@/server/services/payments";
 import { can } from "@/server/services/permissions";
 import { getStudent } from "@/server/services/students";
 
@@ -42,14 +44,18 @@ export default async function StudentPage({ params }: Params) {
 
   // La membresía revalidada trae el ROL: editar montos y exonerar es de owner/admin, y lo
   // que un rol no puede hacer no se le muestra (§4.3) — el server lo valida igual.
-  const [actor, student, enrollments, charges, groups, settings] = await Promise.all([
-    requireMember(orgId),
-    getStudent(orgId, id),
-    listEnrollmentsForStudent(orgId, id),
-    listChargesForStudent(orgId, id),
-    listGroups(orgId),
-    getOrgSettings(orgId),
-  ]);
+  const [actor, student, enrollments, charges, payments, context, groups, settings, shellOrg] =
+    await Promise.all([
+      requireMember(orgId),
+      getStudent(orgId, id),
+      listEnrollmentsForStudent(orgId, id),
+      listChargesForStudent(orgId, id),
+      listPaymentsForStudent(orgId, id),
+      paymentContext(orgId, id),
+      listGroups(orgId),
+      getOrgSettings(orgId),
+      getShellOrganization(orgId),
+    ]);
 
   if (!student) notFound();
 
@@ -76,7 +82,12 @@ export default async function StudentPage({ params }: Params) {
               studentId={student.id}
               studentName={student.name}
               charges={charges}
+              payments={payments}
+              credit={context.credit}
               canManage={can(actor, "org:configure")}
+              isStudio={shellOrg?.type === "STUDIO"}
+              attachmentsEnabled={isR2Configured()}
+              today={today}
             />
           </>
         }

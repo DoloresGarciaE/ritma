@@ -54,3 +54,39 @@ export type ChargeAmountFormState = {
   errors?: { amount?: string };
   formError?: string;
 };
+
+/** Un pago (HU4.3): a diferencia de un precio, tiene que ser MAYOR a cero. */
+const paymentAmountField = z
+  .number({ error: "Poné el monto del pago." })
+  .positive("El pago tiene que ser mayor a cero.")
+  .max(9_999_999_999, "Ese monto es demasiado alto.");
+
+export const paymentSchema = z.object({
+  studentId: z.string().min(1),
+  amount: paymentAmountField,
+  method: z.enum(["CASH", "TRANSFER", "OTHER"]),
+  receivedBy: z.enum(["STUDIO", "TEACHER"]).optional(),
+  paidAt: civilDateField,
+  /** Ausente → imputación automática (RN4); presente → edición manual (HU4.4). */
+  allocations: z
+    .array(
+      z.object({
+        chargeId: z.string().min(1),
+        amount: z
+          .number({ error: "Poné el monto de la imputación." })
+          .positive("Cada imputación tiene que ser mayor a cero."),
+      }),
+    )
+    .optional(),
+});
+
+export type PaymentField = "amount" | "paidAt";
+
+export type PaymentFormState = {
+  errors?: Partial<Record<PaymentField, string>>;
+  formError?: string;
+};
+
+export function toPaymentFieldErrors(error: z.ZodError): PaymentFormState["errors"] {
+  return genericToFieldErrors<PaymentField>(error);
+}

@@ -430,6 +430,94 @@ async function main() {
     });
     if (becaCharge) await waiveCharge(ORG_INDEPENDIENTE, becaCharge.id);
 
+    // ── Pagos (S4) ───────────────────────────────────────────────────────────
+    //
+    // Registrados con el SERVICIO real (createPayment): imputación automática
+    // antigua-primero, transacción, recálculo de estados — el seed cuenta exactamente lo
+    // que contaría un mes de uso. Idempotencia: un pago no tiene unique natural, así que
+    // se saltea si ya existe uno del mismo alumno por el mismo monto.
+    //
+    // La historia que queda armada:
+    // - Sofía: UN pago que cubre DOS cuotas (junio + julio de Árabe inicial) → PAID ×2.
+    // - Julieta: paga su Intermedio ($20.000) con $25.000 → PAID + $5.000 A FAVOR.
+    // - Valentina: seña de $4.000 a su clase suelta (imputación manual) → PARTIAL con
+    //   vencimiento futuro — el badge Parcial se ve en Deudores.
+    // - Lucía (estudio): su junio exacto, transferencia RECIBIDA POR LA PROFE (RN5).
+    // - Tomás (ya de baja): $10.000 a cuenta de su última cuota → sigue Vencida, pero
+    //   Deudores muestra solo lo que FALTA.
+    const { createPayment } = await import("../src/server/services/payments");
+
+    async function seedPayment(
+      orgId: string,
+      studentName: string,
+      input: {
+        amount: number;
+        method: "CASH" | "TRANSFER" | "OTHER";
+        receivedBy?: "STUDIO" | "TEACHER";
+        daysAgo: number;
+        toDropIn?: boolean;
+      },
+    ) {
+      const student = await db.student.findFirstOrThrow({
+        where: { orgId, name: studentName },
+      });
+
+      const existing = await db.payment.findFirst({
+        where: { orgId, studentId: student.id, amount: input.amount },
+      });
+      if (existing) return;
+
+      let allocations: { chargeId: string; amount: number }[] | undefined;
+      if (input.toDropIn) {
+        const dropInCharge = await db.charge.findFirst({
+          where: {
+            orgId,
+            status: { in: ["PENDING", "PARTIAL", "OVERDUE"] },
+            enrollment: { studentId: student.id, plan: "DROP_IN" },
+          },
+        });
+        if (!dropInCharge) return;
+        allocations = [{ chargeId: dropInCharge.id, amount: input.amount }];
+      }
+
+      await createPayment(orgId, {
+        studentId: student.id,
+        amount: input.amount,
+        method: input.method,
+        receivedBy: input.receivedBy,
+        paidAt: addDays(todayAr, -input.daysAgo),
+        allocations,
+      });
+    }
+
+    await seedPayment(ORG_INDEPENDIENTE, "Sofía Herrera", {
+      amount: 36000,
+      method: "TRANSFER",
+      daysAgo: 3,
+    });
+    await seedPayment(ORG_INDEPENDIENTE, "Julieta Ibáñez", {
+      amount: 25000,
+      method: "CASH",
+      daysAgo: 2,
+    });
+    await seedPayment(ORG_INDEPENDIENTE, "Valentina Ruiz", {
+      amount: 4000,
+      method: "CASH",
+      daysAgo: 1,
+      toDropIn: true,
+    });
+    await seedPayment(ORG_ESTUDIO, "Lucía Fernández", {
+      amount: 22000,
+      method: "TRANSFER",
+      receivedBy: "TEACHER",
+      daysAgo: 3,
+    });
+    await seedPayment(ORG_ESTUDIO, "Tomás Quiroga", {
+      amount: 10000,
+      method: "CASH",
+      daysAgo: 2,
+    });
+
     const orgs = await db.organization.findMany({
       orderBy: { name: "asc" },
       include: {
@@ -467,7 +555,9 @@ async function main() {
         `franjas: ${await db.scheduleSlot.count()} · ` +
         `sesiones (excepciones): ${await db.classSession.count()} · ` +
         `inscripciones: ${await db.enrollment.count()} · ` +
-        `cuotas: ${await db.charge.count()} (${statusSummary})\n` +
+        `cuotas: ${await db.charge.count()} (${statusSummary}) · ` +
+        `pagos: ${await db.payment.count()} · ` +
+        `imputaciones: ${await db.paymentAllocation.count()}\n` +
         `Contraseña de desarrollo: ${DEV_PASSWORD}\n`,
     );
   } finally {

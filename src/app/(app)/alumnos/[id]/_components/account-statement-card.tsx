@@ -18,29 +18,55 @@ import { useToast } from "@/components/ui/toast";
 import { formatListDate, formatMoney, formatPeriod } from "@/lib/format";
 import type { ChargeListItem } from "@/server/services/charges";
 
+import type { PaymentListItem } from "@/server/services/payments";
+
 import { updateChargeAmountAction, waiveChargeAction } from "../../../cobranzas/actions";
+import { PaymentDetailSheet } from "../../../cobranzas/_components/payment-detail-sheet";
+import { PaymentSheet } from "../../../cobranzas/_components/payment-sheet";
 
 /**
- * Estado de cuenta (S3): todas las cuotas del alumno con el badge §3.3 — el primer uso
- * real del componente firma. Montos en tabular-nums, período "Julio 2026" y vencimiento
- * "mar 12/05" (§4.2). Los pagos llegan en S4; hoy las acciones son las manuales:
- * editar el monto (RN2) y exonerar (RN3), SOLO owner/admin — a un teacher ni se le
- * muestran (§4.3), y el server igual lo valida.
+ * Estado de cuenta (S3 + S4): cuotas y pagos INTERCALADOS por fecha, con el saldo a
+ * favor visible cuando existe. Cuotas con el badge §3.3; pagos con etiqueta de texto
+ * (el color nunca comunica solo). Registrar pago abre el sheet de HU4.3; cada pago abre
+ * su detalle (imputaciones, comprobante, eliminar — RN12). Editar monto y exonerar
+ * siguen siendo de owner/admin (§4.3) — a un teacher las cuotas ni se le tocan.
  */
 
 const EDITABLE: ChargeListItem["status"][] = ["PENDING", "OVERDUE"];
+
+const METHOD_LABEL: Record<PaymentListItem["method"], string> = {
+  CASH: "Efectivo",
+  TRANSFER: "Transferencia",
+  OTHER: "Otro",
+};
+
+type Entry =
+  | { kind: "charge"; date: string; charge: ChargeListItem }
+  | { kind: "payment"; date: string; payment: PaymentListItem };
 
 export function AccountStatementCard({
   studentId,
   studentName,
   charges,
+  payments,
+  credit,
   canManage,
+  isStudio,
+  attachmentsEnabled,
+  today,
 }: {
   studentId: string;
   studentName: string;
   charges: ChargeListItem[];
+  payments: PaymentListItem[];
+  /** Saldo a favor (pagos − imputaciones), ya derivado en el server. */
+  credit: number;
   /** owner/admin (Plan §4): habilita editar monto y exonerar. */
   canManage: boolean;
+  isStudio: boolean;
+  attachmentsEnabled: boolean;
+  /** Hoy en la zona de la org. */
+  today: string;
 }) {
   const toast = useToast();
   const [saving, startSave] = useTransition();
@@ -51,6 +77,33 @@ export function AccountStatementCard({
   const [amount, setAmount] = useState<number | null>(null);
   const [amountError, setAmountError] = useState<string | null>(null);
   const [confirmWaive, setConfirmWaive] = useState(false);
+
+  const [payOpen, setPayOpen] = useState(false);
+  const [payKey, setPayKey] = useState(0);
+  const [detailPayment, setDetailPayment] = useState<PaymentListItem | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
+
+  const openPay = () => {
+    toast.closeAll();
+    setPayKey((key) => key + 1);
+    setPayOpen(true);
+  };
+
+  const openPaymentDetail = (payment: PaymentListItem) => {
+    toast.closeAll();
+    setDetailPayment(payment);
+    setDetailOpen(true);
+  };
+
+  // Cuotas (por vencimiento) y pagos (por fecha de pago) en UNA línea de tiempo, lo más
+  // nuevo arriba; a igual fecha, el pago primero (es la actividad más reciente).
+  const entries: Entry[] = [
+    ...charges.map((charge): Entry => ({ kind: "charge", date: charge.dueDate, charge })),
+    ...payments.map((payment): Entry => ({ kind: "payment", date: payment.paidAt, payment })),
+  ].sort(
+    (a, b) =>
+      b.date.localeCompare(a.date) || (a.kind === b.kind ? 0 : a.kind === "payment" ? -1 : 1),
+  );
 
   const openCharge = (charge: ChargeListItem) => {
     toast.closeAll();
@@ -121,15 +174,50 @@ export function AccountStatementCard({
 
   return (
     <Card className="flex flex-col gap-3">
-      <h3 className="font-medium text-text">Estado de cuenta</h3>
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="font-medium text-text">Estado de cuenta</h3>
+        {credit > 0 ? (
+          <span className="text-sm font-medium text-success">
+            Saldo a favor: <span className="font-display tabular-nums">{formatMoney(credit)}</span>
+          </span>
+        ) : null}
+      </div>
 
-      {charges.length === 0 ? (
+      {entries.length === 0 ? (
         <p className="text-sm text-text-secondary">
-          Sin cuotas todavía. Se generan solas al inscribirlo en un grupo.
+          Sin movimientos todavía. Las cuotas se generan solas al inscribirlo en un grupo.
         </p>
       ) : (
         <ul className="flex flex-col divide-y divide-border">
-          {charges.map((charge) => {
+          {entries.map((entry) => {
+            if (entry.kind === "payment") {
+              const { payment } = entry;
+              return (
+                <li key={`pago-${payment.id}`}>
+                  <button
+                    type="button"
+                    onClick={() => openPaymentDetail(payment)}
+                    className="flex min-h-14 w-full cursor-pointer items-center justify-between gap-3 py-2 text-left"
+                  >
+                    <div className="flex min-w-0 flex-col">
+                      <span className="truncate font-medium text-text">
+                        Pago · {METHOD_LABEL[payment.method]}
+                      </span>
+                      <span className="truncate text-xs text-text-secondary">
+                        {formatListDate(payment.paidAt)}
+                        {payment.allocations.length === 0 ? " · quedó a favor" : ""}
+                        {payment.hasAttachment ? " · con comprobante" : ""}
+                      </span>
+                    </div>
+                    <span className="shrink-0 font-display text-sm font-medium text-success tabular-nums">
+                      {formatMoney(payment.amount)}
+                    </span>
+                  </button>
+                </li>
+              );
+            }
+
+            const { charge } = entry;
             const row = (
               <>
                 <div className="flex min-w-0 flex-col">
@@ -169,6 +257,29 @@ export function AccountStatementCard({
           })}
         </ul>
       )}
+
+      <Button variant="secondary" size="lg" className="w-full" onClick={openPay}>
+        Registrar pago
+      </Button>
+
+      <PaymentSheet
+        key={payKey}
+        open={payOpen}
+        onOpenChange={setPayOpen}
+        student={{ id: studentId, name: studentName }}
+        isStudio={isStudio}
+        attachmentsEnabled={attachmentsEnabled}
+        today={today}
+      />
+
+      <PaymentDetailSheet
+        key={detailPayment ? `detalle-${detailPayment.id}` : "sin-pago"}
+        open={detailOpen}
+        onOpenChange={setDetailOpen}
+        payment={detailPayment}
+        student={{ id: studentId, name: studentName }}
+        isStudio={isStudio}
+      />
 
       {/* El detalle de la cuota: monto editable (RN2) y exoneración (RN3). */}
       <ActionSheet

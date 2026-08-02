@@ -2,19 +2,19 @@ import type { Metadata } from "next";
 import { ChevronLeft, ChevronRight, PartyPopper } from "lucide-react";
 import Link from "next/link";
 
-import { Avatar } from "@/components/ui/avatar";
 import { Card } from "@/components/ui/card";
-import { StatusBadge } from "@/components/ui/status-badge";
 import { requireSession } from "@/lib/auth";
 import { addMonths, DEFAULT_TIMEZONE, isPeriod, periodOf, todayInTz } from "@/lib/dates";
-import { formatListDate, formatMoney, formatPeriod } from "@/lib/format";
+import { formatMoney, formatPeriod } from "@/lib/format";
+import { isR2Configured } from "@/lib/r2";
 import { cn } from "@/lib/utils";
-import { getOrgSettings } from "@/server/organizations";
+import { getOrgSettings, getShellOrganization } from "@/server/organizations";
 import { debtorsForPeriod } from "@/server/services/charges";
 import { listGroups } from "@/server/services/groups";
 
 import { AppBar } from "../_components/app-bar";
 import { EmptyState } from "../_components/empty-state";
+import { DebtorsList } from "./_components/debtors-list";
 
 export const metadata: Metadata = {
   title: "Cobranzas · Ritma",
@@ -37,8 +37,13 @@ export default async function CobranzasPage({
 
   const first = (value: string | string[] | undefined) => (Array.isArray(value) ? value[0] : value);
 
-  const [settings, groups] = await Promise.all([getOrgSettings(orgId), listGroups(orgId)]);
-  const currentPeriod = periodOf(todayInTz(settings?.timezone ?? DEFAULT_TIMEZONE));
+  const [settings, groups, shellOrg] = await Promise.all([
+    getOrgSettings(orgId),
+    listGroups(orgId),
+    getShellOrganization(orgId),
+  ]);
+  const today = todayInTz(settings?.timezone ?? DEFAULT_TIMEZONE);
+  const currentPeriod = periodOf(today);
 
   const periodoParam = first(params.periodo);
   const period = periodoParam && isPeriod(periodoParam) ? periodoParam : currentPeriod;
@@ -150,31 +155,14 @@ export default async function CobranzasPage({
               </span>
             </Card>
 
-            {/* Una fila por CUOTA (§3.5): el tap va a la ficha, donde viven las acciones. */}
-            <ul className="divide-y divide-border border-y border-border bg-surface">
-              {debtors.map((debtor) => (
-                <li key={debtor.chargeId}>
-                  <Link
-                    href={`/alumnos/${debtor.student.id}`}
-                    className="flex min-h-16 items-center gap-3 px-4 py-2"
-                  >
-                    <Avatar name={debtor.student.name} size="md" />
-                    <div className="flex min-w-0 flex-1 flex-col">
-                      <span className="truncate font-medium text-text">{debtor.student.name}</span>
-                      <span className="truncate text-xs text-text-secondary">
-                        {debtor.group.name} · vence {formatListDate(debtor.dueDate)}
-                      </span>
-                    </div>
-                    <div className="flex shrink-0 flex-col items-end gap-1">
-                      <span className="font-display text-sm font-medium text-text tabular-nums">
-                        {formatMoney(debtor.amount)}
-                      </span>
-                      <StatusBadge status={debtor.status} />
-                    </div>
-                  </Link>
-                </li>
-              ))}
-            </ul>
+            {/* Una fila por CUOTA con lo que FALTA, y "Registrar pago" en la fila:
+                el flujo de los 15 segundos de HU4.3 (nota S4 en §3.5). */}
+            <DebtorsList
+              debtors={debtors}
+              isStudio={shellOrg?.type === "STUDIO"}
+              attachmentsEnabled={isR2Configured()}
+              today={today}
+            />
           </>
         )}
       </div>

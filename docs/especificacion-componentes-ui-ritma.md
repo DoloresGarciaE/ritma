@@ -95,6 +95,8 @@ Este mismo componente se usa en fichas, listas, tablas de liquidación y comprob
 
 Anatomía de izquierda a derecha: avatar de iniciales (ver §3.11) · nombre en `text` + subtítulo en `text-secondary` (grupos activos) · zona derecha con badge de estado o monto adeudado en `tabular-nums` · chevron. Altura 64 px, divisor `border` entre ítems. El tap navega a la ficha; las acciones rápidas (WhatsApp, registrar pago) viven dentro de la ficha, no en la lista — una lista con botones por fila se vuelve un campo minado táctil.
 
+*(S4)* **Una excepción, medida:** la fila de Deudores lleva UNA acción — "Registrar pago", botón secundario `sm` en una segunda línea, target ≥ 44 px — porque el DoD de HU4.3 (pago completo en < 15 segundos desde Deudores) no se cumple pasando por la ficha. Sigue sin ser un campo minado: una sola acción por fila, separada del área de navegación, y el tap de la fila sigue yendo a la ficha. La zona derecha muestra el REMANENTE de la cuota (una Parcial debe lo que le falta), con el monto original chico abajo como contexto.
+
 ### 3.6 Navegación
 
 **Bottom nav (mobile).** Cinco ítems fijos: Inicio · Agenda · Alumnos · Cobranzas · Más. Ícono Lucide 24 px + label 11 px. Activo: `primary` en ícono y label; inactivo: `text-secondary`. Altura 56 px + safe-area inferior. No se agregan ni reordenan ítems sin actualizar esta spec.

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { db } from "@/lib/db";
 import {
@@ -16,7 +16,19 @@ import { makeCharge, makeEnrollment, makeGroup, makeOrg, makeStudent } from "./f
  * (con el total sumado en Decimal) y las dos mutaciones manuales con sus reglas de
  * estado (RN2/RN3). El aislamiento org×org ya está en isolation.test.ts; acá se prueba
  * la lógica.
+ *
+ * El reloj se congela (solo `Date`): desde S4, editar un monto RECOMPUTA el estado con
+ * el "hoy" de la org — con el reloj real, los estados sembrados quedarían viejos.
  */
+
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-07-05T12:00:00Z")); // antes del vencimiento default (10)
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 async function makeCharged(orgName = "Danzas Malena") {
   const org = await makeOrg(orgName);

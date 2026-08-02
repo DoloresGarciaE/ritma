@@ -216,3 +216,32 @@ del diagnóstico. Se pueden borrar con Prisma Studio apuntando al branch de prod
   (clase suelta: un cargo único al inscribir, vence a 7 días) elevada para aprobar en §8.
 - **Próximo:** S4 — pagos e imputaciones (RN4–RN5): `Payment` + `PaymentAllocation`, el sheet
   "Registrar pago" en <15 segundos, y los estados PARTIAL/PAID que este bloque dejó listos.
+
+## Semana 11 (julio–agosto 2026) — cobranzas: pagos e imputaciones (S4)
+
+- **Hecho:** `feat/s4-payments`: `Payment` y `PaymentAllocation` con sus bloques de aislamiento
+  (incluidos el lookup por `receiptToken` ajeno y el pisado de `attachmentKey` cross-org); el
+  **motor de imputaciones** en `billing.ts` — `recomputeChargeStatus` como ÚNICA fuente de RN3
+  (probada su coincidencia con `markOverdue`), `allocateGreedy` sirviendo los dos consumos de
+  RN4 (pago nuevo antigua-primero, crédito contra cuotas recién generadas) y las invariantes de
+  la edición manual — con la suite más exhaustiva del proyecto, centavos exactos incluidos;
+  **transacción o nada** en `createPayment`/`deletePayment` (una imputación inválida deja CERO
+  filas); **saldo a favor derivado** (pagos − imputaciones, jamás una columna) aplicado por el
+  cron de generación (idempotencia intacta, testeada) y por la cuota inicial del alta; sheet
+  "Registrar pago" con deuda pre-cargada, imputación VISIBLE y edición plegada (HU4.4),
+  `receivedBy` solo en STUDIO (RN5); estado de cuenta con cuotas y pagos intercalados, crédito
+  visible, detalle de pago con eliminar (propuesta RN12); Deudores con remanentes, badge
+  PARTIAL estrenado y "Registrar pago" EN la fila (nota S4 en §3.5: el flujo de los 15
+  segundos); adjuntos a R2 con URLs firmadas cortas y keys `{orgId}/payments/{paymentId}`,
+  TODO detrás de `isR2Configured()`; seed con un mes verosímil de plata. **294 tests**
+  (venían 241).
+- **Trabado:** R2 sin credenciales en `.env.local` — el adjunto quedó implementado pero
+  apagado; al cargar las 4 env vars se enciende solo (nada que codear). Dos guardas nuevas que
+  S3 no necesitaba: el monto de una cuota no puede quedar bajo lo ya pagado, y una cuota con
+  imputaciones no se exonera (primero se elimina el pago). `npm audit` trae avisos
+  preexistentes (tooling de Prisma/ESLint y un advisory de Next que pide bump de versión) —
+  para un housekeeping aparte, no de este bloque. Propuestas **RN11** (S3) y **RN12** (un pago
+  sin liquidación puede eliminarse con confirmación; la inmutabilidad llega con RN6/S9)
+  esperando aprobación para entrar a §8.
+- **Próximo:** S5 — comprobantes y recordatorios: la página pública `/r/[token]` (el
+  `receiptToken` ya se genera), imagen compartible, plantilla de recordatorio y `wa.me`.

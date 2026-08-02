@@ -1,12 +1,20 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  allocateGreedy,
   dropInCharge,
   generateCharges,
   isActiveInPeriod,
   markOverdue,
+  money,
+  recomputeChargeStatus,
+  sumMoney,
+  validateAllocations,
+  ZERO,
   type BillingEnrollment,
   type BillingOrgConfig,
+  type ChargeStatusValue,
+  type Money,
   type OverdueCandidate,
 } from "./billing";
 
@@ -249,5 +257,235 @@ describe("markOverdue — RN3: transiciones exactas", () => {
 
   it("lista vacía → nada que marcar", () => {
     expect(markOverdue([], "2026-07-15")).toEqual([]);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// S4 — imputaciones (RN3 + RN4): la suite más exhaustiva del proyecto. Acá se
+// registra plata: un caso borde sin test no cierra el bloque (mandato S4).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Los estados como salen de la base, para recorrer matrices completas. */
+const TODAY = "2026-07-15";
+
+function chargeOf(amount: number, status: ChargeStatusValue, dueDate: string) {
+  return { amount: money(amount), status, dueDate };
+}
+
+describe("recomputeChargeStatus — RN3, la única fuente de verdad", () => {
+  it("cubierta exacta → PAID; sobrecubierta (defensivo) → PAID", () => {
+    const charge = chargeOf(18000, "PENDING", "2026-07-20");
+    expect(recomputeChargeStatus(charge, money(18000), TODAY)).toBe("PAID");
+    expect(recomputeChargeStatus(charge, money(20000), TODAY)).toBe("PAID");
+  });
+
+  it("una VENCIDA que se paga pasa DIRECTO a PAID (RN3 literal)", () => {
+    const overdue = chargeOf(18000, "OVERDUE", "2026-06-10");
+    expect(recomputeChargeStatus(overdue, money(18000), TODAY)).toBe("PAID");
+  });
+
+  it("plata parcial antes del vencimiento → PARTIAL", () => {
+    const charge = chargeOf(18000, "PENDING", "2026-07-20");
+    expect(recomputeChargeStatus(charge, money(5000), TODAY)).toBe("PARTIAL");
+  });
+
+  it("plata parcial con el vencimiento pasado → OVERDUE: el badge no disfraza la mora", () => {
+    const charge = chargeOf(18000, "OVERDUE", "2026-06-10");
+    expect(recomputeChargeStatus(charge, money(5000), TODAY)).toBe("OVERDUE");
+    // El día exacto del vencimiento todavía no está vencida (hoy > dueDate, como RN3).
+    const dueToday = chargeOf(18000, "PARTIAL", TODAY);
+    expect(recomputeChargeStatus(dueToday, money(5000), TODAY)).toBe("PARTIAL");
+  });
+
+  it("sin plata → PENDING o OVERDUE según el calendario (ej.: se eliminó el pago)", () => {
+    expect(recomputeChargeStatus(chargeOf(18000, "PAID", "2026-07-20"), ZERO, TODAY)).toBe(
+      "PENDING",
+    );
+    expect(recomputeChargeStatus(chargeOf(18000, "PAID", "2026-06-10"), ZERO, TODAY)).toBe(
+      "OVERDUE",
+    );
+  });
+
+  it("WAIVED es un cierre: ninguna imputación lo mueve", () => {
+    const waived = chargeOf(18000, "WAIVED", "2026-06-10");
+    expect(recomputeChargeStatus(waived, ZERO, TODAY)).toBe("WAIVED");
+    expect(recomputeChargeStatus(waived, money(18000), TODAY)).toBe("WAIVED");
+  });
+
+  it("coincide con markOverdue: recomputar hoy y correr el cron hoy dan lo mismo", () => {
+    const charge = chargeOf(18000, "PENDING", "2026-07-10");
+    const recomputed = recomputeChargeStatus(charge, ZERO, TODAY);
+    const cronWouldMark = markOverdue(
+      [{ id: "c", status: "PENDING", dueDate: "2026-07-10" }],
+      TODAY,
+    );
+    expect(recomputed).toBe("OVERDUE");
+    expect(cronWouldMark).toEqual(["c"]);
+  });
+});
+
+describe("allocateGreedy — RN4: antigua-primero, en el orden recibido", () => {
+  const p = (paymentId: string, remaining: number): { paymentId: string; remaining: Money } => ({
+    paymentId,
+    remaining: money(remaining),
+  });
+  const c = (chargeId: string, remaining: number): { chargeId: string; remaining: Money } => ({
+    chargeId,
+    remaining: money(remaining),
+  });
+
+  function totals(allocations: ReturnType<typeof allocateGreedy>) {
+    return allocations.map((a) => ({ ...a, amount: a.amount.toNumber() }));
+  }
+
+  it("pago parcial: la primera cuota recibe todo y queda con remanente", () => {
+    const result = allocateGreedy([p("pago", 5000)], [c("junio", 18000), c("julio", 18000)]);
+    expect(totals(result)).toEqual([{ paymentId: "pago", chargeId: "junio", amount: 5000 }]);
+  });
+
+  it("un pago cubre varias cuotas: $38.000 = junio completa + julio completa", () => {
+    const result = allocateGreedy([p("pago", 38000)], [c("junio", 18000), c("julio", 20000)]);
+    expect(totals(result)).toEqual([
+      { paymentId: "pago", chargeId: "junio", amount: 18000 },
+      { paymentId: "pago", chargeId: "julio", amount: 20000 },
+    ]);
+  });
+
+  it("cubre dos y deja la tercera parcial", () => {
+    const result = allocateGreedy(
+      [p("pago", 40000)],
+      [c("mayo", 15000), c("junio", 15000), c("julio", 15000)],
+    );
+    expect(totals(result)).toEqual([
+      { paymentId: "pago", chargeId: "mayo", amount: 15000 },
+      { paymentId: "pago", chargeId: "junio", amount: 15000 },
+      { paymentId: "pago", chargeId: "julio", amount: 10000 },
+    ]);
+  });
+
+  it("excedente: lo que no entra en ninguna cuota NO se imputa (queda como crédito)", () => {
+    const result = allocateGreedy([p("pago", 25000)], [c("julio", 18000)]);
+    expect(totals(result)).toEqual([{ paymentId: "pago", chargeId: "julio", amount: 18000 }]);
+    // El crédito es un derivado: pago 25.000 − imputado 18.000 = 7.000 a favor.
+    const allocated = sumMoney(result.map((a) => a.amount));
+    expect(money(25000).minus(allocated).toNumber()).toBe(7000);
+  });
+
+  it("respeta el orden recibido (antigua-primero lo garantiza el caller)", () => {
+    const result = allocateGreedy([p("pago", 1000)], [c("febrero", 500), c("marzo", 500)]);
+    expect(result[0].chargeId).toBe("febrero");
+    expect(result[1].chargeId).toBe("marzo");
+  });
+
+  it("varios pagos con remanente contra varias cuotas (el caso del crédito en el cron)", () => {
+    const result = allocateGreedy(
+      [p("pago-viejo", 3000), p("pago-nuevo", 5000)],
+      [c("agosto-arabe", 6000), c("agosto-folklore", 4000)],
+    );
+    expect(totals(result)).toEqual([
+      { paymentId: "pago-viejo", chargeId: "agosto-arabe", amount: 3000 },
+      { paymentId: "pago-nuevo", chargeId: "agosto-arabe", amount: 3000 },
+      { paymentId: "pago-nuevo", chargeId: "agosto-folklore", amount: 2000 },
+    ]);
+  });
+
+  it("cuotas ya cubiertas (remanente 0) y remanentes negativos defensivos se saltean", () => {
+    const result = allocateGreedy(
+      [p("pago", 5000)],
+      [c("pagada", 0), c("rara", -100), c("julio", 18000)],
+    );
+    expect(totals(result)).toEqual([{ paymentId: "pago", chargeId: "julio", amount: 5000 }]);
+  });
+
+  it("sin cuotas abiertas → sin imputaciones (todo el pago es crédito); sin pagos → nada", () => {
+    expect(allocateGreedy([p("pago", 5000)], [])).toEqual([]);
+    expect(allocateGreedy([], [c("julio", 18000)])).toEqual([]);
+  });
+
+  it("centavos exactos: tres cuotas de $6.666,67 contra $20.000 dejan 1 centavo impago", () => {
+    const result = allocateGreedy(
+      [p("pago", 20000)],
+      [c("a", 6666.67), c("b", 6666.67), c("c", 6666.67)],
+    );
+    expect(totals(result)).toEqual([
+      { paymentId: "pago", chargeId: "a", amount: 6666.67 },
+      { paymentId: "pago", chargeId: "b", amount: 6666.67 },
+      { paymentId: "pago", chargeId: "c", amount: 6666.66 },
+    ]);
+    // La suma cierra EXACTA en Decimal — con floats, 6666.67 × 3 ya no daría 20000.01.
+    expect(sumMoney(result.map((a) => a.amount)).toNumber()).toBe(20000);
+  });
+
+  it("$10.000,49 contra una cuota de $10.000,50: queda PARTIAL por un centavo", () => {
+    const result = allocateGreedy([p("pago", 10000.49)], [c("julio", 10000.5)]);
+    expect(totals(result)).toEqual([{ paymentId: "pago", chargeId: "julio", amount: 10000.49 }]);
+  });
+});
+
+describe("validateAllocations — invariantes de la edición manual (HU4.3)", () => {
+  const remaining = new Map([
+    ["junio", money(18000)],
+    ["julio", money(20000)],
+  ]);
+
+  it("una imputación válida pasa (incluso dejando excedente como crédito)", () => {
+    expect(
+      validateAllocations(
+        money(30000),
+        [
+          { chargeId: "junio", amount: money(18000) },
+          { chargeId: "julio", amount: money(5000) },
+        ],
+        remaining,
+      ),
+    ).toBeNull();
+  });
+
+  it("la suma de imputaciones nunca supera el monto del pago", () => {
+    expect(
+      validateAllocations(
+        money(20000),
+        [
+          { chargeId: "junio", amount: money(18000) },
+          { chargeId: "julio", amount: money(5000) },
+        ],
+        remaining,
+      ),
+    ).toMatch(/suman más que el pago/);
+  });
+
+  it("una imputación nunca supera el remanente de su cuota", () => {
+    expect(
+      validateAllocations(
+        money(50000),
+        [{ chargeId: "junio", amount: money(18000.01) }],
+        remaining,
+      ),
+    ).toMatch(/supera lo que falta/);
+  });
+
+  it("cuota desconocida (ajena, de otro alumno o ya cerrada) rechaza", () => {
+    expect(
+      validateAllocations(money(5000), [{ chargeId: "hackeada", amount: money(1) }], remaining),
+    ).toMatch(/no existe o no es de este alumno/);
+  });
+
+  it("cero, negativo y duplicados rechazan", () => {
+    expect(
+      validateAllocations(money(5000), [{ chargeId: "junio", amount: ZERO }], remaining),
+    ).toMatch(/mayor a cero/);
+    expect(
+      validateAllocations(money(5000), [{ chargeId: "junio", amount: money(-1) }], remaining),
+    ).toMatch(/mayor a cero/);
+    expect(
+      validateAllocations(
+        money(5000),
+        [
+          { chargeId: "junio", amount: money(1000) },
+          { chargeId: "junio", amount: money(1000) },
+        ],
+        remaining,
+      ),
+    ).toMatch(/misma cuota/);
   });
 });

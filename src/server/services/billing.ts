@@ -1,18 +1,22 @@
+import { Prisma } from "@/generated/prisma/client";
 import { addDays, dateInPeriod, isPeriod, periodOf } from "@/lib/dates";
 
 /**
- * El motor de cobranzas (S3): decide QUÉ cuotas corresponden, sin tocar la base.
+ * El motor de cobranzas: decide QUÉ cuotas corresponden (S3) y CÓMO se imputa la plata
+ * (S4), sin tocar la base.
  *
  * Funciones puras (patrón schedule.ts): reciben datos, devuelven resultados. Quién las
  * alimenta y persiste es `server/system/` (los crons, cross-org) o los servicios de
- * `enrollments.ts` (la cuota inicial al inscribir). La idempotencia NO vive acá: la da el
- * unique `(enrollmentId, period)` de la base, sobre el que el caller upsertea con
- * `update: {}` — este módulo solo garantiza que con la misma entrada produce exactamente
- * la misma salida.
+ * datos. La idempotencia NO vive acá: la da el unique `(enrollmentId, period)` de la
+ * base — este módulo solo garantiza que con la misma entrada produce la misma salida.
  *
- * Dinero sin flotantes POR CONSTRUCCIÓN: el monto es un tipo opaco `<A>` (Prisma Decimal
- * en producción) que este módulo acarrea sin poder operar. El día que una regla necesite
- * aritmética de plata (imputaciones, S4), se hace con Decimal, jamás con `number`.
+ * Dinero sin flotantes, en dos niveles:
+ * - Las funciones de GENERACIÓN (S3) acarrean el monto como tipo opaco `<A>`: no pueden
+ *   operar con él.
+ * - Las de IMPUTACIÓN (S4) sí hacen aritmética — y son EL ÚNICO lugar del proyecto donde
+ *   se suma o resta plata (regla dura de S4): siempre `Prisma.Decimal`, jamás `number`.
+ *   Todo otro módulo que necesite operar montos importa los helpers de acá (`money`,
+ *   `sumMoney`); a `number` se convierte recién al borde, para mostrar.
  */
 
 export type ChargeStatusValue = "PENDING" | "PARTIAL" | "PAID" | "OVERDUE" | "WAIVED";
@@ -146,4 +150,157 @@ export function markOverdue(charges: OverdueCandidate[], today: string): string[
   return charges
     .filter((c) => (c.status === "PENDING" || c.status === "PARTIAL") && today > c.dueDate)
     .map((c) => c.id);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Imputaciones (S4, RN3 + RN4): la ÚNICA aritmética de dinero del proyecto.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type Money = Prisma.Decimal;
+
+export const ZERO: Money = new Prisma.Decimal(0);
+
+/** Construye un monto desde un literal (input validado o test). */
+export function money(value: number | string): Money {
+  return new Prisma.Decimal(value);
+}
+
+export function sumMoney(values: readonly Money[]): Money {
+  return values.reduce((acc: Money, value) => acc.add(value), ZERO);
+}
+
+/**
+ * RN3, la ÚNICA fuente de verdad del estado de una cuota frente a su plata imputada.
+ * Crear, editar o borrar un pago recalcula por acá; RN3 no se reimplementa en ningún
+ * otro lado (decisión S4).
+ *
+ * - WAIVED es un cierre manual: no lo mueve ninguna imputación.
+ * - Cubierta (imputado ≥ monto) → PAID. "Una vencida que se paga pasa DIRECTO a
+ *   pagada" (RN3): no hay estado intermedio.
+ * - Con plata parcial → PARTIAL, salvo que ya esté vencida (hoy > dueDate): una parcial
+ *   vencida ES vencida (RN3: "pendiente/parcial pasan a vencida"), el badge no la
+ *   disfraza.
+ * - Sin plata → PENDING o OVERDUE según el calendario.
+ *
+ * Es la contracara exacta de `markOverdue`: recomputar hoy y correr el cron hoy dejan
+ * el mismo estado.
+ */
+export function recomputeChargeStatus(
+  charge: { amount: Money; status: ChargeStatusValue; dueDate: string },
+  allocated: Money,
+  today: string,
+): ChargeStatusValue {
+  if (charge.status === "WAIVED") return "WAIVED";
+  if (allocated.greaterThanOrEqualTo(charge.amount)) return "PAID";
+
+  const overdue = today > charge.dueDate;
+  if (allocated.greaterThan(ZERO)) return overdue ? "OVERDUE" : "PARTIAL";
+  return overdue ? "OVERDUE" : "PENDING";
+}
+
+export type PaymentRemainder = {
+  paymentId: string;
+  /** Lo que a este pago le queda SIN imputar (monto − imputaciones existentes). */
+  remaining: Money;
+};
+
+export type ChargeRemainder = {
+  chargeId: string;
+  /** Lo que a esta cuota le falta (monto − imputado por todos los pagos). */
+  remaining: Money;
+};
+
+export type AllocationDraft = {
+  paymentId: string;
+  chargeId: string;
+  amount: Money;
+};
+
+/**
+ * RN4: imputación automática, doble-greedy EN EL ORDEN RECIBIDO.
+ *
+ * El caller manda las cuotas antigua-primero (period, dueDate, id) y los pagos
+ * viejo-primero (paidAt, createdAt, id) — este módulo no conoce esos campos, solo
+ * respeta el orden. Sirve a los DOS consumos de RN4 con una sola función:
+ * - el pago nuevo (un solo pago, remanente = su monto) contra las cuotas impagas;
+ * - el crédito existente (varios pagos con remanente) contra las cuotas recién
+ *   generadas por el cron.
+ *
+ * Lo que no entra en ninguna cuota queda como remanente de su pago: ESO es el saldo a
+ * favor — un derivado, no una columna. Remanentes ≤ 0 se saltean (defensivo).
+ */
+export function allocateGreedy(
+  payments: readonly PaymentRemainder[],
+  charges: readonly ChargeRemainder[],
+): AllocationDraft[] {
+  const out: AllocationDraft[] = [];
+
+  let chargeIndex = 0;
+  let chargeLeft = charges.length > 0 ? charges[0].remaining : ZERO;
+
+  const advance = () => {
+    chargeIndex += 1;
+    chargeLeft = chargeIndex < charges.length ? charges[chargeIndex].remaining : ZERO;
+  };
+
+  for (const payment of payments) {
+    let paymentLeft = payment.remaining;
+
+    while (paymentLeft.greaterThan(ZERO) && chargeIndex < charges.length) {
+      if (chargeLeft.lessThanOrEqualTo(ZERO)) {
+        advance();
+        continue;
+      }
+
+      const take = Prisma.Decimal.min(paymentLeft, chargeLeft);
+      out.push({
+        paymentId: payment.paymentId,
+        chargeId: charges[chargeIndex].chargeId,
+        amount: take,
+      });
+      paymentLeft = paymentLeft.minus(take);
+      chargeLeft = chargeLeft.minus(take);
+    }
+  }
+
+  return out;
+}
+
+/**
+ * Las invariantes duras de una imputación EDITADA A MANO (HU4.3: "editable"). Devuelve
+ * el mensaje del error o `null` si es válida; el servicio la corre DENTRO de la
+ * transacción, con los remanentes leídos ahí mismo.
+ */
+export function validateAllocations(
+  paymentAmount: Money,
+  allocations: readonly { chargeId: string; amount: Money }[],
+  remainingByCharge: ReadonlyMap<string, Money>,
+): string | null {
+  const seen = new Set<string>();
+
+  for (const allocation of allocations) {
+    if (seen.has(allocation.chargeId)) {
+      return "Hay dos imputaciones a la misma cuota.";
+    }
+    seen.add(allocation.chargeId);
+
+    if (allocation.amount.lessThanOrEqualTo(ZERO)) {
+      return "Cada imputación tiene que ser mayor a cero.";
+    }
+
+    const remaining = remainingByCharge.get(allocation.chargeId);
+    if (remaining === undefined) {
+      return "Una de las cuotas no existe o no es de este alumno.";
+    }
+    if (allocation.amount.greaterThan(remaining)) {
+      return "Una imputación supera lo que falta pagar de su cuota.";
+    }
+  }
+
+  const total = sumMoney(allocations.map((a) => a.amount));
+  if (total.greaterThan(paymentAmount)) {
+    return "Las imputaciones suman más que el pago.";
+  }
+
+  return null;
 }

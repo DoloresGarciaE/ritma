@@ -148,6 +148,46 @@ export async function makeCharge(
   });
 }
 
+/** Un pago, por el camino crudo. Default: $18.000 ARS en efectivo, pagado 2026-07-05. */
+export async function makePayment(
+  orgId: string,
+  studentId: string,
+  extra: {
+    amount?: number;
+    currency?: string;
+    method?: "CASH" | "TRANSFER" | "OTHER";
+    receivedBy?: "STUDIO" | "TEACHER";
+    paidAt?: string;
+    attachmentKey?: string | null;
+  } = {},
+) {
+  return db.payment.create({
+    data: {
+      orgId,
+      studentId,
+      amount: extra.amount ?? 18000,
+      currency: extra.currency ?? "ARS",
+      method: extra.method ?? "CASH",
+      receivedBy: extra.receivedBy ?? "STUDIO",
+      paidAt: new Date(`${extra.paidAt ?? "2026-07-05"}T00:00:00.000Z`),
+      attachmentKey: extra.attachmentKey ?? null,
+      receiptToken: randomUUID(),
+    },
+  });
+}
+
+/** Una imputación pago→cuota, por el camino crudo. */
+export async function makeAllocation(
+  orgId: string,
+  paymentId: string,
+  chargeId: string,
+  amount = 18000,
+) {
+  return db.paymentAllocation.create({
+    data: { orgId, paymentId, chargeId, amount },
+  });
+}
+
 /** Un alumno en una org, por el camino crudo. `searchName` se calcula igual que el servicio. */
 export async function makeStudent(
   orgId: string,

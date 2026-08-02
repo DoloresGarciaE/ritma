@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { db } from "@/lib/db";
+import { createPayment } from "@/server/services/payments";
 import { runGenerateCharges } from "@/server/system/generate-charges";
 import { runMarkOverdue } from "@/server/system/mark-overdue";
 
@@ -130,6 +131,39 @@ describe("runGenerateCharges", () => {
 
   it("un período malformado corta antes de tocar la base", async () => {
     await expect(runGenerateCharges("julio")).rejects.toThrow(/período inválido/);
+  });
+
+  it("S4/RN4: tras generar, el saldo a favor cubre las cuotas nuevas — y re-correr no duplica", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-08-01T12:00:00Z"));
+
+    const org = await makeOrg("Danzas Malena");
+    const student = await makeStudent(org.id, "Valentina Ruiz");
+    const group = await makeGroup(org.id, "Árabe inicial");
+    await makeEnrollment(org.id, student.id, group.id, { price: 18000, startDate: "2026-06-01" });
+
+    // Pagó por adelantado: $20.000 de crédito puro (todavía no existe ninguna cuota).
+    await createPayment(org.id, {
+      studentId: student.id,
+      amount: 20000,
+      method: "TRANSFER",
+      paidAt: "2026-07-28",
+    });
+
+    const first = await runGenerateCharges("2026-08");
+    expect(first).toMatchObject({ created: 1, creditsApplied: 1 });
+
+    const charge = await db.charge.findFirstOrThrow({ where: { period: "2026-08" } });
+    expect(charge.status).toBe("PAID"); // el crédito la cubrió solo
+    const allocations = await db.paymentAllocation.findMany({ where: { chargeId: charge.id } });
+    expect(allocations).toHaveLength(1);
+    expect(allocations[0].amount.toNumber()).toBe(18000);
+
+    // La idempotencia del cron sigue INTACTA con el crédito adentro (mandato S4).
+    const second = await runGenerateCharges("2026-08");
+    expect(second).toMatchObject({ created: 0, skipped: 1, creditsApplied: 0 });
+    expect(await db.paymentAllocation.count()).toBe(1);
+    expect((await db.charge.findUniqueOrThrow({ where: { id: charge.id } })).status).toBe("PAID");
   });
 });
 

@@ -1,6 +1,7 @@
 import { forSystem } from "@/lib/db";
 import { civilToDb, dbToCivil, isPeriod, periodOf, todayInTz } from "@/lib/dates";
 import { generateCharges } from "@/server/services/billing";
+import { applyStudentCredit } from "@/server/services/payments";
 
 /**
  * Job mensual (RN1): genera las cuotas del período para TODAS las organizaciones.
@@ -24,6 +25,8 @@ export type GenerateChargesSummary = {
   created: number;
   /** Cuotas que ya existían (el upsert las dejó como estaban). */
   skipped: number;
+  /** Imputaciones de crédito aplicadas a las cuotas nuevas (RN4, S4). */
+  creditsApplied: number;
 };
 
 export async function runGenerateCharges(period?: string): Promise<GenerateChargesSummary> {
@@ -39,6 +42,7 @@ export async function runGenerateCharges(period?: string): Promise<GenerateCharg
 
   let created = 0;
   let skipped = 0;
+  let creditsApplied = 0;
 
   for (const org of orgs) {
     const orgPeriod = period ?? periodOf(todayInTz(org.timezone));
@@ -95,7 +99,22 @@ export async function runGenerateCharges(period?: string): Promise<GenerateCharg
       if (existing.has(draft.enrollmentId)) skipped += 1;
       else created += 1;
     }
+
+    // RN4 (S4): tras generar, el saldo a favor se aplica a las cuotas nuevas. Se intenta
+    // por cada alumno CON pagos (el servicio no escribe nada si no hay crédito ni cuotas
+    // abiertas): así el job no hace aritmética de plata — esa es toda del motor. La
+    // operación va por withOrg (es per-org); forSystem solo enumera.
+    const orgToday = todayInTz(org.timezone);
+    const paidStudents = await system.payment.findMany({
+      where: { orgId: org.id },
+      select: { studentId: true },
+      distinct: ["studentId"],
+    });
+    for (const { studentId } of paidStudents) {
+      const result = await applyStudentCredit(org.id, studentId, orgToday);
+      creditsApplied += result.applied;
+    }
   }
 
-  return { orgs: orgs.length, created, skipped };
+  return { orgs: orgs.length, created, skipped, creditsApplied };
 }
