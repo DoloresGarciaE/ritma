@@ -96,44 +96,53 @@ async function paymentRemaindersOf(client: OrgClient, studentId: string) {
     .filter((row) => row.remaining.greaterThan(ZERO));
 }
 
+type ChargeForRecompute = {
+  id: string;
+  amount: Money;
+  status: ChargeStatusValue;
+  /** Fecha civil. */
+  dueDate: string;
+  /** El total imputado DESPUÉS de la escritura de esta transacción. */
+  newAllocated: Money;
+};
+
 /**
  * Recalcula el estado de las cuotas tocadas por LA ÚNICA fuente de verdad
- * (`recomputeChargeStatus`, RN3). Corre dentro de la transacción del caller.
+ * (`recomputeChargeStatus`, RN3) y escribe solo los que cambian.
+ *
+ * Recibe los datos YA LEÍDOS por el caller dentro de la transacción — cero re-lecturas:
+ * una transacción interactiva contra Neon paga cada roundtrip en latencia real, y la
+ * versión que re-leía cuota por cuota se pasaba del timeout con un pago multi-cuota.
  */
-async function recomputeCharges(
+async function applyRecomputedStatuses(
   client: OrgClient,
-  chargeIds: Iterable<string>,
+  charges: ChargeForRecompute[],
   today: string,
 ): Promise<void> {
-  for (const chargeId of new Set(chargeIds)) {
-    const charge = await client.charge.findUniqueOrThrow({
-      where: { id: chargeId },
-      select: {
-        amount: true,
-        status: true,
-        dueDate: true,
-        allocations: { select: { amount: true } },
-      },
-    });
-
+  for (const charge of charges) {
     const status = recomputeChargeStatus(
-      {
-        amount: charge.amount as Money,
-        status: charge.status as ChargeStatusValue,
-        dueDate: dbToCivil(charge.dueDate),
-      },
-      sumMoney(charge.allocations.map((a) => a.amount)),
+      { amount: charge.amount, status: charge.status, dueDate: charge.dueDate },
+      charge.newAllocated,
       today,
     );
 
     if (status !== charge.status) {
       await client.charge.update({
-        where: { id: chargeId },
+        where: { id: charge.id },
         data: { status },
         select: { id: true },
       });
     }
   }
+}
+
+/** Suma los borradores de imputación por cuota (varios pagos pueden tocar la misma). */
+function draftTotalsByCharge(drafts: readonly { chargeId: string; amount: Money }[]) {
+  const totals = new Map<string, Money>();
+  for (const draft of drafts) {
+    totals.set(draft.chargeId, (totals.get(draft.chargeId) ?? ZERO).add(draft.amount));
+  }
+  return totals;
 }
 
 /**
@@ -148,84 +157,102 @@ async function recomputeCharges(
 export async function createPayment(orgId: string, input: PaymentInput): Promise<{ id: string }> {
   const org = withOrg(orgId);
 
-  return org.$transaction(async (tx) => {
-    const scoped = tx as unknown as OrgClient;
+  return org.$transaction(
+    async (tx) => {
+      const scoped = tx as unknown as OrgClient;
 
-    const student = await scoped.student.findUnique({
-      where: { id: input.studentId },
-      select: { id: true },
-    });
-    if (!student) throw new Error("El alumno no pertenece a esta organización.");
+      const student = await scoped.student.findUnique({
+        where: { id: input.studentId },
+        select: { id: true },
+      });
+      if (!student) throw new Error("El alumno no pertenece a esta organización.");
 
-    const settings = await scoped.organization.findUniqueOrThrow({
-      where: { id: orgId },
-      select: { currency: true, timezone: true },
-    });
-    const today = todayInTz(settings.timezone);
+      const settings = await scoped.organization.findUniqueOrThrow({
+        where: { id: orgId },
+        select: { currency: true, timezone: true },
+      });
+      const today = todayInTz(settings.timezone);
 
-    const amount = money(input.amount);
-    if (amount.lessThanOrEqualTo(ZERO)) {
-      throw new PaymentRuleError("El pago tiene que ser mayor a cero.");
-    }
+      const amount = money(input.amount);
+      if (amount.lessThanOrEqualTo(ZERO)) {
+        throw new PaymentRuleError("El pago tiene que ser mayor a cero.");
+      }
 
-    const open = await openChargesOf(scoped, input.studentId);
-    const openWithRemainder = open.filter((charge) => charge.remaining.greaterThan(ZERO));
+      const open = await openChargesOf(scoped, input.studentId);
+      const openWithRemainder = open.filter((charge) => charge.remaining.greaterThan(ZERO));
 
-    let drafts: { chargeId: string; amount: Money }[];
-    if (input.allocations) {
-      const manual = input.allocations.map((allocation) => ({
-        chargeId: allocation.chargeId,
-        amount: money(allocation.amount),
-      }));
-      // El mapa de remanentes sale de las cuotas DEL ALUMNO: una cuota ajena (de otra
-      // org u otro alumno) no está y el motor la rechaza.
-      const remainingByCharge = new Map(
-        openWithRemainder.map((charge) => [charge.id, charge.remaining]),
+      let drafts: { chargeId: string; amount: Money }[];
+      if (input.allocations) {
+        const manual = input.allocations.map((allocation) => ({
+          chargeId: allocation.chargeId,
+          amount: money(allocation.amount),
+        }));
+        // El mapa de remanentes sale de las cuotas DEL ALUMNO: una cuota ajena (de otra
+        // org u otro alumno) no está y el motor la rechaza.
+        const remainingByCharge = new Map(
+          openWithRemainder.map((charge) => [charge.id, charge.remaining]),
+        );
+        const error = validateAllocations(amount, manual, remainingByCharge);
+        if (error) throw new PaymentRuleError(error);
+        drafts = manual;
+      } else {
+        drafts = allocateGreedy(
+          [{ paymentId: "nuevo", remaining: amount }],
+          openWithRemainder.map((charge) => ({
+            chargeId: charge.id,
+            remaining: charge.remaining,
+          })),
+        ).map((draft) => ({ chargeId: draft.chargeId, amount: draft.amount }));
+      }
+
+      const payment = await scoped.payment.create({
+        data: {
+          orgId,
+          studentId: input.studentId,
+          amount,
+          currency: settings.currency,
+          method: input.method,
+          receivedBy: input.receivedBy ?? "STUDIO",
+          paidAt: civilToDb(input.paidAt),
+          receiptToken: generateReceiptToken(),
+          ...(drafts.length > 0
+            ? {
+                allocations: {
+                  // orgId EXPLÍCITO: la escritura anidada no pasa por el hook del hijo.
+                  create: drafts.map((draft) => ({
+                    orgId,
+                    chargeId: draft.chargeId,
+                    amount: draft.amount,
+                  })),
+                },
+              }
+            : {}),
+        },
+        select: { id: true },
+      });
+
+      // El recompute reusa lo YA leído: imputado nuevo = (monto − remanente) + borrador.
+      const draftTotals = draftTotalsByCharge(drafts);
+      await applyRecomputedStatuses(
+        scoped,
+        open
+          .filter((charge) => draftTotals.has(charge.id))
+          .map((charge) => ({
+            id: charge.id,
+            amount: charge.amount,
+            status: charge.status,
+            dueDate: charge.dueDate,
+            newAllocated: charge.amount.minus(charge.remaining).add(draftTotals.get(charge.id)!),
+          })),
+        today,
       );
-      const error = validateAllocations(amount, manual, remainingByCharge);
-      if (error) throw new PaymentRuleError(error);
-      drafts = manual;
-    } else {
-      drafts = allocateGreedy(
-        [{ paymentId: "nuevo", remaining: amount }],
-        openWithRemainder.map((charge) => ({ chargeId: charge.id, remaining: charge.remaining })),
-      ).map((draft) => ({ chargeId: draft.chargeId, amount: draft.amount }));
-    }
 
-    const payment = await scoped.payment.create({
-      data: {
-        orgId,
-        studentId: input.studentId,
-        amount,
-        currency: settings.currency,
-        method: input.method,
-        receivedBy: input.receivedBy ?? "STUDIO",
-        paidAt: civilToDb(input.paidAt),
-        receiptToken: generateReceiptToken(),
-        ...(drafts.length > 0
-          ? {
-              allocations: {
-                // orgId EXPLÍCITO: la escritura anidada no pasa por el hook del hijo.
-                create: drafts.map((draft) => ({
-                  orgId,
-                  chargeId: draft.chargeId,
-                  amount: draft.amount,
-                })),
-              },
-            }
-          : {}),
-      },
-      select: { id: true },
-    });
-
-    await recomputeCharges(
-      scoped,
-      drafts.map((draft) => draft.chargeId),
-      today,
-    );
-
-    return payment;
-  });
+      return payment;
+    },
+    // Neon queda a un océano del dev local: el default de 5 s se queda corto con la
+    // latencia real. Los roundtrips ya están minimizados; esto es defensa, no excusa.
+    { timeout: 15000 },
+  );
 }
 
 /**
@@ -240,31 +267,61 @@ export async function deletePayment(
 ): Promise<{ attachmentKey: string | null }> {
   const org = withOrg(orgId);
 
-  return org.$transaction(async (tx) => {
-    const scoped = tx as unknown as OrgClient;
+  return org.$transaction(
+    async (tx) => {
+      const scoped = tx as unknown as OrgClient;
 
-    const payment = await scoped.payment.findUnique({
-      where: { id: paymentId },
-      select: { id: true, attachmentKey: true, allocations: { select: { chargeId: true } } },
-    });
-    if (!payment) throw new Error("El pago no pertenece a esta organización.");
+      const payment = await scoped.payment.findUnique({
+        where: { id: paymentId },
+        select: { id: true, attachmentKey: true, allocations: { select: { chargeId: true } } },
+      });
+      if (!payment) throw new Error("El pago no pertenece a esta organización.");
 
-    const settings = await scoped.organization.findUniqueOrThrow({
-      where: { id: orgId },
-      select: { timezone: true },
-    });
+      const settings = await scoped.organization.findUniqueOrThrow({
+        where: { id: orgId },
+        select: { timezone: true },
+      });
 
-    await scoped.payment.delete({ where: { id: paymentId }, select: { id: true } });
+      // Las cuotas tocadas, leídas UNA vez ANTES del delete; el imputado nuevo excluye
+      // las imputaciones de ESTE pago (que se van por cascada).
+      const touchedIds = payment.allocations.map((allocation) => allocation.chargeId);
+      const touched =
+        touchedIds.length > 0
+          ? await scoped.charge.findMany({
+              where: { id: { in: touchedIds } },
+              select: {
+                id: true,
+                amount: true,
+                status: true,
+                dueDate: true,
+                allocations: { select: { paymentId: true, amount: true } },
+              },
+            })
+          : [];
 
-    await recomputeCharges(
-      scoped,
-      payment.allocations.map((allocation) => allocation.chargeId),
-      todayInTz(settings.timezone),
-    );
+      await scoped.payment.delete({ where: { id: paymentId }, select: { id: true } });
 
-    // El caller borra el objeto de R2 (best-effort) DESPUÉS de que la base confirmó.
-    return { attachmentKey: payment.attachmentKey };
-  });
+      await applyRecomputedStatuses(
+        scoped,
+        touched.map((charge) => ({
+          id: charge.id,
+          amount: charge.amount as Money,
+          status: charge.status as ChargeStatusValue,
+          dueDate: dbToCivil(charge.dueDate),
+          newAllocated: sumMoney(
+            charge.allocations
+              .filter((allocation) => allocation.paymentId !== paymentId)
+              .map((allocation) => allocation.amount),
+          ),
+        })),
+        todayInTz(settings.timezone),
+      );
+
+      // El caller borra el objeto de R2 (best-effort) DESPUÉS de que la base confirmó.
+      return { attachmentKey: payment.attachmentKey };
+    },
+    { timeout: 15000 },
+  );
 }
 
 /** El adjunto del pago (lectura chica para las actions de R2). `null` si es ajeno. */
@@ -304,39 +361,51 @@ export async function applyStudentCredit(
 ): Promise<{ applied: number }> {
   const org = withOrg(orgId);
 
-  return org.$transaction(async (tx) => {
-    const scoped = tx as unknown as OrgClient;
+  return org.$transaction(
+    async (tx) => {
+      const scoped = tx as unknown as OrgClient;
 
-    const remainders = await paymentRemaindersOf(scoped, studentId);
-    if (remainders.length === 0) return { applied: 0 };
+      const remainders = await paymentRemaindersOf(scoped, studentId);
+      if (remainders.length === 0) return { applied: 0 };
 
-    const open = await openChargesOf(scoped, studentId);
-    const openWithRemainder = open.filter((charge) => charge.remaining.greaterThan(ZERO));
-    if (openWithRemainder.length === 0) return { applied: 0 };
+      const open = await openChargesOf(scoped, studentId);
+      const openWithRemainder = open.filter((charge) => charge.remaining.greaterThan(ZERO));
+      if (openWithRemainder.length === 0) return { applied: 0 };
 
-    const drafts = allocateGreedy(
-      remainders,
-      openWithRemainder.map((charge) => ({ chargeId: charge.id, remaining: charge.remaining })),
-    );
-    if (drafts.length === 0) return { applied: 0 };
+      const drafts = allocateGreedy(
+        remainders,
+        openWithRemainder.map((charge) => ({ chargeId: charge.id, remaining: charge.remaining })),
+      );
+      if (drafts.length === 0) return { applied: 0 };
 
-    await scoped.paymentAllocation.createMany({
-      data: drafts.map((draft) => ({
-        orgId,
-        paymentId: draft.paymentId,
-        chargeId: draft.chargeId,
-        amount: draft.amount,
-      })),
-    });
+      await scoped.paymentAllocation.createMany({
+        data: drafts.map((draft) => ({
+          orgId,
+          paymentId: draft.paymentId,
+          chargeId: draft.chargeId,
+          amount: draft.amount,
+        })),
+      });
 
-    await recomputeCharges(
-      scoped,
-      drafts.map((draft) => draft.chargeId),
-      today,
-    );
+      const draftTotals = draftTotalsByCharge(drafts);
+      await applyRecomputedStatuses(
+        scoped,
+        open
+          .filter((charge) => draftTotals.has(charge.id))
+          .map((charge) => ({
+            id: charge.id,
+            amount: charge.amount,
+            status: charge.status,
+            dueDate: charge.dueDate,
+            newAllocated: charge.amount.minus(charge.remaining).add(draftTotals.get(charge.id)!),
+          })),
+        today,
+      );
 
-    return { applied: drafts.length };
-  });
+      return { applied: drafts.length };
+    },
+    { timeout: 15000 },
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
