@@ -31,6 +31,12 @@ const eslintConfig = defineConfig([
                 "forSystem() es la puerta cross-org de los crons y vive SOLO en src/server/system/. Todo lo demás pasa por withOrg(orgId).",
             },
             {
+              name: "@/lib/db",
+              importNames: ["forPublic"],
+              message:
+                "forPublic() es la puerta sin sesión del comprobante público y vive SOLO en src/server/public/. Todo lo demás pasa por withOrg(orgId).",
+            },
+            {
               name: "@/generated/prisma/client",
               importNames: ["PrismaClient"],
               message:
@@ -57,9 +63,46 @@ const eslintConfig = defineConfig([
                 "También en los jobs de sistema: el acceso cross-org es forSystem(), no el `db` crudo.",
             },
             {
+              name: "@/lib/db",
+              importNames: ["forPublic"],
+              message:
+                "forPublic() es del comprobante público (src/server/public/). En los jobs, forSystem().",
+            },
+            {
               name: "@/generated/prisma/client",
               importNames: ["PrismaClient"],
               message: "Instanciá el cliente solo en src/lib/db.ts. En los jobs, usá forSystem().",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    // S5 — la superficie pública: acá forPublic() es legítimo (el comprobante se resuelve
+    // por token, sin sesión), pero el `db` crudo y la puerta de los crons siguen prohibidos.
+    files: ["src/server/public/**"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "@/lib/db",
+              importNames: ["db"],
+              message:
+                "También en la superficie pública: el acceso sin sesión es forPublic(), no el `db` crudo.",
+            },
+            {
+              name: "@/lib/db",
+              importNames: ["forSystem"],
+              message: "forSystem() es de los crons (src/server/system/). Acá usá forPublic().",
+            },
+            {
+              name: "@/generated/prisma/client",
+              importNames: ["PrismaClient"],
+              message:
+                "Instanciá el cliente solo en src/lib/db.ts. En la superficie pública, usá forPublic().",
             },
           ],
         },

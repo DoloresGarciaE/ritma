@@ -59,8 +59,7 @@ ritma/
 | `BETTER_AUTH_SECRET` / `BETTER_AUTH_URL` | Auth | F0.4 |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | OAuth Google | F0.4 |
 | `R2_ACCOUNT_ID` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_BUCKET` | Cloudflare R2 | F1·S4 |
-| `RESEND_API_KEY` | Resend | F1·S5 |
-| `RECEIPT_TOKEN_SECRET` | Firma de comprobantes | F1·S5 |
+| `RESEND_API_KEY` / `RESEND_FROM` | Resend (email; sin la key, el feature se apaga) | F1·S5 |
 | `CRON_SECRET` | Protección de endpoints de cron | F1·S3 |
 | `SENTRY_DSN` | Sentry | F0.7 |
 | `NEXT_PUBLIC_APP_URL` | URLs absolutas (comprobantes, emails) | F0.1 |
@@ -142,10 +141,10 @@ ritma/
 - **DoD:** cronometrado en el teléfono, registrar un pago toma < 15 segundos (pendiente de tu recorrido sobre el preview); los tests de imputación cubren los casos de RN4. ✓ (294 tests)
 
 ### S5 — Comprobantes y recordatorios
-- [ ] `receiptToken` firmado (HMAC con `RECEIPT_TOKEN_SECRET`); página pública `/r/[token]` según Marca §9.1, con pie "Generado con Ritma".
-- [ ] Imagen compartible (`@vercel/og`) + Web Share API; toast "Pago registrado · Compartir comprobante".
-- [ ] Plantilla de recordatorio editable en Ajustes (Marca §4.2); builder de link `wa.me`; envío por email (Resend); `ReminderLog`.
-- **DoD:** el link del comprobante abre bien en WhatsApp de un teléfono ajeno; el recordatorio llega pre-armado con nombre, período, monto y alias.
+- [x] `receiptToken` **opaco almacenado** (aleatorio de 192 bits, `@unique`; decisión S5 — reemplaza al HMAC con `RECEIPT_TOKEN_SECRET`: revocable rotándolo, sin secretos que administrar); página pública `/r/[token]` según Marca §9.1, con pie "Generado con Ritma", por la puerta con nombre `forPublic()` (solo `server/public/`, ESLint). Acción "revocar link" (= rotar) en el detalle del pago.
+- [x] Imagen compartible (`@vercel/og`, on-demand por la misma puerta) + Web Share API; toast "Pago registrado · Compartir comprobante" (§3.9).
+- [x] Plantilla de recordatorio editable en Ajustes con vista previa en vivo (§3.16; default = ejemplo normativo de Marca §4.2, variables {nombre} {periodo} {monto} {alias} + campo `paymentAlias`); builder de link `wa.me` en Deudores y ficha (dos acciones por fila — nota S5 en §3.5); envío por email (Resend, detrás de guarda de env como R2); `ReminderLog` (WHATSAPP_LINK mejor-esfuerzo al disparar / EMAIL al aceptarse) + historial en la ficha (cierra HU2.2).
+- **DoD:** el link del comprobante abre bien en WhatsApp de un teléfono ajeno (pendiente de tu prueba con los dos teléfonos sobre el preview); el recordatorio llega pre-armado con nombre, período, monto y alias. ✓ (333 tests)
 
 ### S6 — Dashboard, PWA y pulido
 - [ ] Dashboard (HU7.1): cobrado, pendiente, deudores, clases de hoy — cards de métrica navegables.

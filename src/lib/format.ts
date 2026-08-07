@@ -127,6 +127,13 @@ export function formatPeriod(period: string): string {
   return `${MONTHS_FULL[Number(month) - 1]} ${year}`;
 }
 
+/** `"2026-05-12"` → `"12 de mayo de 2026"` — el formato de DOCUMENTOS (§4.2): comprobantes. */
+export function formatDocumentDate(date: string): string {
+  const [year] = date.split("-");
+  const { day, monthIndex } = partsOf(date);
+  return `${day} de ${MONTHS_FULL[monthIndex].toLowerCase()} de ${year}`;
+}
+
 /** `("19:00", 90)` → `"19:00–20:30"`. Cruza medianoche sin drama: `("23:30", 90)` → `"23:30–01:00"`. */
 export function formatTimeRange(startTime: string, durationMin: number): string {
   const [hours, minutes] = startTime.split(":").map(Number);

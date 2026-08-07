@@ -132,22 +132,39 @@ async function main() {
   const { auth } = await import("../src/lib/auth");
 
   try {
+    // Alias en las dos orgs (S5): el DoD del recordatorio lo exige pre-armado. Malena
+    // usa la plantilla default de Marca §4.2 (reminderTemplate null); el estudio, una
+    // propia — así el seed ejercita los dos caminos.
     await db.organization.upsert({
       where: { id: ORG_INDEPENDIENTE },
-      update: { name: "Danzas Malena" },
+      update: { name: "Danzas Malena", paymentAlias: "malena.danzas" },
       create: {
         id: ORG_INDEPENDIENTE,
         name: "Danzas Malena",
         type: "INDEPENDENT",
+        paymentAlias: "malena.danzas",
         // currency, timezone y dueDay quedan en los defaults del schema
         // (ARS, America/Argentina/Buenos_Aires, 10): son los de HU1.2.
       },
     });
 
+    const COMPAS_TEMPLATE =
+      "Hola {nombre} 👋 Te acercamos el resumen de {periodo} del estudio: {monto}. " +
+      "Alias: {alias}. ¡Cualquier cosa nos escribís!";
     await db.organization.upsert({
       where: { id: ORG_ESTUDIO },
-      update: { name: "Estudio Compás" },
-      create: { id: ORG_ESTUDIO, name: "Estudio Compás", type: "STUDIO" },
+      update: {
+        name: "Estudio Compás",
+        paymentAlias: "compas.estudio.mp",
+        reminderTemplate: COMPAS_TEMPLATE,
+      },
+      create: {
+        id: ORG_ESTUDIO,
+        name: "Estudio Compás",
+        type: "STUDIO",
+        paymentAlias: "compas.estudio.mp",
+        reminderTemplate: COMPAS_TEMPLATE,
+      },
     });
 
     for (const { email, name, orgId, role } of SEED_USERS) {
@@ -518,6 +535,38 @@ async function main() {
       daysAgo: 2,
     });
 
+    // ── Recordatorios (S5) ──────────────────────────────────────────────────
+    // Un par de disparos ya registrados, así la ficha muestra historial sin preparar
+    // nada a mano. Idempotencia: skip si el alumno ya tiene un log de ese canal.
+    async function seedReminder(
+      orgId: string,
+      studentName: string,
+      channel: "WHATSAPP_LINK" | "EMAIL",
+      daysAgo: number,
+    ) {
+      const student = await db.student.findFirst({ where: { orgId, name: studentName } });
+      if (!student) throw new Error(`Seed: no existe el alumno "${studentName}"`);
+
+      const existing = await db.reminderLog.findFirst({
+        where: { orgId, studentId: student.id, channel },
+      });
+      if (existing) return;
+
+      await db.reminderLog.create({
+        data: {
+          orgId,
+          studentId: student.id,
+          channel,
+          sentAt: new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000),
+        },
+      });
+    }
+
+    // Tomás debe (parcial de S4): un recordatorio por WhatsApp de hace unos días.
+    await seedReminder(ORG_ESTUDIO, "Tomás Quiroga", "WHATSAPP_LINK", 4);
+    // Valentina con su drop-in parcial: le llegó uno por email.
+    await seedReminder(ORG_INDEPENDIENTE, "Valentina Ruiz", "EMAIL", 2);
+
     const orgs = await db.organization.findMany({
       orderBy: { name: "asc" },
       include: {
@@ -557,7 +606,8 @@ async function main() {
         `inscripciones: ${await db.enrollment.count()} · ` +
         `cuotas: ${await db.charge.count()} (${statusSummary}) · ` +
         `pagos: ${await db.payment.count()} · ` +
-        `imputaciones: ${await db.paymentAllocation.count()}\n` +
+        `imputaciones: ${await db.paymentAllocation.count()} · ` +
+        `recordatorios: ${await db.reminderLog.count()}\n` +
         `Contraseña de desarrollo: ${DEV_PASSWORD}\n`,
     );
   } finally {

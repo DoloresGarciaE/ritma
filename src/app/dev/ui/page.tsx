@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
 import { Check, Plus } from "lucide-react";
 
+import { RitmaIsotipo } from "@/components/brand/ritma-isotipo";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, MetricCard } from "@/components/ui/card";
 import { Fab } from "@/components/ui/fab";
-import { AmountInput, Field, Input } from "@/components/ui/input";
+import { AmountInput, Field, Input, Textarea } from "@/components/ui/input";
 import { SessionBlock } from "@/components/ui/session-block";
 import { StatusBadge, type InstallmentStatus } from "@/components/ui/status-badge";
 import { Switch } from "@/components/ui/switch";
@@ -102,6 +103,16 @@ function Showcase({ title }: { title: string }) {
 
           <Field label="Monto">
             <AmountInput placeholder="0" disabled />
+          </Field>
+
+          <Field
+            label="Plantilla de recordatorio"
+            helpText="Multilínea de §3.2 (S5). Variables: {nombre} {periodo} {monto} {alias}"
+          >
+            <Textarea
+              defaultValue={"Hola {nombre} 👋 Te paso el resumen de {periodo}: {monto}."}
+              rows={3}
+            />
           </Field>
         </div>
       </Section>
@@ -247,6 +258,19 @@ function Showcase({ title }: { title: string }) {
 
       <Section title="Editor de franjas (§3.15)">
         <SlotEditorDemo />
+      </Section>
+
+      {/* ── S5 ───────────────────────────────────────────────────────────────── */}
+
+      <Section title="Isotipo (Marca §5.2: espacios reducidos y sello del comprobante)">
+        <div className="flex items-center gap-6 rounded-card border border-border bg-surface p-3">
+          <RitmaIsotipo className="h-7" />
+          <RitmaIsotipo className="h-4" />
+          <span className="inline-flex items-center gap-1.5 text-xs text-text-secondary">
+            <RitmaIsotipo className="h-4" />
+            Generado con Ritma
+          </span>
+        </div>
       </Section>
     </div>
   );

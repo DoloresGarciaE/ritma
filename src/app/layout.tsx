@@ -15,6 +15,9 @@ const spaceGrotesk = Space_Grotesk({
 });
 
 export const metadata: Metadata = {
+  // La base de toda URL de metadatos (S5): sin esto, un path relativo en openGraph es
+  // ERROR DE BUILD en Next 16. Misma fuente que los links compartidos (lib/receipts.ts).
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"),
   title: "Ritma",
   description: "Gestión de agenda, alumnos y cobranzas para docentes y estudios.",
 };

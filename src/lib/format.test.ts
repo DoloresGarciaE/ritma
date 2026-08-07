@@ -4,6 +4,7 @@ import {
   formatFullDayDate,
   formatListDate,
   formatMoney,
+  formatDocumentDate,
   formatPeriod,
   formatTimeRange,
   formatWeekRange,
@@ -56,6 +57,14 @@ describe("formatPeriod", () => {
     expect(formatPeriod("2026-03")).toBe("Marzo 2026");
     expect(formatPeriod("2026-07")).toBe("Julio 2026");
     expect(formatPeriod("2027-01")).toBe("Enero 2027");
+  });
+});
+
+describe("formatDocumentDate", () => {
+  it('es el "12 de mayo de 2026" de documentos (§4.2): mes en minúscula, día sin cero', () => {
+    expect(formatDocumentDate("2026-05-12")).toBe("12 de mayo de 2026");
+    expect(formatDocumentDate("2026-08-01")).toBe("1 de agosto de 2026");
+    expect(formatDocumentDate("2027-12-31")).toBe("31 de diciembre de 2027");
   });
 });
 

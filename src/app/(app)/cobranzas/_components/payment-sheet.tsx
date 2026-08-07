@@ -7,6 +7,7 @@ import { AmountInput, Field, Input } from "@/components/ui/input";
 import { ActionSheet, ActionSheetBody, ActionSheetFooter } from "@/components/ui/sheet";
 import { useToast } from "@/components/ui/toast";
 import { formatListDate, formatMoney, formatPeriod } from "@/lib/format";
+import { shareLink } from "@/lib/share";
 import { cn } from "@/lib/utils";
 import type { PaymentContext } from "@/server/services/payments";
 
@@ -166,11 +167,30 @@ export function PaymentSheet({
       }
 
       onOpenChange(false);
-      toast.notify("Pago registrado.");
+      // §3.9: "Pago registrado · Compartir comprobante" — el atajo de los 15 segundos
+      // (HU4.3 + HU5.1). La URL ya vino con el alta: navigator.share corre EN el tap,
+      // sin un await antes que se coma la activación del gesto (iOS la expira).
+      const shareUrl = state.receiptShareUrl;
+      toast.notify("Pago registrado.", {
+        ...(shareUrl
+          ? {
+              actionProps: {
+                children: "Compartir comprobante",
+                onClick: () => void shareReceipt(shareUrl),
+              },
+            }
+          : {}),
+      });
       if (attachmentWarning) {
         toast.error(`El pago se guardó, pero el comprobante no: ${attachmentWarning}`);
       }
     });
+  };
+
+  const shareReceipt = async (url: string) => {
+    const outcome = await shareLink(url, "Comprobante de pago");
+    if (outcome === "copied") toast.notify("Link copiado.");
+    if (outcome === "failed") toast.error("No se pudo compartir el link. Probá de nuevo.");
   };
 
   const uploadAttachment = async (paymentId: string, attachment: File): Promise<string | null> => {

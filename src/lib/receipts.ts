@@ -11,3 +11,14 @@ import { randomBytes } from "node:crypto";
 export function generateReceiptToken(): string {
   return randomBytes(24).toString("base64url");
 }
+
+/**
+ * URL ABSOLUTA del comprobante público: lo que se comparte por WhatsApp tiene que abrir
+ * desde cualquier teléfono, así que la base sale de `NEXT_PUBLIC_APP_URL` (F0.1), nunca
+ * de un path relativo. Sin la env (no debería pasar: está desde el día 1), localhost —
+ * visible al instante en vez de un link roto en silencio.
+ */
+export function receiptUrl(token: string): string {
+  const base = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  return `${base.replace(/\/$/, "")}/r/${token}`;
+}

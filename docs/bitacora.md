@@ -245,3 +245,38 @@ del diagnóstico. Se pueden borrar con Prisma Studio apuntando al branch de prod
   esperando aprobación para entrar a §8.
 - **Próximo:** S5 — comprobantes y recordatorios: la página pública `/r/[token]` (el
   `receiptToken` ya se genera), imagen compartible, plantilla de recordatorio y `wa.me`.
+
+## Semana 12 (agosto 2026) — comprobantes y recordatorios (S5)
+
+- **Hecho:** `feat/s5-receipts-reminders`: **la primera cara pública del producto.**
+  `ReminderLog` + `paymentAlias` (única migración del día) con su bloque de aislamiento;
+  **`forPublic()`** como segunda puerta con nombre (hermana de `forSystem()`, ESLint solo en
+  `server/public/`) y `getReceiptByToken` devolviendo EXACTAMENTE la pieza de Marca §9.1 — hay
+  un test que pinnea el shape campo por campo, y otro que prueba que el token de una org no
+  filtra nada de otra; página `/r/[token]` solo modo claro (`.light` forzado), isotipo nuevo en
+  `components/brand/`, `formatDocumentDate` ("12 de mayo de 2026", §4.2), 404 genérico en voz
+  de marca; **revocar = rotar el token** (el HMAC del plan quedó reemplazado: un token opaco
+  revocable no necesita secretos — doc actualizado); imagen OG on-demand (`next/og`, fuentes
+  TTF commiteadas, org + período + monto y SIN el alumno) + metadatos + `noindex` por meta
+  (robots.ts NO bloquea `/r/`: bloquearlo impediría leer el noindex) + `metadataBase` (sin él,
+  build error en Next 16); compartir con Web Share API /
+  copiar link desde el toast §3.9 ("Pago registrado · Compartir comprobante"), el detalle del
+  pago y el post-revocación; **plantilla de recordatorio** pura en `lib/reminders` (default =
+  ejemplo normativo de Marca §4.2, variables {nombre} {periodo} {monto} {alias}, typo queda
+  visible), editable en Ajustes con vista previa EN VIVO con datos reales (§3.16 nueva);
+  `wa.me` en cada fila de Deudores (dos acciones por fila — §3.5 versionada) y en la ficha,
+  como `<a>` pre-armado en el server (nunca window.open post-await) con log MEJOR ESFUERZO al
+  disparar; email vía Resend detrás de guarda de env (patrón R2, sin SDK: un POST), con la
+  misma plantilla pero SIN emojis (Marca §4: solo canales conversacionales) y log EMAIL
+  recién al aceptarse; historial en la ficha (cierra HU2.2) con `sentAt` instante → fecha
+  civil de la org (`civilDateOf`); seed con alias en las dos orgs, plantilla propia en el
+  estudio y dos recordatorios. **333 tests** (venían 294).
+- **Trabado:** Resend sin cuenta ni API key — el email quedó implementado pero apagado
+  (deshabilitado CON MOTIVO, §4.3); falta crear la cuenta, verificar el dominio del remitente
+  y cargar `RESEND_API_KEY` + `RESEND_FROM`. El header del email lleva
+  `public/brand/ritma-logotipo.png` (los clientes de email no renderizan SVG) generado desde
+  el SVG maestro. La agregación de deuda por alumno se movió a `debtorsForPeriod` (en Decimal,
+  vía `sumMoney`): la UI recibe números listos y jamás suma plata — la regla S4 aguantó la
+  primera tentación.
+- **Próximo:** S6 — dashboard, PWA y pulido; antes, el DoD de S5 con dos teléfonos sobre el
+  preview (link en WhatsApp ajeno + recordatorio pre-armado) y aprobar RN11/RN12.

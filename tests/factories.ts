@@ -204,3 +204,20 @@ export async function makeStudent(
     },
   });
 }
+
+/** Un recordatorio enviado, por el camino crudo. */
+export async function makeReminderLog(
+  orgId: string,
+  studentId: string,
+  extra: { channel?: "WHATSAPP_LINK" | "EMAIL"; chargeId?: string; sentAt?: Date } = {},
+) {
+  return db.reminderLog.create({
+    data: {
+      orgId,
+      studentId,
+      chargeId: extra.chargeId ?? null,
+      channel: extra.channel ?? "WHATSAPP_LINK",
+      sentAt: extra.sentAt ?? new Date("2026-07-10T15:00:00.000Z"),
+    },
+  });
+}

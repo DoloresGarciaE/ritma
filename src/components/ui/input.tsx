@@ -83,6 +83,28 @@ function Input({
   );
 }
 
+/** Multilínea con los mismos estilos de §3.2 (S5: la plantilla de recordatorio). */
+function Textarea({
+  className,
+  id,
+  "aria-invalid": ariaInvalid,
+  "aria-describedby": ariaDescribedBy,
+  ...props
+}: React.ComponentProps<"textarea">) {
+  const field = useContext(FieldContext);
+
+  return (
+    <textarea
+      data-slot="textarea"
+      id={id ?? field?.inputId}
+      aria-invalid={ariaInvalid ?? (field?.invalid || undefined)}
+      aria-describedby={ariaDescribedBy ?? (field?.hasMessage ? field.messageId : undefined)}
+      className={cn(controlStyles, "h-auto min-h-24 py-2.5", className)}
+      {...props}
+    />
+  );
+}
+
 type AmountInputProps = Omit<
   React.ComponentProps<"input">,
   "value" | "defaultValue" | "onChange" | "type" | "inputMode"
@@ -157,4 +179,4 @@ function AmountInput({
   );
 }
 
-export { AmountInput, Field, Input };
+export { AmountInput, Field, Input, Textarea };

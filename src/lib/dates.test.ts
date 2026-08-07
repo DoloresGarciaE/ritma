@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   addDays,
   addMonths,
+  civilDateOf,
   civilToDb,
   dateInPeriod,
   daysInPeriod,
@@ -146,5 +147,17 @@ describe("todayInTz", () => {
     vi.setSystemTime(new Date("2026-07-18T02:30:00Z"));
 
     expect(todayInTz("America/Springfield")).toBe("2026-07-17");
+  });
+});
+
+describe("civilDateOf", () => {
+  it("un instante UTC de madrugada es el día anterior en la zona de la org", () => {
+    const instant = new Date("2026-07-11T02:30:00Z");
+    expect(civilDateOf(instant, "America/Argentina/Buenos_Aires")).toBe("2026-07-10");
+    expect(civilDateOf(instant, "UTC")).toBe("2026-07-11");
+  });
+
+  it("una zona inválida cae al default AR en vez de tirar", () => {
+    expect(civilDateOf(new Date("2026-07-11T02:30:00Z"), "America/Springfield")).toBe("2026-07-10");
   });
 });

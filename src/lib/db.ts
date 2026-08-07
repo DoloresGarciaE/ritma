@@ -59,6 +59,7 @@ const SCOPE: Record<Prisma.ModelName, Scope> = {
   Charge: "orgId",
   Payment: "orgId",
   PaymentAllocation: "orgId",
+  ReminderLog: "orgId",
   // Membership tiene orgId y es dato del tenant. La lee la capa de permisos
   // (requireMember) a través de withOrg; el arranque de sesión la lee cruda en auth.ts.
   Membership: "orgId",
@@ -181,6 +182,23 @@ export function withOrg(orgId: string): OrgClient {
  *   quede en el código y el lint pueda distinguirla.
  */
 export function forSystem() {
+  return db;
+}
+
+/**
+ * La puerta PÚBLICA (S5): el comprobante `/r/[token]` se resuelve sin sesión, sin org y
+ * sin actor — como los crons, `withOrg` no puede representarlo. La autorización ES el
+ * token: opaco, de 192 bits, imposible de adivinar y revocable (se rota y el link viejo
+ * muere). Ver `server/public/receipts.ts`.
+ *
+ * - ESLint la permite SOLO en `src/server/public/` — la superficie pública entera queda
+ *   en un módulo con nombre, no en un `db` crudo suelto en una page.
+ * - Quien la usa responde con lo MÍNIMO que la pieza pública define (Marca §9.1) y 404
+ *   genérico para todo lo demás: un token inválido no aprende ni siquiera si existe.
+ * - Devuelve el mismo cliente crudo (mismo pool); el nombre existe para el lint y para
+ *   que la intención quede en el código.
+ */
+export function forPublic() {
   return db;
 }
 

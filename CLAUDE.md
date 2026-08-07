@@ -249,6 +249,50 @@ orden**, y la seguridad va primero:
 - **`receivedBy` (RN5):** existe siempre con default STUDIO; el selector solo aparece en una org
   STUDIO. `receivedById` (QUÉ profe) y `settlementId` llegan con S9.
 
+## Comprobantes y recordatorios (desde S5)
+
+- **`forPublic()` es la segunda excepción legítima al scoping** ([`src/lib/db.ts`](src/lib/db.ts)),
+  hermana de `forSystem()`: el comprobante `/r/[token]` se resuelve sin sesión ni org, y la
+  autorización ES el token (opaco, 192 bits, `@unique`). ESLint la permite SOLO en
+  `src/server/public/` — un único accesor `getReceiptByToken` que devuelve EXACTAMENTE la pieza
+  de Marca §9.1 y nada más (sin ids, adjuntos, historial ni contacto; hay un test que pinnea el
+  shape campo por campo). Token desconocido → null → 404 genérico que no confirma nada.
+- **Revocar = rotar el token** (`rotateReceiptToken`): el link compartido muere en el acto y nace
+  uno nuevo. No hay estado "revocado" ni HMAC ni `RECEIPT_TOKEN_SECRET`: un token que ya no está
+  en la base no autoriza nada. El token viaja al cliente solo al compartir (`receiptLinkAction`),
+  nunca en los payloads de listas.
+- **El comprobante es SOLO modo claro** (Color §5): la página fuerza `.light`, decida lo que
+  decida el sistema del que abre el link. Fecha en formato documento ("12 de mayo de 2026",
+  `formatDocumentDate`). El no-indexado es el `noindex` de la meta; ⚠️ [`robots.ts`](src/app/robots.ts)
+  NO bloquea `/r/` a propósito — bloquear el crawl impediría LEER el noindex y la URL podría
+  indexarse pelada ("indexed, though blocked by robots.txt").
+- **La imagen OG se genera al vuelo** (`opengraph-image.tsx` en el segmento, `next/og`) por la
+  MISMA puerta pública, y muestra org, período y monto — sin el alumno: un link reenviado no
+  tiene por qué decir quién pagó. satori no lee CSS vars ni `next/font`: colores con los hex del
+  modo claro de Color §8 (comentados como tokens) y TTF estáticos commiteados en `assets/fonts/`.
+  ⚠️ `metadataBase` vive en el layout raíz: sin él, un path relativo en metadata es ERROR DE
+  BUILD en Next 16.
+- **Plantilla de recordatorio** ([`src/lib/reminders.ts`](src/lib/reminders.ts)): render puro,
+  cuatro variables ({nombre} {periodo} {monto} {alias}) y ni una más; la default ES el ejemplo
+  normativo de Marca §4.2 con variables — y una org SIN alias usa la default SIN la frase de la
+  transferencia (jamás se manda "transferir a ."). Una variable desconocida queda VISIBLE sin
+  reemplazar (se ve en la vista previa de Ajustes, §3.16). `{monto}` = deuda del PERÍODO
+  COMPLETO en remanentes, agregada por alumno en `debtorsForPeriod` — el filtro de grupo de
+  Deudores no la achica (la UI jamás suma plata: regla S4). El EMAIL manda la misma plantilla
+  **sin emojis** (`withoutEmojis`): Marca §4 los permite solo en canales conversacionales.
+- **El log es honesto por diseño:** `WHATSAPP_LINK` se registra al DISPARAR el link `wa.me`
+  (mejor esfuerzo — la app no puede saber si el profe tocó "enviar"; F2 paso 3); `EMAIL` recién
+  cuando Resend ACEPTÓ el envío. El botón de WhatsApp es un `<a>` con el link pre-armado en el
+  server — nunca `window.open` después de un await: un popup blocker se lo comería.
+- **Email detrás de guarda de env** ([`src/lib/email.ts`](src/lib/email.ts), patrón R2): sin
+  `RESEND_API_KEY` la opción se muestra deshabilitada CON MOTIVO (§4.3, decisión S5) — no se
+  oculta, porque es "temporalmente no disponible", no un permiso. Sin SDK: un POST a la API.
+  `RESEND_FROM` define el remitente (dominio verificado); el header lleva
+  `public/brand/ritma-logotipo.png` (los clientes de email no renderizan SVG).
+- **`sentAt` es un INSTANTE** (evento), no fecha civil: la ficha lo convierte con `civilDateOf`
+  ([`src/lib/dates.ts`](src/lib/dates.ts)) — el mismo único punto de contacto con la zona que
+  `todayInTz`. El historial muestra fecha y canal, sin estados de "leído" inventados.
+
 ## CI/CD y observabilidad (desde F0.7)
 
 - **Un branch de Neon por entorno.** `production` → Vercel Production; `dev` → tu `.env.local`

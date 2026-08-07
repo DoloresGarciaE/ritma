@@ -220,7 +220,8 @@ model Organization {
   currency  String  @default("ARS")
   timezone  String  @default("America/Argentina/Buenos_Aires")
   dueDay    Int     @default(10)   // día de vencimiento de cuotas
-  reminderTemplate String?         // plantilla de recordatorio
+  reminderTemplate String?         // plantilla de recordatorio (null = default de Marca §4.2)
+  paymentAlias     String?         // alias/CBU de cobro: {alias} de la plantilla — S5
 }
 
 model User {
@@ -379,9 +380,9 @@ model ReminderLog {
   id        String   @id @default(cuid())
   orgId     String
   studentId String
-  chargeId  String?
-  channel   Channel   // WHATSAPP_LINK | EMAIL
-  sentAt    DateTime
+  chargeId  String?          // null en el MVP: el recordatorio es por la deuda del período
+  channel   ReminderChannel  // WHATSAPP_LINK | EMAIL — ver nota S5
+  sentAt    DateTime         // INSTANTE del disparo; se muestra como fecha civil de la org
 }
 ```
 
@@ -410,6 +411,14 @@ Toda tabla lleva además `createdAt` (`@default(now())`) y `updatedAt` (`@update
 3. **`receivedById` y `settlementId` diferidos a S9** (misma lógica que `teacherId` en la nota S2): sin `TeacherProfile` ni `Settlement` no hay a qué apuntar. `receivedBy` (el enum, RN5) existe desde S4 con default STUDIO; en una org independiente la UI ni lo muestra.
 4. **`paidAt` como fecha civil** (`@db.Date`, RN10); el orden fino de imputación lo desempata `createdAt`.
 5. **El saldo a favor NO es una columna**: es `sum(pagos) − sum(imputaciones)`, un derivado imposible de desincronizar. La cuota además nunca guarda "cuánto le pagaron": se deriva de sus imputaciones y el estado lo recalcula UNA sola función (RN3) en cada escritura.
+
+**Nota S5 (al construir comprobantes y recordatorios).** Cinco decisiones sobre el borrador, ya reflejadas arriba:
+
+1. **El token del comprobante es OPACO almacenado, no firmado**: aleatorio de 192 bits con `@unique`, generado en cada pago desde S4. Donde este doc decía "token firmado" (HU5.1, §13) léase "token no adivinable y revocable": la revocación es ROTAR el token (el link viejo muere al instante), cosa que un HMAC sin estado no puede hacer, y no hay `RECEIPT_TOKEN_SECRET` que administrar. La página pública entra por una puerta con nombre (`forPublic()`, solo `server/public/`, ESLint) y responde exactamente la pieza de Marca §9.1 — nada más.
+2. **`paymentAlias` en `Organization`** (arriba): HU5.2 y F2 piden el alias/CBU en la plantilla y el borrador no decía dónde vivía. Campo opcional; sin alias, la variable `{alias}` renderiza vacía.
+3. **El enum se llama `ReminderChannel`**, no `Channel`: un nombre global tan genérico chocaría con futuros canales de otras cosas. Valores como el borrador. `WHATSAPP_LINK` se registra AL DISPARAR el link (mejor esfuerzo, F2 paso 3 — la app no puede saber si el profe tocó "enviar"); `EMAIL`, recién cuando Resend aceptó el envío.
+4. **`sentAt` es un instante**, no fecha civil (`@db.Date`): es un evento, no un dato de negocio con "día de la org" — la ficha lo convierte a fecha civil de la org al mostrar (RN10). `chargeId` queda null en el MVP (el recordatorio es por la deuda del período, no por cuota).
+5. **`ReminderLog` entra al aislamiento** con la convención de §7 (orgId + índices `[orgId, studentId, sentAt]`) y su bloque en la suite org×org, como todo modelo de negocio.
 
 ## 8. Reglas de negocio
 

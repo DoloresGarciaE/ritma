@@ -154,7 +154,10 @@ function draftTotalsByCharge(drafts: readonly { chargeId: string; amount: Money 
  *   Y contra el alumno leyendo sus cuotas abiertas adentro de la transacción, y las
  *   invariantes duras las valida el motor (`validateAllocations`).
  */
-export async function createPayment(orgId: string, input: PaymentInput): Promise<{ id: string }> {
+export async function createPayment(
+  orgId: string,
+  input: PaymentInput,
+): Promise<{ id: string; receiptToken: string }> {
   const org = withOrg(orgId);
 
   return org.$transaction(
@@ -228,7 +231,9 @@ export async function createPayment(orgId: string, input: PaymentInput): Promise
               }
             : {}),
         },
-        select: { id: true },
+        // El token vuelve con el alta: el toast §3.9 comparte SIN otro round-trip — un
+        // await antes de navigator.share se comería la activación del tap (iOS).
+        select: { id: true, receiptToken: true },
       });
 
       // El recompute reusa lo YA leído: imputado nuevo = (monto − remanente) + borrador.
@@ -332,6 +337,34 @@ export async function getPaymentAttachment(
   return withOrg(orgId).payment.findUnique({
     where: { id: paymentId },
     select: { attachmentKey: true },
+  });
+}
+
+/** El token del link público del pago (para compartir). `null` si el pago es ajeno. */
+export async function getReceiptToken(
+  orgId: string,
+  paymentId: string,
+): Promise<{ receiptToken: string } | null> {
+  return withOrg(orgId).payment.findUnique({
+    where: { id: paymentId },
+    select: { receiptToken: true },
+  });
+}
+
+/**
+ * Revoca el link público del comprobante ROTANDO el token (S5): el link compartido muere
+ * en el acto y nace uno nuevo listo para compartir. No hay estado "revocado": la
+ * autorización es el token, y un token que ya no existe no autoriza nada.
+ * P2025 si el pago es ajeno.
+ */
+export async function rotateReceiptToken(
+  orgId: string,
+  paymentId: string,
+): Promise<{ receiptToken: string }> {
+  return withOrg(orgId).payment.update({
+    where: { id: paymentId },
+    data: { receiptToken: generateReceiptToken() },
+    select: { receiptToken: true },
   });
 }
 

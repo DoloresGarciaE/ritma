@@ -44,8 +44,14 @@ export type DebtorRow = {
   status: ChargeStatusValue;
   dueDate: string;
   period: string;
-  student: { id: string; name: string };
+  student: { id: string; name: string; phone: string | null };
   group: { id: string; name: string };
+};
+
+/** La deuda del período AGREGADA por alumno (S5): lo que dice el recordatorio. */
+export type StudentDebt = {
+  student: { id: string; name: string; phone: string | null };
+  total: number;
 };
 
 /** Estados que cuentan como deuda del período (S4 sumará los pagos parciales). */
@@ -122,13 +128,17 @@ export async function listChargesForStudent(
 export async function debtorsForPeriod(
   orgId: string,
   period: string,
-  options: { groupId?: string } = {},
-): Promise<{ total: number; debtors: DebtorRow[] }> {
+  options: { groupId?: string; studentId?: string } = {},
+): Promise<{ total: number; debtors: DebtorRow[]; students: StudentDebt[] }> {
   const rows = await withOrg(orgId).charge.findMany({
     where: {
       period,
       status: { in: OWING },
-      enrollment: options.groupId ? { groupId: options.groupId } : undefined,
+      // `studentId` (S5): la deuda del período de UN alumno — lo que dice el recordatorio.
+      enrollment:
+        options.groupId || options.studentId
+          ? { groupId: options.groupId, studentId: options.studentId }
+          : undefined,
     },
     orderBy: [{ enrollment: { student: { searchName: "asc" } } }, { id: "asc" }],
     select: {
@@ -140,7 +150,7 @@ export async function debtorsForPeriod(
       allocations: { select: { amount: true } },
       enrollment: {
         select: {
-          student: { select: { id: true, name: true } },
+          student: { select: { id: true, name: true, phone: true } },
           group: { select: { id: true, name: true } },
         },
       },
@@ -156,6 +166,16 @@ export async function debtorsForPeriod(
     }))
     .filter(({ remaining }) => remaining.greaterThan(ZERO));
 
+  // El agregado por alumno (S5: el monto del recordatorio) se calcula ACÁ, en Decimal
+  // con sumMoney — la UI recibe números listos y jamás suma plata por su cuenta.
+  const byStudent = new Map<string, { student: DebtorRow["student"]; remainings: Money[] }>();
+  for (const { row, remaining } of withRemaining) {
+    const student = row.enrollment.student;
+    const entry = byStudent.get(student.id) ?? { student, remainings: [] };
+    entry.remainings.push(remaining);
+    byStudent.set(student.id, entry);
+  }
+
   return {
     total: sumMoney(withRemaining.map(({ remaining }) => remaining)).toNumber(),
     debtors: withRemaining.map(({ row, remaining }) => ({
@@ -167,6 +187,10 @@ export async function debtorsForPeriod(
       period: row.period,
       student: row.enrollment.student,
       group: row.enrollment.group,
+    })),
+    students: [...byStudent.values()].map(({ student, remainings }) => ({
+      student,
+      total: sumMoney(remainings).toNumber(),
     })),
   };
 }

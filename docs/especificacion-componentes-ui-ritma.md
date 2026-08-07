@@ -97,6 +97,8 @@ Anatomía de izquierda a derecha: avatar de iniciales (ver §3.11) · nombre en 
 
 *(S4)* **Una excepción, medida:** la fila de Deudores lleva UNA acción — "Registrar pago", botón secundario `sm` en una segunda línea, target ≥ 44 px — porque el DoD de HU4.3 (pago completo en < 15 segundos desde Deudores) no se cumple pasando por la ficha. Sigue sin ser un campo minado: una sola acción por fila, separada del área de navegación, y el tap de la fila sigue yendo a la ficha. La zona derecha muestra el REMANENTE de la cuota (una Parcial debe lo que le falta), con el monto original chico abajo como contexto.
 
+*(S5)* **La segunda línea admite DOS acciones y ni una más:** "Registrar pago" y "WhatsApp" (HU5.2 — recordatorio en dos taps exige el botón EN la fila de Deudores, por el mismo argumento que S4). Las dos son botones secundarios `sm` en la misma línea, lejos del área de navegación. Alumno sin teléfono: "WhatsApp" deshabilitado con el motivo al lado como link — "Sin teléfono · Cargarlo" → la ficha (§4.3: deshabilitado solo con motivo visible). Cualquier tercera acción vuelve a la ficha: el límite ahora son estas dos.
+
 ### 3.6 Navegación
 
 **Bottom nav (mobile).** Cinco ítems fijos: Inicio · Agenda · Alumnos · Cobranzas · Más. Ícono Lucide 24 px + label 11 px. Activo: `primary` en ícono y label; inactivo: `text-secondary`. Altura 56 px + safe-area inferior. No se agregan ni reordenan ítems sin actualizar esta spec.
@@ -152,6 +154,12 @@ Bloques Neutro 100 (claro) / `#292833` (oscuro) con pulso de opacidad de 1.5 s, 
 El editor de horarios recurrentes del formulario de grupo (HU3.1): una fila por franja, franjas agregables y eliminables. Anatomía de cada fila: **pills de día** lunes-primero (`Lu Ma Mi Ju Vi Sá Do`, single-select, `aria-pressed`, target ≥ 44 px), **hora** con `<input type="time">` estilado con los tokens de §3.2 (la rueda nativa del sistema es lo correcto para el pulgar), y **duración** como pills de valores comunes (45′ · 60′ · 90′) más "Otra", que revela un input numérico en minutos (15–480). "Agregar franja" es botón secundario; eliminar, botón fantasma por fila. Un grupo necesita al menos una franja.
 
 En edición, el editor advierte con un helpText fijo: **si eliminás una franja o le cambiás el día, se pierden sus sesiones canceladas o movidas** — la franja con otro día es otra identidad. Cambiar solo la hora o la duración conserva las excepciones. No valida solapamientos: eso llega con los espacios (S8). Reprogramar una sesión sobre otra ocurrencia del mismo grupo está permitido a propósito, por lo mismo.
+
+### 3.16 Editor de plantilla de recordatorio (S5)
+
+La sección "Cobranzas" de Ajustes, solo para owner/admin (§4.3). Dos campos de §3.2 — el alias de cobro (input) y la plantilla (multilínea, mismo tratamiento visual que el input de una línea) — y debajo, **la vista previa renderizada en vivo con datos reales**: el primer deudor del período en curso o, sin deudores, el ejemplo canónico de Marca §4.2. El profe nunca guarda un mensaje que no vio.
+
+Las variables son cuatro y se documentan en el helpText del campo: `{nombre}` (nombre de pila), `{periodo}` ("Marzo 2026"), `{monto}` (la deuda del período **completo**, en remanentes — el filtro de grupo de Deudores no la achica) y `{alias}`. Una variable desconocida o con typo queda **visible sin reemplazar** en la vista previa — un hueco silencioso sería peor. Plantilla vacía = se usa la default (el ejemplo normativo de Marca §4.2, con las variables en el lugar de los datos); el placeholder del campo la muestra. Una org **sin alias** usa la default sin la frase de la transferencia: nunca se manda "Podés transferir a .". El recordatorio por **email** sale con la misma plantilla pero sin emojis (Marca §4: solo canales conversacionales). Guardar sigue §4.1: CTA primario, toast "Ajustes guardados.".
 
 ## 4. Patrones
 

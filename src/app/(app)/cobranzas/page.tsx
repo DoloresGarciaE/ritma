@@ -7,7 +7,9 @@ import { requireSession } from "@/lib/auth";
 import { addMonths, DEFAULT_TIMEZONE, isPeriod, periodOf, todayInTz } from "@/lib/dates";
 import { formatMoney, formatPeriod } from "@/lib/format";
 import { isR2Configured } from "@/lib/r2";
+import { defaultReminderTemplate, firstNameOf, renderTemplate } from "@/lib/reminders";
 import { cn } from "@/lib/utils";
+import { waLink } from "@/lib/whatsapp";
 import { getOrgSettings, getShellOrganization } from "@/server/organizations";
 import { debtorsForPeriod } from "@/server/services/charges";
 import { listGroups } from "@/server/services/groups";
@@ -24,7 +26,8 @@ export const metadata: Metadata = {
  * Cobranzas (S3): los deudores del período — una fila por cuota impaga, con alumno,
  * grupo, badge §3.3 y monto; arriba, el total adeudado. Server-first como la agenda:
  * `?periodo=YYYY-MM` y `?grupo=<id>` viven en la URL (params inválidos caen en silencio
- * al período actual / sin filtro). El botón de WhatsApp llega en S5; registrar pagos, S4.
+ * al período actual / sin filtro). Desde S4, "Registrar pago" en la fila; desde S5, el
+ * WhatsApp del recordatorio (HU5.2) con la plantilla renderizada.
  */
 export default async function CobranzasPage({
   searchParams,
@@ -51,7 +54,33 @@ export default async function CobranzasPage({
   const grupoParam = first(params.grupo);
   const groupId = groups.some((g) => g.id === grupoParam) ? grupoParam : undefined;
 
-  const { total, debtors } = await debtorsForPeriod(orgId, period, { groupId });
+  const { total, debtors, students } = await debtorsForPeriod(orgId, period, { groupId });
+
+  // El recordatorio de cada alumno (HU5.2): la plantilla de la org renderizada con la
+  // deuda del PERÍODO COMPLETO (§3.16 define {monto} así — con el filtro de grupo
+  // activo, el mensaje NO subdeclara la deuda) y el link wa.me armado acá en el server.
+  // El log se registra recién al tocar (F2 paso 3).
+  const { students: periodStudents } = groupId
+    ? await debtorsForPeriod(orgId, period)
+    : { students };
+  const alias = settings?.paymentAlias ?? "";
+  const template = settings?.reminderTemplate ?? defaultReminderTemplate(alias);
+  const reminders = Object.fromEntries(
+    periodStudents.map(({ student, total: debt }) => [
+      student.id,
+      student.phone
+        ? waLink(
+            student.phone,
+            renderTemplate(template, {
+              nombre: firstNameOf(student.name),
+              periodo: formatPeriod(period),
+              monto: formatMoney(debt),
+              alias,
+            }),
+          )
+        : null,
+    ]),
+  );
 
   const href = (p: string, g: string | undefined = groupId) => {
     const query = new URLSearchParams();
@@ -155,10 +184,11 @@ export default async function CobranzasPage({
               </span>
             </Card>
 
-            {/* Una fila por CUOTA con lo que FALTA, y "Registrar pago" en la fila:
-                el flujo de los 15 segundos de HU4.3 (nota S4 en §3.5). */}
+            {/* Una fila por CUOTA con lo que FALTA; "Registrar pago" (15 s, HU4.3) y
+                el WhatsApp del recordatorio (HU5.2) — nota S5 en §3.5. */}
             <DebtorsList
               debtors={debtors}
+              reminders={reminders}
               isStudio={shellOrg?.type === "STUDIO"}
               attachmentsEnabled={isR2Configured()}
               today={today}

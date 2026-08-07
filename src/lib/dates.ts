@@ -121,8 +121,29 @@ export function todayInTz(timezone: string): string {
     now = TZDate.tz(DEFAULT_TIMEZONE);
   }
 
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
+  return civilOf(now);
+}
+
+/**
+ * Un INSTANTE (p. ej. el `sentAt` de un recordatorio) como fecha civil en la zona de la
+ * org — el mismo único punto de contacto con la zona que `todayInTz` (RN10): a las
+ * 02:30 UTC, el envío fue "ayer" para la org. Zona inválida → default AR, sin tirar.
+ */
+export function civilDateOf(instant: Date, timezone: string): string {
+  let inTz: TZDate;
+  try {
+    inTz = new TZDate(instant.getTime(), timezone);
+    if (Number.isNaN(inTz.getTime())) throw new Error("timezone inválida");
+  } catch {
+    inTz = new TZDate(instant.getTime(), DEFAULT_TIMEZONE);
+  }
+
+  return civilOf(inTz);
+}
+
+function civilOf(date: TZDate): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 }

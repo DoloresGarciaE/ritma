@@ -11,6 +11,7 @@ import {
   makeMember,
   makeOrg,
   makePayment,
+  makeReminderLog,
   makeSession,
   makeSlot,
   makeStudent,
@@ -847,5 +848,86 @@ describe("aislamiento org × org — Membership", () => {
       select: { role: true },
     });
     expect(found).toBeNull();
+  });
+});
+
+describe("aislamiento org × org — ReminderLog", () => {
+  async function makeReminded(orgId: string, studentName: string) {
+    const student = await makeStudent(orgId, studentName);
+    return { student, reminder: await makeReminderLog(orgId, student.id) };
+  }
+
+  it("A no ve los recordatorios de B; findUnique por id ajeno devuelve null", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+    const { reminder: aReminder } = await makeReminded(a.id, "Sofía Herrera");
+    const { reminder: bReminder } = await makeReminded(b.id, "Malena Ríos");
+
+    const seenByA = await withOrg(a.id).reminderLog.findMany();
+    expect(seenByA.map((r) => r.id)).toEqual([aReminder.id]);
+    expect(await withOrg(a.id).reminderLog.findUnique({ where: { id: bReminder.id } })).toBeNull();
+  });
+
+  it("A no puede editar un recordatorio de B (P2025)", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+    const { reminder: bReminder } = await makeReminded(b.id, "Malena Ríos");
+
+    await expect(
+      withOrg(a.id).reminderLog.update({
+        where: { id: bReminder.id },
+        data: { channel: "EMAIL" },
+      }),
+    ).rejects.toMatchObject({ code: "P2025" });
+
+    const after = await db.reminderLog.findUniqueOrThrow({ where: { id: bReminder.id } });
+    expect(after.channel).toBe("WHATSAPP_LINK");
+  });
+
+  it("A no puede borrar un recordatorio de B; un deleteMany desde A no lo alcanza", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+    const { reminder: bReminder } = await makeReminded(b.id, "Malena Ríos");
+
+    await expect(
+      withOrg(a.id).reminderLog.delete({ where: { id: bReminder.id } }),
+    ).rejects.toMatchObject({ code: "P2025" });
+
+    await withOrg(a.id).reminderLog.deleteMany({});
+    expect(await db.reminderLog.count({ where: { orgId: b.id } })).toBe(1);
+  });
+
+  it("un recordatorio creado vía withOrg(A) no puede aterrizar en B: el orgId se fuerza", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+    const aStudent = await makeStudent(a.id, "Sofía Herrera");
+
+    const created = await withOrg(a.id).reminderLog.create({
+      data: {
+        studentId: aStudent.id,
+        channel: "WHATSAPP_LINK",
+        sentAt: new Date("2026-07-10T15:00:00.000Z"),
+        orgId: b.id,
+      },
+    });
+
+    expect(created.orgId).toBe(a.id);
+    expect(await db.reminderLog.count({ where: { orgId: b.id } })).toBe(0);
+  });
+
+  it("el historial de la ficha queda scoped: A solo lista recordatorios de su alumno", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+    const { student: aStudent, reminder: aReminder } = await makeReminded(a.id, "Sofía Herrera");
+    // El caso ADVERSARIAL de verdad: una fila con orgId=B que apunta al alumno DE A
+    // (posible vía db crudo: el FK no distingue tenants). La query de la ficha filtra
+    // por studentId — si withOrg no inyectara el orgId, esta fila se colaría.
+    await makeReminderLog(b.id, aStudent.id);
+
+    const history = await withOrg(a.id).reminderLog.findMany({
+      where: { studentId: aStudent.id },
+      orderBy: { sentAt: "desc" },
+    });
+    expect(history.map((r) => r.id)).toEqual([aReminder.id]);
   });
 });

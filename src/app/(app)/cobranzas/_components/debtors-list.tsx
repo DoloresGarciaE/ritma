@@ -4,30 +4,40 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { Avatar } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { useToast } from "@/components/ui/toast";
 import { formatListDate, formatMoney } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import type { DebtorRow } from "@/server/services/charges";
 
+import { logReminderAction } from "../actions";
 import { PaymentSheet } from "./payment-sheet";
 
 /**
  * La lista de deudores (S4): una fila por cuota impaga con lo que FALTA (una PARTIAL
  * debe su remanente, no el total) y — el corazón del DoD de HU4.3 — "Registrar pago" EN
- * la fila: desde acá, un pago completo son tres taps. §3.5 pedía las acciones en la
- * ficha; este bloque la versiona: UNA sola acción por fila, la que define el producto.
+ * la fila: desde acá, un pago completo son tres taps.
+ *
+ * Desde S5 la fila tiene DOS acciones (nota S5 en §3.5): registrar el pago y el
+ * WhatsApp del recordatorio (HU5.2) — un <a> a wa.me con el mensaje ya renderizado en
+ * el server, que se abre SIN esperar red (un popup blocker mataría un window.open
+ * post-await); el log viaja en paralelo, mejor esfuerzo por diseño (F2 paso 3). Sin
+ * teléfono: deshabilitado con motivo y acceso directo a cargarlo (§4.3).
  *
  * El tap de la fila sigue yendo a la ficha; el sheet abre con TODA la deuda del alumno
  * pre-cargada (HU4.3), no solo esta cuota.
  */
 export function DebtorsList({
   debtors,
+  reminders,
   isStudio,
   attachmentsEnabled,
   today,
 }: {
   debtors: DebtorRow[];
+  /** Por alumno: el link wa.me con la plantilla renderizada, o null si no hay teléfono. */
+  reminders: Record<string, string | null>;
   isStudio: boolean;
   attachmentsEnabled: boolean;
   today: string;
@@ -68,11 +78,37 @@ export function DebtorsList({
               </div>
             </Link>
 
-            {/* La única acción de la fila (nota S4 en §3.5): el flujo de los 15 segundos. */}
-            <div className="pl-[52px]">
+            {/* Las dos acciones de la fila (nota S5 en §3.5): pago y recordatorio. */}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pl-[52px]">
               <Button variant="secondary" size="sm" onClick={() => openPay(debtor.student)}>
                 Registrar pago
               </Button>
+              {reminders[debtor.student.id] ? (
+                <a
+                  href={reminders[debtor.student.id]!}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label={`Recordar a ${debtor.student.name} por WhatsApp`}
+                  className={cn(buttonVariants({ variant: "secondary", size: "sm" }))}
+                  onClick={() =>
+                    void logReminderAction({ studentId: debtor.student.id }).catch(() => {})
+                  }
+                >
+                  WhatsApp
+                </a>
+              ) : (
+                <>
+                  <Button variant="secondary" size="sm" disabled>
+                    WhatsApp
+                  </Button>
+                  <Link
+                    href={`/alumnos/${debtor.student.id}`}
+                    className="text-xs font-medium text-primary"
+                  >
+                    Sin teléfono · Cargarlo
+                  </Link>
+                </>
+              )}
             </div>
           </li>
         ))}

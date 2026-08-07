@@ -48,6 +48,9 @@ model Organization {
   /// Día del mes en que vencen las cuotas (RN2).
   dueDay           Int      @default(10)
   reminderTemplate String?
+  /// Alias o CBU de cobro: la variable {alias} de la plantilla de recordatorio (HU5.2).
+  /// Opcional: sin alias, la plantilla igual renderiza (la variable queda vacía).
+  paymentAlias     String?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
@@ -61,6 +64,7 @@ model Organization {
   charges     Charge[]
   payments    Payment[]
   allocations PaymentAllocation[]
+  reminders   ReminderLog[]
 }
 
 /// Alumno del padrón (Plan §7, HU2.1–2.3).
@@ -96,6 +100,7 @@ model Student {
 
   enrollments Enrollment[]
   payments    Payment[]
+  reminders   ReminderLog[]
 
   /// El índice líder por orgId cumple la convención de §7 y sirve a la vez para la lista
   /// (filtrada por org + activos) y para la búsqueda por prefijo/substring.
@@ -298,6 +303,7 @@ model Charge {
   enrollment Enrollment   @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
 
   allocations PaymentAllocation[]
+  reminders   ReminderLog[]
 
   @@unique([enrollmentId, period])
   // Deudores por período (query por org) y el cron diario de vencidas (cross-org, por
@@ -381,6 +387,48 @@ model PaymentAllocation {
 
   @@id([paymentId, chargeId])
   @@index([orgId])
+  @@index([chargeId])
+}
+
+/// El canal por el que salió un recordatorio. WHATSAPP_LINK es el deep link wa.me del
+/// MVP (el envío real lo hace el profe en su WhatsApp); la Cloud API llega en fase 3
+/// y sería otro valor. En el §7 del plan el enum se llama `Channel`; acá lleva el
+/// prefijo para no chocar con futuros canales de otras cosas — ver nota S5.
+enum ReminderChannel {
+  WHATSAPP_LINK
+  EMAIL
+}
+
+/// Registro de recordatorios enviados (HU5.2–5.3): fecha y canal, nada más — no hay
+/// estados de "entregado" o "leído" que el MVP no pueda conocer.
+///
+/// WHATSAPP_LINK es MEJOR ESFUERZO por diseño: se loguea al disparar el link wa.me,
+/// antes de que el profe toque "enviar" en WhatsApp (F2 paso 3 — la app no puede saber
+/// más). EMAIL en cambio se loguea recién cuando Resend aceptó el envío.
+model ReminderLog {
+  id        String          @id @default(cuid())
+  orgId     String
+  studentId String
+  /// Opcional (§7): el recordatorio del MVP es por la deuda del período, no por una
+  /// cuota puntual — queda null. El campo existe para recordatorios por cuota futuros.
+  chargeId  String?
+  channel   ReminderChannel
+  /// Instante real del disparo (no fecha civil): es un evento, no un dato de negocio
+  /// con día "de la org". La ficha lo muestra como fecha civil en la zona de la org.
+  sentAt    DateTime
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  org     Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  student Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  /// SetNull y no Cascade: si alguna vez se borrara la cuota, el historial de que el
+  /// recordatorio SALIÓ tiene que sobrevivir (las cuotas de negocio igual no se borran).
+  charge  Charge?      @relation(fields: [chargeId], references: [id], onDelete: SetNull)
+
+  // El historial de la ficha (por alumno, más nuevo primero) y la convención de §7.
+  @@index([orgId, studentId, sentAt])
+  @@index([studentId])
   @@index([chargeId])
 }
 

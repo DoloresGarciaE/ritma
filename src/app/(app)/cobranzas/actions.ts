@@ -3,6 +3,13 @@
 import { revalidatePath } from "next/cache";
 
 import { requireSession } from "@/lib/auth";
+import { periodOf, todayInTz } from "@/lib/dates";
+import { isEmailConfigured, sendReminderEmail } from "@/lib/email";
+import { formatPeriod } from "@/lib/format";
+import { receiptUrl } from "@/lib/receipts";
+import { withoutEmojis } from "@/lib/reminders";
+import { getOrgSettings } from "@/server/organizations";
+import { buildReminder, logReminder, ReminderRuleError } from "@/server/services/reminders";
 import {
   deleteAttachment,
   headAttachment,
@@ -23,8 +30,10 @@ import {
   createPayment,
   deletePayment,
   getPaymentAttachment,
+  getReceiptToken,
   paymentContext,
   PaymentRuleError,
+  rotateReceiptToken,
   setPaymentAttachment,
   type PaymentContext,
 } from "@/server/services/payments";
@@ -183,13 +192,13 @@ export async function createPaymentAction(input: {
   receivedBy?: "STUDIO" | "TEACHER";
   paidAt: string;
   allocations?: { chargeId: string; amount: number }[];
-}): Promise<PaymentFormState & { paymentId?: string }> {
+}): Promise<PaymentFormState & { paymentId?: string; receiptShareUrl?: string }> {
   const actor = await currentActor();
 
   const parsed = paymentSchema.safeParse(input);
   if (!parsed.success) return { errors: toPaymentFieldErrors(parsed.error) };
 
-  let payment: { id: string };
+  let payment: { id: string; receiptToken: string };
   try {
     payment = await createPayment(actor.orgId, parsed.data);
   } catch (error) {
@@ -200,8 +209,9 @@ export async function createPaymentAction(input: {
   }
 
   revalidateBilling(parsed.data.studentId);
-  // El id vuelve para encadenar la subida del comprobante (si hay foto y hay R2).
-  return { paymentId: payment.id };
+  // El id encadena la subida del comprobante; la URL del link público viaja YA armada:
+  // el toast comparte en el mismo tap, sin otro round-trip que mate la activación.
+  return { paymentId: payment.id, receiptShareUrl: receiptUrl(payment.receiptToken) };
 }
 
 /** Eliminar un pago (propuesta RN12): revierte imputaciones y recalcula estados. */
@@ -274,6 +284,103 @@ export async function confirmAttachmentAction(input: {
   await setPaymentAttachment(actor.orgId, input.paymentId, key);
   revalidateBilling(input.studentId);
   return {};
+}
+
+/**
+ * Registra un recordatorio disparado por WhatsApp (F2 paso 3). MEJOR ESFUERZO por
+ * diseño y documentado: se loguea al abrir el link — la app no puede saber si el profe
+ * tocó "enviar". Por eso el canal EMAIL no se acepta acá: ese lo loguea el server
+ * DESPUÉS de que Resend aceptó el envío.
+ */
+export async function logReminderAction(input: { studentId: string }): Promise<{
+  error?: string;
+}> {
+  const actor = await currentActor();
+
+  try {
+    await logReminder(actor.orgId, { studentId: input.studentId, channel: "WHATSAPP_LINK" });
+  } catch (error) {
+    if (error instanceof ReminderRuleError) return { error: error.message };
+    throw error;
+  }
+
+  revalidatePath(`/alumnos/${input.studentId}`);
+  return {};
+}
+
+/**
+ * Recordatorio por email (HU5.3): misma plantilla, envío server-side vía Resend detrás
+ * de la guarda de env, y el log recién cuando el envío fue ACEPTADO (canal unificado).
+ * Siempre sobre el período en curso de la org.
+ */
+export async function sendEmailReminderAction(studentId: string): Promise<{ error?: string }> {
+  const actor = await currentActor();
+
+  if (!isEmailConfigured()) return { error: "El envío por email no está configurado." };
+
+  const settings = await getOrgSettings(actor.orgId);
+  const period = periodOf(todayInTz(settings?.timezone ?? ""));
+
+  let draft: Awaited<ReturnType<typeof buildReminder>>;
+  try {
+    draft = await buildReminder(actor.orgId, studentId, period);
+  } catch (error) {
+    if (error instanceof ReminderRuleError) return { error: error.message };
+    throw error;
+  }
+  if (!draft.student.email) return { error: "El alumno no tiene email cargado." };
+  if (draft.debt <= 0) return { error: "No hay deuda del período para recordar." };
+
+  try {
+    await sendReminderEmail({
+      to: draft.student.email,
+      subject: `Resumen de ${formatPeriod(period)} · ${draft.orgName}`,
+      // Misma plantilla que WhatsApp (HU5.3), pero sin emojis: Marca §4 los permite
+      // solo en canales conversacionales.
+      message: withoutEmojis(draft.message),
+      orgName: draft.orgName,
+    });
+  } catch {
+    return { error: "No se pudo enviar el email. Probá de nuevo." };
+  }
+
+  await logReminder(actor.orgId, { studentId, channel: "EMAIL" });
+  revalidatePath(`/alumnos/${studentId}`);
+  return {};
+}
+
+/**
+ * El link público del comprobante (HU5.1), para compartir. El token viaja recién acá —
+ * nunca en el payload de las listas — y previa verificación de membresía; compartir es
+ * de cualquier rol (matriz §4: ✔✔✔).
+ */
+export async function receiptLinkAction(
+  paymentId: string,
+): Promise<{ url: string } | { error: string }> {
+  const actor = await currentActor();
+
+  const payment = await getReceiptToken(actor.orgId, paymentId);
+  if (!payment) return { error: "El pago no existe o no es de esta organización." };
+
+  return { url: receiptUrl(payment.receiptToken) };
+}
+
+/**
+ * Revocar = ROTAR el token (S5): el link compartido muere en el acto y vuelve uno nuevo
+ * listo para compartir. La confirmación la pone la UI (§3.8); acá solo la membresía.
+ */
+export async function revokeReceiptLinkAction(
+  paymentId: string,
+): Promise<{ url: string } | { error: string }> {
+  const actor = await currentActor();
+
+  try {
+    const { receiptToken } = await rotateReceiptToken(actor.orgId, paymentId);
+    return { url: receiptUrl(receiptToken) };
+  } catch {
+    // P2025: el pago no es de esta org (o ya no existe). Mismo mensaje genérico.
+    return { error: "El pago no existe o no es de esta organización." };
+  }
 }
 
 /** URL firmada CORTA (60 s) para ver el comprobante, previa verificación de membresía. */

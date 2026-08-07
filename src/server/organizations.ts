@@ -37,10 +37,13 @@ export const getDisciplines = cache(async (orgId: string) =>
   }),
 );
 
-/** Config de la org que la agenda necesita: la zona define qué día es "hoy" (RN10). */
+/**
+ * Config de la org que la agenda y los recordatorios necesitan: la zona define qué día
+ * es "hoy" (RN10); alias y plantilla arman el recordatorio (S5).
+ */
 export const getOrgSettings = cache(async (orgId: string) =>
   withOrg(orgId).organization.findUnique({
     where: { id: orgId },
-    select: { timezone: true },
+    select: { timezone: true, paymentAlias: true, reminderTemplate: true },
   }),
 );
