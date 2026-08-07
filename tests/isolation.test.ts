@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { listMembershipsForUser, resolveActiveOrg } from "@/lib/active-org";
 import { db, withOrg } from "@/lib/db";
 
 import {
@@ -929,5 +930,38 @@ describe("aislamiento org × org — ReminderLog", () => {
       orderBy: { sentAt: "desc" },
     });
     expect(history.map((r) => r.id)).toEqual([aReminder.id]);
+  });
+});
+
+describe("cambio de organización activa (selector, S7 adelantado)", () => {
+  it("listMembershipsForUser trae SOLO las membresías propias, en orden de antigüedad", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+    const member = await makeMember(a.id, "OWNER");
+    // Otro usuario en B: no debe aparecer en la lista del primero.
+    await makeMember(b.id, "OWNER");
+
+    const memberships = await listMembershipsForUser(member.userId);
+    expect(memberships.map((m) => m.orgId)).toEqual([a.id]);
+    expect(memberships[0].role).toBe("OWNER");
+    expect(memberships[0].orgName).toBe("Estudio A");
+  });
+
+  it("imposible activar una org sin membresía: la preferencia forjada cae a la propia", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+    const member = await makeMember(a.id, "TEACHER");
+    await makeMember(b.id, "OWNER"); // B existe y tiene gente — pero no este usuario.
+
+    const memberships = await listMembershipsForUser(member.userId);
+    const orgIds = memberships.map((m) => m.orgId);
+    // La cookie del selector es input del cliente: apuntando a B, se ignora.
+    expect(resolveActiveOrg(orgIds, b.id)).toBe(a.id);
+    // Y con las dos membresías reales, la preferencia sí manda.
+    const dual = await db.membership.create({
+      data: { userId: member.userId, orgId: b.id, role: "TEACHER" },
+    });
+    const dualIds = (await listMembershipsForUser(dual.userId)).map((m) => m.orgId);
+    expect(resolveActiveOrg(dualIds, b.id)).toBe(b.id);
   });
 });
