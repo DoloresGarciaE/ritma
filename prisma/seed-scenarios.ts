@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { createInterface } from "node:readline/promises";
 
 import { config as loadEnv } from "dotenv";
@@ -86,6 +87,36 @@ async function main() {
     const owner = await ensureUser(STUDIO_OWNER_EMAIL, "Dolores");
     const teacher = await ensureUser(DUAL_TEACHER_EMAIL, "Dolores Garcia");
     const teacherFirstName = teacher.name.trim().split(/\s+/)[0] || "la profe";
+
+    /**
+     * GARANTÍA DE LOGIN para el recorrido: estas cuentas pueden haber nacido con Google
+     * (en dev y en los previews el botón de Google no existe), así que acá se les
+     * asegura una credencial email+contraseña con la clave del guion. SOLO toca a los
+     * dos usuarios configurados arriba, y solo en la base que confirmaste.
+     */
+    async function ensureLoginPassword(user: { id: string; email: string }) {
+      const ctx = await auth.$context;
+      const hash = await ctx.password.hash(FALLBACK_PASSWORD);
+      const credential = await db.account.findFirst({
+        where: { userId: user.id, providerId: "credential" },
+      });
+      if (credential) {
+        await db.account.update({ where: { id: credential.id }, data: { password: hash } });
+      } else {
+        await db.account.create({
+          data: {
+            id: randomUUID(),
+            accountId: user.id,
+            providerId: "credential",
+            userId: user.id,
+            password: hash,
+          },
+        });
+      }
+    }
+
+    await ensureLoginPassword(owner);
+    await ensureLoginPassword(teacher);
 
     // ── Organizaciones ───────────────────────────────────────────────────────
     async function ensureOrg(input: {
@@ -515,7 +546,9 @@ async function main() {
       `\nPersonas del recorrido (guion en docs/observaciones-demo.md):\n` +
         `  1. ${STUDIO_OWNER_EMAIL} → Estudio Meraki (dueña)\n` +
         `  2. ${DUAL_TEACHER_EMAIL} → Clases de Folklore de ${teacherFirstName} (titular)\n` +
-        `  3. ${DUAL_TEACHER_EMAIL} → cambia a Estudio Meraki con el selector de "Más" (profe)\n`,
+        `  3. ${DUAL_TEACHER_EMAIL} → cambia a Estudio Meraki con el selector de "Más" (profe)\n\n` +
+        `Las DOS cuentas entran con email + contraseña: "${FALLBACK_PASSWORD}"\n` +
+        `(la credencial se asegura en cada corrida; en dev/preview no hay botón de Google).\n`,
     );
   } finally {
     const { db } = await import("../src/lib/db");

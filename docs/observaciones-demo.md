@@ -10,7 +10,10 @@
 > (S1–S5) está completo. Los ítems marcados **(S6 pendiente)** van a verse así
 > hasta que corramos ese bloque.
 
-Entrás con tus dos cuentas de siempre; los datos ya están colgados de ellas:
+Entrás con tus dos cuentas de siempre; los datos ya están colgados de ellas.
+**Contraseña de las dos: `ritma-demo-2026`** (el seed asegura la credencial en
+cada corrida — en dev y en previews no hay botón de Google, siempre es email +
+contraseña).
 
 | Persona | Cuenta | Organización |
 |---|---|---|
@@ -18,8 +21,17 @@ Entrás con tus dos cuentas de siempre; los datos ya están colgados de ellas:
 | 2. Docente independiente | `dgarciaelissondo@gmail.com` | Clases de Folklore de Dolores |
 | 3. La docente, en el estudio | `dgarciaelissondo@gmail.com` | → Estudio Meraki vía el selector de "Más" |
 
-Ojo: las dos cuentas ya tenían organizaciones tuyas ("Estudio Grande", "Estudio
-de danzas 1") — van a aparecer en el selector también. Es un buen test extra.
+Dos cosas antes de arrancar:
+
+- **Al entrar caés en tu org más vieja** ("Estudio Grande" / "Estudio de danzas
+  1"): la org activa es la primera membresía. El paso cero de CADA persona es
+  **Más → Organización → elegir la org del guion**. Que tus orgs viejas
+  aparezcan en el selector es un buen test extra.
+- **Desde el teléfono**: los datos viven en la base de DEV, que es la misma que
+  usan los **previews** de Vercel. Abrí el PR de `feat/demo-scenarios`, entrá a
+  la URL de preview desde el teléfono, y logueate con email + contraseña. La
+  producción queda intacta (el seed corre contra producción solo si vos lo
+  decidís).
 
 ---
 
