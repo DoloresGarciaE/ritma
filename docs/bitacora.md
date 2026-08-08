@@ -280,3 +280,32 @@ del diagnóstico. Se pueden borrar con Prisma Studio apuntando al branch de prod
   primera tentación.
 - **Próximo:** S6 — dashboard, PWA y pulido; antes, el DoD de S5 con dos teléfonos sobre el
   preview (link en WhatsApp ajeno + recordatorio pre-armado) y aprobar RN11/RN12.
+
+## Semana 13 (agosto 2026) — sesión especial: escenarios de demo y selector de organización
+
+- **Hecho:** `feat/demo-scenarios` — NO es un bloque del plan: preparación del testeo manual
+  del caso estudio + docente dual. (1) **Selector de organización mínimo** (única feature,
+  adelanto autorizado de S7): en "Más", con más de una membresía, nombre + tipo + rol y la
+  activa marcada; la preferencia es una COOKIE validada en cada request por `customSession`
+  contra las membresías reales (`resolveActiveOrg`, pura) — una cookie forjada se ignora y
+  cae a la primera membresía. Cero migraciones; `activeOrgId` sigue siendo contexto, no
+  autorización. Tests: resolver puro + caso nuevo en la suite de aislamiento (la preferencia
+  ajena JAMÁS activa) + verificación en vivo (cambiar de org cambia TODOS los datos
+  visibles, 6/6 checks). (2) **`npm run seed:scenarios`**: tres personas sobre los usuarios
+  de testeo REALES — Estudio Meraki (STUDIO, 3 "salones" POR CONVENCIÓN de nombre hasta S8,
+  7 grupos con dos cruces de horario a propósito, 15 alumnos, dos períodos por los JOBS
+  reales, pagos por `createPayment` con parcial/crédito/receivedBy TEACHER, una beca por
+  `waiveCharge`, recordatorios por `logReminder`), la org independiente de la docente
+  (mundo chico, estados mezclados, plantilla default) y la membresía TEACHER de esa docente
+  en Meraki con un grupo "a cargo de" por nombre (sin `teacherId` hasta S9), con agendas que
+  no chocan entre sí. Idempotente (corrido 2×, conteos idénticos) y con cinturón: imprime
+  host y base y pide confirmación (`--yes` la saltea). (3) **`docs/observaciones-demo.md`**:
+  el guion checklist por persona, con la observación esperada de que un TEACHER hoy ve TODO
+  el estudio (scoping S7) y el mapa de faltantes → S6/S7/S8/S9.
+- **Trabado:** ⚠️ **S6 NUNCA corrió** — el brief de la sesión asumía Fase 1 cerrada
+  (v0.2.0-f1), pero `main` está en S5: no hay dashboard (Inicio = placeholder de F0), ni
+  PWA, ni E2E de F1/F2, ni tag. La sesión de S6 anterior quedó en la lectura de specs, sin
+  código. El recorrido de demo funciona igual (S1–S5 completos) con esa limitación señalada
+  en el guion. Pendiente de decidir: correr S6 antes o después del recorrido.
+- **Próximo:** el recorrido de Dolores con el guion; S6 completo (dashboard + PWA + E2E);
+  con lo anotado, definir S7 (roles/scoping de teacher).

@@ -2,10 +2,11 @@ import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { nextCookies } from "better-auth/next-js";
 import { customSession } from "better-auth/plugins";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { cache } from "react";
 
+import { ACTIVE_ORG_COOKIE, resolveActiveOrg } from "@/lib/active-org";
 import { db } from "@/lib/db";
 
 /**
@@ -94,26 +95,42 @@ export const auth = betterAuth({
 
   plugins: [
     /**
-     * `activeOrgId` viaja en la sesión: es la primera membresía del usuario, o
-     * `null` si todavía no tiene ninguna (recién registrado — la creación de
-     * organización es F0.5).
+     * `activeOrgId` viaja en la sesión: la org PREFERIDA del usuario (cookie del
+     * selector de "Más", validada contra sus membresías reales) o, sin preferencia
+     * válida, la primera membresía; `null` si todavía no tiene ninguna (recién
+     * registrado — la creación de organización es F0.5).
      *
      * Se recalcula en cada `getSession()`, no se cachea: así nunca queda una
-     * organización vieja pegada a una sesión. El costo es una query indexada por
-     * `userId` por request.
+     * organización vieja pegada a una sesión, y una cookie apuntando a una org
+     * ajena se ignora sola (`resolveActiveOrg`). El costo es una query indexada
+     * por `userId` por request.
      *
      * OJO: esto es contexto, NO autorización. Que la sesión traiga un `orgId` no
      * prueba que el usuario siga siendo miembro: toda query de negocio revalida
      * la membresía (`withOrg`, F0.6).
      */
     customSession(async ({ user, session }) => {
-      const membership = await db.membership.findFirst({
+      const memberships = await db.membership.findMany({
         where: { userId: user.id },
         orderBy: { createdAt: "asc" },
         select: { orgId: true },
       });
 
-      return { user, session, activeOrgId: membership?.orgId ?? null };
+      let preferred: string | undefined;
+      try {
+        preferred = (await cookies()).get(ACTIVE_ORG_COOKIE)?.value;
+      } catch {
+        // Fuera de un request de Next (el seed llama auth.api directo): sin preferencia.
+      }
+
+      return {
+        user,
+        session,
+        activeOrgId: resolveActiveOrg(
+          memberships.map((membership) => membership.orgId),
+          preferred ?? null,
+        ),
+      };
     }),
 
     // Deja que las server actions puedan setear la cookie de sesión.
