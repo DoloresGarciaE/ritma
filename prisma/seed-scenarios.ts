@@ -3,6 +3,8 @@ import { createInterface } from "node:readline/promises";
 
 import { config as loadEnv } from "dotenv";
 
+import { isProductionTarget, productionDbUrls } from "./seed-guard";
+
 /**
  * Escenarios de testeo realistas SOBRE USUARIOS EXISTENTES (sesión de demo, agosto 2026).
  *
@@ -21,7 +23,8 @@ import { config as loadEnv } from "dotenv";
  *   `waiveCharge`, recordatorios por `logReminder`. Nunca inserts crudos de plata.
  * - Idempotente: correrlo dos veces no duplica nada.
  * - Cinturón: imprime host y base de `DATABASE_URL` y pide confirmación. `--yes` la
- *   saltea (para scripts); producción solo si lo decidís a mano.
+ *   saltea (para scripts), pero NO saltea el cinturón anti-producción: si el host es el
+ *   del branch de prod (según `.env.production` local), el script se niega SIEMPRE.
  *
  * Correr: `npm run seed:scenarios` (agregar `-- --yes` para saltear la confirmación).
  */
@@ -34,9 +37,24 @@ const FALLBACK_PASSWORD = "ritma-demo-2026"; // solo si un email no existe todav
 loadEnv({ path: [".env.local", ".env"], quiet: true });
 
 async function confirmTarget() {
-  const url = new URL(process.env.DATABASE_URL ?? "");
+  const databaseUrl = process.env.DATABASE_URL ?? "";
+  const url = new URL(databaseUrl);
   const target = `${url.hostname}${url.pathname}`;
   console.log(`\nBase de datos destino: ${target}`);
+
+  // Cinturón anti-producción: NO lo saltea ni `--yes`. La referencia es el
+  // `.env.production` local (gitignored; el host de prod no se commitea al repo público).
+  const prodUrls = productionDbUrls(".env.production");
+  if (prodUrls.length === 0) {
+    console.log("(sin .env.production en esta máquina: no hay contra qué comparar el host)");
+  } else if (isProductionTarget(databaseUrl, prodUrls)) {
+    console.error(
+      "\n✋ Ese host es el branch de PRODUCCIÓN (según .env.production). Este script se " +
+        "niega a correr contra producción, incluso con --yes. Si de verdad querés " +
+        "escenarios en prod, es una decisión aparte: no pasa por acá.",
+    );
+    process.exit(1);
+  }
 
   if (process.argv.includes("--yes")) {
     console.log("(--yes: sin confirmación interactiva)\n");

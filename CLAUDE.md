@@ -293,6 +293,27 @@ orden**, y la seguridad va primero:
   ([`src/lib/dates.ts`](src/lib/dates.ts)) — el mismo único punto de contacto con la zona que
   `todayInTz`. El historial muestra fecha y canal, sin estados de "leído" inventados.
 
+## Dashboard y PWA (desde S6)
+
+- **Las métricas del Inicio salen SOLO de `services/metrics.ts`** (`dashboardMetrics`), y ese
+  servicio NO inventa varas: "cobrado" = imputaciones del período (S4), "pendiente"/"deudores" =
+  la MISMA llamada `debtorsForPeriod` que renderiza Cobranzas (cuadran por construcción, hay
+  test), "clases de hoy" = `weekData` (S2) filtrado al día. Ninguna query agregada en
+  componentes; la aritmética sigue siendo del motor (`sumMoney`).
+- **PWA sin service worker** (decisión S6): manifest + íconos + instalable; cero caché offline,
+  cero push. Los íconos rasterizados viven en `public/brand/ritma-app-icon-{512,192,180}.png`
+  (del maestro `docs/brand/ritma-app-icon.svg`, Marca §9.2); el favicon es `src/app/icon.svg`
+  (SVG theme-aware: Tinta 900 / Blanco roto) + `favicon.ico` de fallback.
+- **El splash es el `loading.tsx` raíz** y anima SOLO el punto coral del isotipo
+  (`RitmaIsotipo pulse` — Marca §8: el resto del logo jamás se anima); los skeletons por
+  pantalla (§3.14) usan `bg-muted` + `animate-skeleton` (1.5 s). Todo con `motion-safe:`.
+- **E2E = tres flujos y no más** (Plan §10): onboarding (smoke F0.7), F1 (pago → comprobante
+  público sin login) y F2 (recordatorio → log). Corren SOLO en push a `main`, arman sus datos
+  por la UI real (helpers en `tests/e2e/helpers.ts`). ⚠️ El origen de los links compartidos se
+  hornea en el build (`NEXT_PUBLIC_APP_URL`): el spec de F1 normaliza el origen a propósito.
+- ⚠️ El `AmountInput` controlado CONCATENA dígitos si le hacés `fill` con valor previo (los
+  E2E no re-tipean precios pre-cargados: los verifican).
+
 ## CI/CD y observabilidad (desde F0.7)
 
 - **Un branch de Neon por entorno.** `production` → Vercel Production; `dev` → tu `.env.local`
@@ -411,6 +432,9 @@ F1–F3 (Plan §9) con Playwright, en `main`. No se testean componentes UI unita
 
 ## Comandos
 
+El gestor de paquetes es **npm** (lo fija `package-lock.json`): todo script y ejemplo es
+`npm run …` / `npx …`. Nunca asumir pnpm ni yarn.
+
 | Comando                           | Qué hace                                               |
 | --------------------------------- | ------------------------------------------------------ |
 | `npm run dev`                     | Servidor de desarrollo                                 |
@@ -434,6 +458,10 @@ F1–F3 (Plan §9) con Playwright, en `main`. No se testean componentes UI unita
 
 - Trunk-based: ramas cortas `feat/...`, PR propio (el diff es la revisión), merge solo con CI
   verde. **Un bloque del plan = una sesión = un commit deployable.** Nada queda a medio migrar.
+- **Sesión interrumpida a mitad:** lo ÚLTIMO antes de frenar es actualizar `docs/bitacora.md`
+  y el snapshot de estado (los checkboxes de `docs/plan-implementacion-ritma.md`) con el
+  estado parcial **real** — qué se hizo, qué no, en qué rama quedó. Nunca un snapshot que
+  diga más de lo que hay: la sesión siguiente arranca de ahí y se lo cree.
 - Checklist de PR: ¿CI verde? ¿toca dinero → tiene tests? ¿toca queries → respeta `withOrg`?
   ¿toca UI → cumple componentes/color? ¿cambió una regla → se versionó la spec?
 - Ideas nuevas fuera del bloque en curso → backlog, no al sprint en curso.

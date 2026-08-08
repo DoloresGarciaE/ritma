@@ -3,9 +3,14 @@
 [![CI](https://github.com/DoloresGarciaE/ritma/actions/workflows/ci.yml/badge.svg)](https://github.com/DoloresGarciaE/ritma/actions/workflows/ci.yml)
 
 Web app **mobile-first** de gestión para docentes independientes y estudios: agenda de
-clases, padrón de alumnos y cobranzas. Multi-tenant desde el día 1.
+clases, padrón de alumnos y cobranzas. Multi-tenant desde el día 1, **instalable como PWA**
+(sin service worker: manifest + íconos; cero caché offline por decisión).
 
 > Vos marcás el ritmo.
+
+**Estado:** Fase 1 (MVP profe independiente) completa — S1 alumnos, S2 agenda, S3 cuotas,
+S4 pagos, S5 comprobantes y recordatorios, S6 dashboard + PWA. El gestor de paquetes es
+**npm**.
 
 ## Documentación (fuente de verdad)
 
@@ -78,8 +83,10 @@ está acá a propósito y no existe en producción.
 - **Vitest** — aislamiento org×org, permisos por rol y servicios de dinero. Corren contra un
   **Postgres real** (contenedor efímero, `docker-compose.test.yml`), nunca mockeando Prisma.
   `npm test` levanta la base, aplica las migraciones y corre la suite.
-- **Playwright** — un solo smoke: registro → wizard → dashboard. Corre contra un build de
-  producción local apuntando al mismo Postgres efímero.
+- **Playwright** — tres flujos, no más (Plan §10): el smoke de onboarding (registro → wizard
+  → dashboard), **F1** (registrar pago → comprobante público que abre sin login) y **F2**
+  (deudores → recordatorio de WhatsApp → historial). Corren contra un build de producción
+  local apuntando al mismo Postgres efímero, y cada spec arma sus propios datos por la UI.
 
 ## Deploy
 
@@ -91,5 +98,5 @@ Producción: **Vercel**, desde `main`. Cada PR genera un **preview deployment**.
 - **Un branch de Neon por entorno**: `production` para producción, `dev` para desarrollo local
   y para los previews. Nunca se comparte base entre entornos.
 - **CI** (GitHub Actions): en cada PR corre lint + typecheck + formato + Vitest; al mergear a
-  `main`, además el smoke de Playwright. No necesita ningún secreto: la base de los tests es
-  un service container del propio job.
+  `main`, además los tres E2E de Playwright. No necesita ningún secreto: la base de los tests
+  es un service container del propio job.

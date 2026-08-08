@@ -101,9 +101,10 @@ export function DebtorsList({
                   <Button variant="secondary" size="sm" disabled>
                     WhatsApp
                   </Button>
+                  {/* Área táctil de 44 px aunque el dibujo sea menor (§2.3), como el Button. */}
                   <Link
                     href={`/alumnos/${debtor.student.id}`}
-                    className="text-xs font-medium text-primary"
+                    className="relative text-xs font-medium text-primary after:absolute after:left-0 after:top-1/2 after:h-11 after:w-full after:-translate-y-1/2 after:content-['']"
                   >
                     Sin teléfono · Cargarlo
                   </Link>

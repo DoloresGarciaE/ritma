@@ -147,10 +147,10 @@ ritma/
 - **DoD:** el link del comprobante abre bien en WhatsApp de un teléfono ajeno (pendiente de tu prueba con los dos teléfonos sobre el preview); el recordatorio llega pre-armado con nombre, período, monto y alias. ✓ (333 tests)
 
 ### S6 — Dashboard, PWA y pulido
-- [ ] Dashboard (HU7.1): cobrado, pendiente, deudores, clases de hoy — cards de métrica navegables.
-- [ ] PWA: manifest + íconos desde `ritma-app-icon.svg` (512/192/180) + splash con el pulso (Marca §8, con `prefers-reduced-motion`).
-- [ ] Estados vacíos de todas las pantallas (Componentes §3.10); pasada de accesibilidad con el checklist de Componentes §5.
-- [ ] E2E Playwright de los flujos F1 y F2 del Plan (§9).
+- [x] Dashboard (HU7.1): cobrado, pendiente, deudores, clases de hoy — cards de métrica navegables.
+- [x] PWA: manifest + íconos desde `ritma-app-icon.svg` (512/192/180) + splash con el pulso (Marca §8, con `prefers-reduced-motion`).
+- [x] Estados vacíos de todas las pantallas (Componentes §3.10); pasada de accesibilidad con el checklist de Componentes §5.
+- [x] E2E Playwright de los flujos F1 y F2 del Plan (§9).
 - **DoD Fase 1 completo = DoD del Plan §12** + E2E verdes.
 
 ## 8. Hito de validación (1–2 semanas, en paralelo al cierre de F1)

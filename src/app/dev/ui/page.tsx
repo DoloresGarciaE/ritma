@@ -8,6 +8,7 @@ import { Card, MetricCard } from "@/components/ui/card";
 import { Fab } from "@/components/ui/fab";
 import { AmountInput, Field, Input, Textarea } from "@/components/ui/input";
 import { SessionBlock } from "@/components/ui/session-block";
+import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge, type InstallmentStatus } from "@/components/ui/status-badge";
 import { Switch } from "@/components/ui/switch";
 import { formatMoney } from "@/lib/format";
@@ -270,6 +271,28 @@ function Showcase({ title }: { title: string }) {
             <RitmaIsotipo className="h-4" />
             Generado con Ritma
           </span>
+        </div>
+      </Section>
+
+      {/* ── S6 ───────────────────────────────────────────────────────────────── */}
+
+      <Section title="Skeleton (§3.14: pulso de opacidad 1.5 s, silueta real)">
+        <div className="flex flex-col gap-2 rounded-card border border-border bg-surface p-3">
+          <Skeleton className="h-5 w-40" />
+          <Skeleton className="h-[72px]" />
+          <div className="flex items-center gap-3">
+            <Skeleton className="size-11 rounded-full" />
+            <div className="flex flex-1 flex-col gap-1.5">
+              <Skeleton className="h-4 w-32" />
+              <Skeleton className="h-3.5 w-24" />
+            </div>
+          </div>
+        </div>
+      </Section>
+
+      <Section title="Splash (§3.14 + Marca §8: SOLO el punto late; reduced-motion lo frena)">
+        <div className="flex items-center justify-center rounded-card border border-border bg-background p-6">
+          <RitmaIsotipo pulse className="h-12" />
         </div>
       </Section>
     </div>

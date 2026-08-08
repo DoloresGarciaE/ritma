@@ -309,3 +309,25 @@ del diagnóstico. Se pueden borrar con Prisma Studio apuntando al branch de prod
   en el guion. Pendiente de decidir: correr S6 antes o después del recorrido.
 - **Próximo:** el recorrido de Dolores con el guion; S6 completo (dashboard + PWA + E2E);
   con lo anotado, definir S7 (roles/scoping de teacher).
+
+## Semana 13 bis (agosto 2026) — S6: dashboard, PWA y cierre de Fase 1
+
+- **Hecho:** `feat/demo-scenarios` squash-mergeada a `main` (CI verde, smoke incluido). S6
+  completo en `feat/s6-dashboard-pwa`: (1) **Dashboard HU7.1** — `services/metrics.ts` con la
+  vara existente (cobrado = imputaciones del período; pendiente/deudores = el MISMO
+  `debtorsForPeriod` de Cobranzas, cuadran por construcción y hay test; clases de hoy =
+  `weekData` filtrado), cards §3.4 con la `MetricCard` que esperaba desde F0.2, vacíos con
+  guía. (2) **PWA sin service worker** — manifest, íconos 512/192/180 del maestro §9.2,
+  favicon SVG theme-aware + .ico, splash = `loading.tsx` raíz con SOLO el punto coral
+  latiendo (Marca §8), skeletons §3.14 por pantalla (token `muted`; spec anotada). (3) **E2E
+  F1 y F2** + smoke: 3/3 verdes contra build de producción local; en CI corren al mergear.
+  (4) Pasadas: accesibilidad §5 punto por punto (2 hallazgos, arreglados), modo oscuro §7
+  (impecable; `/r/` queda claro), copy §4/§4.2 (limpio), performance (medido y atribuido:
+  piso = framework+zod; sin deps muertas). (5) Correcciones permanentes: npm fijado en
+  CLAUDE.md, protocolo de sesión interrumpida, cinturón anti-prod del seed (ni `--yes` lo
+  saltea; test incluido, verificado contra el host real).
+- **Trabado:** nada bloqueante. El origen de los links compartidos se hornea en el build
+  (`NEXT_PUBLIC_APP_URL`): el E2E de F1 lo normaliza a propósito y quedó documentado.
+- **Próximo:** recorrido de Dolores con el guion (preview de `feat/s6-dashboard-pwa`,
+  instalando la PWA); merge → corren los 3 E2E en main → tag `v0.2.0-f1`; con lo anotado,
+  definir S7.

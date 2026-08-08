@@ -147,7 +147,7 @@ Solo existe en dos pantallas: Alumnos (alta express) y Agenda (nuevo grupo). Cí
 
 ### 3.14 Skeleton y carga
 
-Bloques Neutro 100 (claro) / `#292833` (oscuro) con pulso de opacidad de 1.5 s, replicando la silueta real del contenido. Carga de pantalla completa (splash de PWA): isotipo con la animación del **pulso** de Marca §8 — única aparición animada del logo. Todo respeta `prefers-reduced-motion`.
+Bloques `muted` con pulso de opacidad de 1.5 s, replicando la silueta real del contenido. (Nota S6: esta sección decía "Neutro 100 (claro) / `#292833` (oscuro)" — exactamente los dos valores del token `muted`; se nombra el token porque Color §8 prohíbe que los componentes consuman stops o hex, igual que la corrección previa de §3.10.) Carga de pantalla completa (splash de PWA): isotipo con la animación del **pulso** de Marca §8 — única aparición animada del logo, y SOLO el punto coral late (los trazos nunca se animan). Implementación S6: el splash es el `loading.tsx` raíz; cada pantalla del shell tiene su skeleton con su silueta. Todo respeta `prefers-reduced-motion`.
 
 ### 3.15 Editor de franjas (S2)
 

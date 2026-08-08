@@ -13,7 +13,7 @@ import {
   DialogDescription,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Field, Input } from "@/components/ui/input";
+import { Field, Input, Textarea } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 import { formatPhone } from "@/lib/students";
 import type { StudentDetail as Student } from "@/server/services/students";
@@ -145,12 +145,12 @@ export function StudentDetail({
           helpText="Lo que quieras recordar: lesiones, preferencias, quién la trae."
           error={shownErrors.note}
         >
-          <textarea
+          {/* El componente Textarea hereda el id del Field: label programático (§5.3). */}
+          <Textarea
             rows={3}
             maxLength={500}
             value={note}
             onChange={(event) => setNote(event.target.value)}
-            className="w-full rounded-control border border-border-strong bg-surface px-3 py-2 text-base text-text placeholder:text-text-muted focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:outline-none"
           />
         </Field>
 

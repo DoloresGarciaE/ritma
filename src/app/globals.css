@@ -20,6 +20,34 @@
    Existen para construir tokens, no para usarse sueltas en JSX.
    ───────────────────────────────────────────────────────────── */
 @theme {
+  /* El pulso de marca (Marca §8): late 1 → 1.15 → 1 como indicador de carga. Es la ÚNICA
+     animación permitida del logo, y se aplica SOLO al punto coral (el resto no se anima).
+     Usar siempre con `motion-safe:` — prefers-reduced-motion lo apaga (§5.6). */
+  --animate-pulso: pulso 1.5s ease-in-out infinite;
+
+  @keyframes pulso {
+    0%,
+    100% {
+      transform: scale(1);
+    }
+    50% {
+      transform: scale(1.15);
+    }
+  }
+
+  /* Skeleton §3.14: pulso de OPACIDAD de 1.5 s (el de Tailwind dura 2 s, la spec pide 1.5). */
+  --animate-skeleton: skeleton 1.5s ease-in-out infinite;
+
+  @keyframes skeleton {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.5;
+    }
+  }
+
   --color-violeta-50: #f6f4fd;
   --color-violeta-100: #edeafb;
   --color-violeta-200: #c9c2f6;

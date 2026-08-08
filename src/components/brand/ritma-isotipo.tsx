@@ -8,8 +8,18 @@ import { cn } from "@/lib/utils";
  * Es la pieza para espacios reducidos y el SELLO DEL COMPROBANTE (§5.2): encabezado y
  * pie de `/r/[token]`. Tamaño mínimo: 16 px de alto (§5.4); por encima de 24 px de alto
  * ya puede ir el logotipo.
+ *
+ * `pulse` (S6, splash §3.14): el punto coral late 1 → 1.15 → 1 — la ÚNICA animación de
+ * marca permitida (Marca §8), y SOLO el punto: los trazos jamás se animan. Con
+ * `prefers-reduced-motion` queda quieto (`motion-safe:`).
  */
-export function RitmaIsotipo({ className }: { className?: string }) {
+export function RitmaIsotipo({
+  className,
+  pulse = false,
+}: {
+  className?: string;
+  pulse?: boolean;
+}) {
   return (
     <svg viewBox="-2 3 32 56" role="img" aria-label="Ritma" className={cn("h-6 w-auto", className)}>
       <g
@@ -24,7 +34,13 @@ export function RitmaIsotipo({ className }: { className?: string }) {
         <path d="M25 32 V52" />
       </g>
       {/* El pulso: el único elemento de color (Marca §5.1). */}
-      <circle cx="25" cy="12" r="4.5" fill="var(--accent)" />
+      <circle
+        cx="25"
+        cy="12"
+        r="4.5"
+        fill="var(--accent)"
+        className={cn(pulse && "origin-center [transform-box:fill-box] motion-safe:animate-pulso")}
+      />
     </svg>
   );
 }

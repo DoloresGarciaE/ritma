@@ -4,11 +4,9 @@
 > `npm run seed:scenarios` (corridos en dev, agosto 2026). Anotá encima de cada
 > ítem: `[x]` visto y OK · `[!]` visto y raro (anotá qué) · `[ ]` pendiente.
 >
-> ⚠️ **Antes de empezar, un aviso**: S6 (dashboard, PWA, E2E) **todavía no corrió**
-> — el tag `v0.2.0-f1` no existe. La pantalla Inicio muestra el placeholder de F0
-> ("Creá tu primer grupo"), no las cards de métrica. Todo lo demás de Fase 1
-> (S1–S5) está completo. Los ítems marcados **(S6 pendiente)** van a verse así
-> hasta que corramos ese bloque.
+> Nota (act. S6): el dashboard, la PWA y los E2E ya corrieron en la rama
+> `feat/s6-dashboard-pwa` — recorré desde el preview de ESA rama para ver el
+> Inicio con las cards de métrica. El aviso viejo de "S6 pendiente" ya no aplica.
 
 Entrás con tus dos cuentas de siempre; los datos ya están colgados de ellas.
 **Contraseña de las dos: `ritma-demo-2026`** (el seed asegura la credencial en
@@ -37,9 +35,10 @@ Dos cosas antes de arrancar:
 
 ## Persona 1 — La dueña de Estudio Meraki
 
-- [ ] **Inicio**: el nombre del estudio en la app bar. **(S6 pendiente)** — vas a
-      ver el CTA de primer grupo en vez de cobrado/pendiente/deudores/clases de
-      hoy, aunque el estudio ya tiene datos. Es el hueco más visible del recorrido.
+- [ ] **Inicio**: el nombre del estudio en la app bar y las cards de métrica (S6):
+      cobrado del mes, pendiente (con las cuotas impagas), deudores y las clases
+      de hoy. Verificá que **cuadren con Cobranzas** y que cada card te lleve al
+      detalle. Probá también **instalar la PWA** desde el menú del navegador.
 - [ ] **Agenda**: la semana con los 7 grupos y los tres "salones" conviviendo.
       Mirá el **martes 18:00**: Árabe inicial (Salón A) y Contemporáneo juvenil
       (Salón B) a la misma hora — ¿se entiende que son espacios distintos, o
@@ -108,7 +107,7 @@ En **Más → Organización**, tocá **Estudio Meraki** (Estudio · Profe).
 
 | Falta | Se ve en el recorrido como… | Bloque |
 |---|---|---|
-| Dashboard con métricas (HU7.1), PWA instalable, E2E F1/F2 | Inicio = placeholder de F0 | **S6 (pendiente de correr)** |
+| ~~Dashboard con métricas (HU7.1), PWA instalable, E2E F1/F2~~ | Ya está: rama `feat/s6-dashboard-pwa` | **S6 ✓** |
 | Scoping de teacher ("sus grupos y alumnos") | La profe ve todo el estudio | **S7** |
 | Selector de rol/organización pulido (invitaciones, crear org extra) | Selector mínimo por cookie, sin invitar gente | **S7** |
 | Modelo `Space` (salones de verdad), filtro por salón, choques de horario | Sufijo "· Salón X" en el nombre; cruces sin validar | **S8** |

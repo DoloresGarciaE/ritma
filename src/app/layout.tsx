@@ -20,6 +20,15 @@ export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"),
   title: "Ritma",
   description: "Gestión de agenda, alumnos y cobranzas para docentes y estudios.",
+  // PWA (S6): iOS ignora los íconos del manifest — el de 180 va como apple-touch-icon.
+  icons: {
+    apple: "/brand/ritma-app-icon-180.png",
+  },
+  appleWebApp: {
+    capable: true,
+    title: "Ritma",
+    statusBarStyle: "default",
+  },
 };
 
 /**
@@ -30,6 +39,11 @@ export const metadata: Metadata = {
  */
 export const viewport: Viewport = {
   viewportFit: "cover",
+  // El color del chrome del navegador acompaña al fondo de cada modo (Color §4).
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#fbfaf7" },
+    { media: "(prefers-color-scheme: dark)", color: "#17161d" },
+  ],
 };
 
 export default function RootLayout({
