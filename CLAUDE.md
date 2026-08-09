@@ -314,16 +314,35 @@ orden**, y la seguridad va primero:
 - ⚠️ El `AmountInput` controlado CONCATENA dígitos si le hacés `fill` con valor previo (los
   E2E no re-tipean precios pre-cargados: los verifican).
 
+## Entornos y releases (desde el ticket DEV/PROD — ADR-003)
+
+- **Mergear a `main` publica en DEV, no en producción.** La production branch de Vercel es la
+  rama-puntero **`production`**: los deploys de `main` salen como preview con URL estable
+  (`ritma-git-main-…` / `dev.ritma.com.ar`) contra la base dev. El protocolo de sesiones no
+  cambia: rama corta → PR → merge a `main` → se ve en DEV con su franja "DEV".
+- **Release = disparar el workflow `Release`** (Actions → Release → Run workflow, escribir
+  `release`). Verifica CI verde en la punta de `main`, fast-forwardea `production` y etiqueta
+  `release-YYYYMMDD-HHmm`; Vercel deploya producción solo. `production` **jamás** recibe
+  commits directos ni PRs — la mueve solo el workflow.
+- **Rollback:** mover el puntero al tag anterior y dejar que Vercel redeploye:
+  `git fetch --tags && git push --force-with-lease origin <tag-anterior>^{commit}:refs/heads/production`
+  (el force es legítimo SOLO acá: el puntero retrocede a un estado ya deployado). El código
+  vuelve; la base NO se desmigra — por eso las migraciones son expand/contract.
+- **La franja "DEV"** ([`src/components/env-banner.tsx`](src/components/env-banner.tsx)) aparece
+  en todo `VERCEL_ENV=preview` (DEV y previews de PR) y nunca en producción ni en local.
+
 ## CI/CD y observabilidad (desde F0.7)
 
-- **Un branch de Neon por entorno.** `production` → Vercel Production; `dev` → tu `.env.local`
-  **y** los Preview deployments. Los tests **no usan Neon**: van contra el Postgres efímero de
-  `docker-compose.test.yml`. Nunca compartas base entre entornos.
-- **Las migraciones viajan con el deploy.** [`vercel.json`](vercel.json) fija el build command a
-  `npm run vercel-build`, que es `prisma generate && prisma migrate deploy && next build`. El
-  `build` normal **no** migra, así que tu build local y el de CI no tocan ninguna base. Corolario:
-  **`DIRECT_URL` es obligatoria en Vercel** (el CLI de Prisma no puede hacer DDL por el pooler);
-  sin ella, el deploy falla en el build.
+- **Un branch de Neon por entorno.** `production` → Vercel Production (rama `production`);
+  `dev` → tu `.env.local`, el DEV de `main` **y** los previews de PR. Los tests **no usan
+  Neon**: van contra el Postgres efímero de `docker-compose.test.yml`. Nunca compartas base
+  entre entornos.
+- **Las migraciones viajan con el deploy, con gate por entorno.** [`vercel.json`](vercel.json)
+  fija el build a `npm run vercel-build` = [`scripts/vercel-build.mjs`](scripts/vercel-build.mjs):
+  migra SOLO producción y los deploys de `main` (una migración se estrena en DEV al mergear);
+  los previews de PR usan la base dev SIN migrar, y el build local no toca ninguna base.
+  Corolario: **`DIRECT_URL` es obligatoria en Vercel en los DOS scopes** (el CLI de Prisma no
+  puede hacer DDL por el pooler); sin ella, el deploy falla en el build.
 - **CI sin secretos** ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)): en cada PR corren
   lint + typecheck + `format:check` + Vitest; al pushear a `main`, además el smoke de Playwright.
   El Postgres de los tests es un `services:` container mapeado a `localhost:15432`, o sea la misma
