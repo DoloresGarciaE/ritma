@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from "next";
 import { Inter, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 
+import { EnvBanner } from "@/components/env-banner";
+
 const inter = Inter({
   subsets: ["latin"],
   display: "swap",
@@ -53,7 +55,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es-AR" className={`${inter.variable} ${spaceGrotesk.variable}`}>
-      <body>{children}</body>
+      <body>
+        <EnvBanner />
+        {children}
+      </body>
     </html>
   );
 }
