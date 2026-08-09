@@ -1,0 +1,82 @@
+name: Release
+
+# Promoción explícita a producción (ADR-003): el disparo manual ES la aprobación.
+# Verifica que el CI de la punta de `main` esté verde (Vitest + lint + los E2E que
+# corren en cada push a main), fast-forwardea la rama puntero `production` y etiqueta
+# `release-YYYYMMDD-HHmm` (hora argentina). Vercel deploya producción solo, porque su
+# production branch es `production`.
+#
+# Rollback: mover el puntero al tag anterior (ver CLAUDE.md, "Release y rollback").
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Escribí "release" (literal) para promover main a producción'
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: La confirmación es literal
+        if: ${{ inputs.confirm != 'release' }}
+        run: |
+          echo '::error::La confirmación tiene que ser exactamente "release" (escribiste: "${{ inputs.confirm }}").'
+          exit 1
+
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+          # RELEASE_TOKEN (PAT fine-grained de la dueña, bypass del ruleset de `production`).
+          # Sin ese secret cae al token del job: alcanza si el ruleset permite a Actions.
+          token: ${{ secrets.RELEASE_TOKEN || github.token }}
+
+      - name: Verificar que el CI de main esté verde
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          SHA=$(git rev-parse HEAD)
+          echo "Punta de main: $SHA"
+          CHECKS=$(gh api "repos/${{ github.repository }}/commits/$SHA/check-runs" --paginate)
+          for NAME in "Lint + typecheck" "Vitest (Postgres real)" "Smoke E2E (Playwright)"; do
+            CONCLUSION=$(echo "$CHECKS" | jq -r --arg n "$NAME" \
+              '[.check_runs[] | select(.name == $n)] | sort_by(.completed_at) | last | .conclusion // "ausente"')
+            echo "$NAME → $CONCLUSION"
+            if [ "$CONCLUSION" != "success" ]; then
+              echo "::error::El check \"$NAME\" no está verde en la punta de main ($CONCLUSION). Sin CI verde no hay release."
+              exit 1
+            fi
+          done
+
+      - name: Fast-forward de production a main
+        run: |
+          git fetch origin production || true
+          if git rev-parse --verify origin/production >/dev/null 2>&1; then
+            if ! git merge-base --is-ancestor origin/production main; then
+              echo "::error::production no es ancestro de main: alguien la movió a mano. Se resuelve a mano, no desde acá."
+              exit 1
+            fi
+          fi
+          # Sin --force: si no fuera fast-forward, git lo rechaza solo.
+          git push origin main:refs/heads/production
+
+      - name: Etiquetar el release (hora argentina)
+        run: |
+          TAG="release-$(TZ=America/Argentina/Buenos_Aires date +%Y%m%d-%H%M)"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "Release a producción: $(git rev-parse --short HEAD)"
+          git push origin "$TAG"
+          echo "## Release publicado 🚀" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Commit: \`$(git rev-parse --short HEAD)\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Tag: \`$TAG\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Vercel va a deployar producción desde la rama \`production\` en unos minutos." >> "$GITHUB_STEP_SUMMARY"
