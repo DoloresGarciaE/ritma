@@ -368,3 +368,19 @@ del diagnóstico. Se pueden borrar con Prisma Studio apuntando al branch de prod
   branch = `main` (nunca llegó a usarse como target de deploy).
 - **Próximo:** bootstrap (merge, rama `dev`, default branch, ruleset en `main`, dominio
   `dev.` → rama `dev`), primer Release, limpieza de la base prod.
+
+## Semana 14 bis (agosto 2026) — cutover hecho: DEV y PROD viven
+
+- **Hecho:** Dolores completó la config (production branch = `main`, default branch =
+  `dev`, dominios apex/www activos) y disparó el primer **Release**:
+  `release-20260812-2012` sobre `f2baee3` — producción deployada desde `main`, sin
+  franja, con `ritma.com.ar` respondiendo. La rama-puntero `production` del diseño
+  descartado quedó borrada. Nota operativa: el push que CREÓ `dev` no generó deploy
+  (Vercel dedupea el mismo SHA que ya compilaba para `main`); este commit lo destraba
+  y estrena la URL estable de DEV.
+- **Trabado:** faltan dos del checklist: el **ruleset de `main`** (hoy nada impide un
+  push directo por error) y el dominio **`dev.ritma.com.ar`** (la URL de rama alcanza
+  mientras tanto). PRs #20 y #24 siguen abiertos con diff vacío (cerrarlos a mano).
+- **Próximo:** limpieza de la base prod (decisión pendiente: wipe total vs conservar
+  las dos cuentas Gmail); tag `v0.2.0-f1`; primer bloque de Fase 2 (S7) ya sobre el
+  flujo nuevo.
