@@ -90,7 +90,10 @@ está acá a propósito y no existe en producción.
 
 ## Deploy
 
-Producción: **Vercel**, desde `main`. Cada PR genera un **preview deployment**.
+Producción: **Vercel**, desde `main` — que solo se mueve con el workflow **Release**
+(fast-forward desde `dev` + tag `release-*`, ADR-003). El ambiente **DEV** es la rama
+`dev` (`dev.ritma.com.ar`), con franja "DEV" visible; cada PR genera además un
+**preview deployment**.
 
 - El build de Vercel usa el script `vercel-build`, que corre **`prisma migrate deploy`** antes
   de `next build`: las migraciones viajan con cada deploy. Por eso `DIRECT_URL` (la conexión
@@ -98,5 +101,5 @@ Producción: **Vercel**, desde `main`. Cada PR genera un **preview deployment**.
 - **Un branch de Neon por entorno**: `production` para producción, `dev` para desarrollo local
   y para los previews. Nunca se comparte base entre entornos.
 - **CI** (GitHub Actions): en cada PR corre lint + typecheck + formato + Vitest; al mergear a
-  `main`, además los tres E2E de Playwright. No necesita ningún secreto: la base de los tests
-  es un service container del propio job.
+  `dev`, además los tres E2E de Playwright — la guardia previa al release. No necesita ningún
+  secreto: la base de los tests es un service container del propio job.

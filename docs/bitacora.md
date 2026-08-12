@@ -352,3 +352,19 @@ del diagnóstico. Se pueden borrar con Prisma Studio apuntando al branch de prod
   esta máquina). El cutover tiene ORDEN: primero la config de Vercel, después el merge.
 - **Próximo:** cutover guiado (config → merge → ver DEV con franja → Release → ensayo de
   rollback); limpieza de prod aprobada; tag `v0.2.0-f1` sobre el primer release.
+
+## Semana 14 (agosto 2026) — el modelo de ambientes pasa a rama-por-ambiente
+
+- **Hecho:** a pedido de Dolores, el diseño del ticket cambió del puntero (`main`=DEV +
+  `production`) al modelo por rama: **`dev` = ambiente DEV** (default branch, integra
+  todas las features, deploya `dev.ritma.com.ar` con franja) y **`main` = producción**
+  (solo la mueve el workflow Release por fast-forward + tag). Sin doble merge por
+  feature: `main` recibe `dev` ENTERO, nunca features sueltas — main es siempre prefijo
+  exacto de dev. Reacomodado: gate de migraciones (`ref === "dev"`), Release (dev→main),
+  E2E al pushear a `dev`, trustedOrigins (`ritma-git-dev-…`), ADR-003 reescrito,
+  CLAUDE.md/README. Dolores ya había agregado `ritma.com.ar` y `www` en Vercel y abierto
+  el PR #24 (CI verde).
+- **Trabado:** nada. El puntero `production` se retira cuando Vercel confirme production
+  branch = `main` (nunca llegó a usarse como target de deploy).
+- **Próximo:** bootstrap (merge, rama `dev`, default branch, ruleset en `main`, dominio
+  `dev.` → rama `dev`), primer Release, limpieza de la base prod.

@@ -63,18 +63,16 @@ describe("baseURL y trustedOrigins por entorno", () => {
     expect(auth.options.trustedOrigins).toContain("https://www.ritma.com.ar");
   });
 
-  it("el DEV estable (ADR-003) siempre vale: dominio custom y URL de rama de main", async () => {
-    // El deploy de main sale como preview (la production branch es `production`), y se
-    // abre por dev.ritma.com.ar — que la derivación de baseURL no conoce: va explícito.
+  it("el DEV estable (ADR-003) siempre vale: dominio custom y URL de la rama dev", async () => {
+    // El deploy de la rama `dev` sale como preview (la production branch es `main`), y
+    // se abre por dev.ritma.com.ar — que la derivación de baseURL no conoce: va explícito.
     process.env.VERCEL_ENV = "preview";
-    process.env.VERCEL_BRANCH_URL = "ritma-git-main-loli-projects.vercel.app";
+    process.env.VERCEL_BRANCH_URL = "ritma-git-dev-loli-projects.vercel.app";
 
     const { auth } = await import("@/lib/auth");
 
     expect(auth.options.trustedOrigins).toContain("https://dev.ritma.com.ar");
-    expect(auth.options.trustedOrigins).toContain(
-      "https://ritma-git-main-loli-projects.vercel.app",
-    );
+    expect(auth.options.trustedOrigins).toContain("https://ritma-git-dev-loli-projects.vercel.app");
   });
 });
 

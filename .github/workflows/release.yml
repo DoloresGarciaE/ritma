@@ -1,18 +1,21 @@
 name: Release
 
-# Promoción explícita a producción (ADR-003): el disparo manual ES la aprobación.
-# Verifica que el CI de la punta de `main` esté verde (Vitest + lint + los E2E que
-# corren en cada push a main), fast-forwardea la rama puntero `production` y etiqueta
-# `release-YYYYMMDD-HHmm` (hora argentina). Vercel deploya producción solo, porque su
-# production branch es `production`.
+# Promoción explícita a producción (ADR-003, modelo por rama): `dev` es el ambiente DEV
+# y `main` es producción. Este workflow ES el "merge de dev a main": verifica que el CI
+# de la punta de `dev` esté verde (Vitest + lint + los tres E2E que corren en cada push
+# a dev), fast-forwardea `main` y etiqueta `release-YYYYMMDD-HHmm` (hora argentina).
+# Vercel deploya producción solo (su production branch es `main`).
 #
-# Rollback: mover el puntero al tag anterior (ver CLAUDE.md, "Release y rollback").
+# main JAMÁS recibe commits que no vengan de acá: así main y dev son SIEMPRE el mismo
+# árbol al momento del release (sin merge commits que los desincronicen).
+#
+# Rollback: mover main al tag anterior (ver CLAUDE.md, "Release y rollback").
 
 on:
   workflow_dispatch:
     inputs:
       confirm:
-        description: 'Escribí "release" (literal) para promover main a producción'
+        description: 'Escribí "release" (literal) para promover dev a producción'
         required: true
 
 permissions:
@@ -34,40 +37,40 @@ jobs:
 
       - uses: actions/checkout@v7
         with:
-          ref: main
+          ref: dev
           fetch-depth: 0
-          # RELEASE_TOKEN (PAT fine-grained de la dueña, bypass del ruleset de `production`).
+          # RELEASE_TOKEN (PAT fine-grained de la dueña, bypass del ruleset de `main`).
           # Sin ese secret cae al token del job: alcanza si el ruleset permite a Actions.
           token: ${{ secrets.RELEASE_TOKEN || github.token }}
 
-      - name: Verificar que el CI de main esté verde
+      - name: Verificar que el CI de dev esté verde
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           SHA=$(git rev-parse HEAD)
-          echo "Punta de main: $SHA"
+          echo "Punta de dev: $SHA"
           CHECKS=$(gh api "repos/${{ github.repository }}/commits/$SHA/check-runs" --paginate)
           for NAME in "Lint + typecheck" "Vitest (Postgres real)" "Smoke E2E (Playwright)"; do
             CONCLUSION=$(echo "$CHECKS" | jq -r --arg n "$NAME" \
               '[.check_runs[] | select(.name == $n)] | sort_by(.completed_at) | last | .conclusion // "ausente"')
             echo "$NAME → $CONCLUSION"
             if [ "$CONCLUSION" != "success" ]; then
-              echo "::error::El check \"$NAME\" no está verde en la punta de main ($CONCLUSION). Sin CI verde no hay release."
+              echo "::error::El check \"$NAME\" no está verde en la punta de dev ($CONCLUSION). Sin CI verde no hay release."
               exit 1
             fi
           done
 
-      - name: Fast-forward de production a main
+      - name: Fast-forward de main a dev
         run: |
-          git fetch origin production || true
-          if git rev-parse --verify origin/production >/dev/null 2>&1; then
-            if ! git merge-base --is-ancestor origin/production main; then
-              echo "::error::production no es ancestro de main: alguien la movió a mano. Se resuelve a mano, no desde acá."
+          git fetch origin main || true
+          if git rev-parse --verify origin/main >/dev/null 2>&1; then
+            if ! git merge-base --is-ancestor origin/main dev; then
+              echo "::error::main no es ancestro de dev: alguien le metió un commit directo a main. Se resuelve a mano, no desde acá."
               exit 1
             fi
           fi
           # Sin --force: si no fuera fast-forward, git lo rechaza solo.
-          git push origin main:refs/heads/production
+          git push origin dev:refs/heads/main
 
       - name: Etiquetar el release (hora argentina)
         run: |
@@ -79,4 +82,4 @@ jobs:
           echo "## Release publicado 🚀" >> "$GITHUB_STEP_SUMMARY"
           echo "- Commit: \`$(git rev-parse --short HEAD)\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- Tag: \`$TAG\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Vercel va a deployar producción desde la rama \`production\` en unos minutos." >> "$GITHUB_STEP_SUMMARY"
+          echo "- Vercel va a deployar producción desde \`main\` en unos minutos." >> "$GITHUB_STEP_SUMMARY"

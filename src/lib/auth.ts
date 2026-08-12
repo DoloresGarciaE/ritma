@@ -52,11 +52,11 @@ const baseURL = process.env.BETTER_AUTH_URL ?? vercelBranchUrl;
 const trustedOrigins = [
   "https://ritma.com.ar",
   "https://www.ritma.com.ar",
-  // DEV estable (ADR-003): el branch domain de `main` y su URL de Vercel. La derivación
-  // de baseURL no conoce el dominio custom, así que va explícito — la trampa recurrente
-  // de esta base es un origen que falta, no uno que sobra.
+  // DEV estable (ADR-003): el branch domain de la rama `dev` y su URL de Vercel. La
+  // derivación de baseURL no conoce el dominio custom, así que va explícito — la trampa
+  // recurrente de esta base es un origen que falta, no uno que sobra.
   "https://dev.ritma.com.ar",
-  "https://ritma-git-main-loli-projects.vercel.app",
+  "https://ritma-git-dev-loli-projects.vercel.app",
   "https://ritma-eight.vercel.app",
   // Un preview se puede abrir por la URL de la rama O por la del deploy: las dos valen.
   ...[baseURL, vercelBranchUrl, vercelDeployUrl].filter((url) => url !== undefined),
