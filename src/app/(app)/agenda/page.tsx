@@ -11,7 +11,7 @@ import { listStudents } from "@/server/services/students";
 import { AgendaScreen } from "./_components/agenda-screen";
 
 export const metadata: Metadata = {
-  title: "Agenda · Ritma",
+  title: "Agenda",
 };
 
 /**

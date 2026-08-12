@@ -384,3 +384,22 @@ del diagnóstico. Se pueden borrar con Prisma Studio apuntando al branch de prod
 - **Próximo:** limpieza de la base prod (decisión pendiente: wipe total vs conservar
   las dos cuentas Gmail); tag `v0.2.0-f1`; primer bloque de Fase 2 (S7) ya sobre el
   flujo nuevo.
+
+## Semana 14 ter (agosto 2026) — ticket favicon: identidad de pestaña
+
+- **Hecho:** diagnóstico con causa raíz encontrada — S6 SÍ había creado `icon.svg` y
+  `favicon.ico`, pero el `<link>` del SVG nunca llegaba al HTML: **declarar
+  `metadata.icons` en el layout (el apple-touch de la PWA) SUPRIME el link del
+  `icon.svg` file-based en Next 16**, aunque la doc diga que el file-based gana
+  (verificado A/B en dev: sin el config aparecen los dos links). Encima el ICO era
+  Tinta 900 sobre transparente: casi invisible en pestañas oscuras — de ahí el "globo".
+  Fix: todo a convención de archivos (`apple-icon.png` reemplaza al config; comentario
+  centinela en el layout para que `icons` no vuelva), `icon.svg` con margen y el pulso
+  Coral 500 FIJO en ambos modos (trazos Tinta 900 → Blanco roto adentro del SVG),
+  `favicon.ico` regenerado 16/32/48 con el mismo arte (legibilidad verificada a 16 px),
+  y títulos con `title.template` "%s · Ritma" (13 pages exportan el corto; el
+  comprobante conserva su título SIN sufijo vía `absolute` — la org es la protagonista).
+  Marca §9.2 versionada con la decisión del pulso.
+- **Trabado:** nada.
+- **Próximo:** merge a `dev` (rama sin mergear, PR de Dolores), verificación en ventana
+  privada desde su máquina, y Release cuando quiera verlo en producción.

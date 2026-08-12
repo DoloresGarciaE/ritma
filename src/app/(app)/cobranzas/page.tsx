@@ -19,7 +19,7 @@ import { EmptyState } from "../_components/empty-state";
 import { DebtorsList } from "./_components/debtors-list";
 
 export const metadata: Metadata = {
-  title: "Cobranzas · Ritma",
+  title: "Cobranzas",
 };
 
 /**

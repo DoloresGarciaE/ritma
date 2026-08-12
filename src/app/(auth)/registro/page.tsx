@@ -7,7 +7,7 @@ import { isGoogleEnabled } from "@/lib/auth";
 import { AuthForm } from "../_components/auth-form";
 
 export const metadata: Metadata = {
-  title: "Crear cuenta · Ritma",
+  title: "Crear cuenta",
 };
 
 export default function RegistroPage() {

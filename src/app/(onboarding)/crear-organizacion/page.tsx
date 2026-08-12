@@ -5,7 +5,7 @@ import { RitmaLogotipo } from "@/components/brand/ritma-logotipo";
 import { Wizard } from "./wizard";
 
 export const metadata: Metadata = {
-  title: "Creá tu organización · Ritma",
+  title: "Creá tu organización",
 };
 
 export default function CrearOrganizacionPage() {

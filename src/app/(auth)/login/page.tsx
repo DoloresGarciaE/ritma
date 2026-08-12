@@ -7,7 +7,7 @@ import { isGoogleEnabled } from "@/lib/auth";
 import { AuthForm } from "../_components/auth-form";
 
 export const metadata: Metadata = {
-  title: "Iniciar sesión · Ritma",
+  title: "Iniciar sesión",
 };
 
 export default function LoginPage() {

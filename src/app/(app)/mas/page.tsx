@@ -12,7 +12,7 @@ import { LogoutButton } from "../_components/logout-button";
 import { OrgSwitcher } from "./_components/org-switcher";
 
 export const metadata: Metadata = {
-  title: "Más · Ritma",
+  title: "Más",
 };
 
 /**

@@ -26,7 +26,7 @@ const DEMO_STUDENTS: StudentListItem[] = [
 ];
 
 export const metadata: Metadata = {
-  title: "Componentes · Ritma",
+  title: "Componentes",
   robots: { index: false, follow: false },
 };
 

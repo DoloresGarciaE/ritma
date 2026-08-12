@@ -13,7 +13,7 @@ import { EmptyState } from "../_components/empty-state";
 import { TodayClasses } from "./_components/today-classes";
 
 export const metadata: Metadata = {
-  title: "Inicio · Ritma",
+  title: "Inicio",
 };
 
 /**

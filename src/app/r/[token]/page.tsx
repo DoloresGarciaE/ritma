@@ -54,13 +54,16 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { token } = await params;
   const receipt = await getReceiptByToken(token);
   // El 404 real lo responde la page; los metadatos del caso inexistente no dicen nada.
-  if (!receipt) return { title: "Comprobante", robots: { index: false, follow: false } };
+  // `absolute`: el comprobante NO lleva el sufijo " · Ritma" del template — la org es la
+  // protagonista y Ritma firma en el pie (Marca §9.1).
+  if (!receipt)
+    return { title: { absolute: "Comprobante" }, robots: { index: false, follow: false } };
 
   const period = periodOf(receipt);
   const description = [period, formatMoney(receipt.amount)].filter(Boolean).join(" · ");
 
   return {
-    title: `Comprobante · ${receipt.orgName}`,
+    title: { absolute: `Comprobante · ${receipt.orgName}` },
     description,
     robots: { index: false, follow: false },
     // El preview del chat (HU5.1): org como título, período y monto como bajada. La

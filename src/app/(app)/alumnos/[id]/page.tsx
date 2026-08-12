@@ -29,7 +29,7 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const session = await requireSession();
   const student = await getStudent(session.activeOrgId!, id);
 
-  return { title: student ? `${student.name} · Ritma` : "Alumno · Ritma" };
+  return { title: student ? student.name : "Alumno" };
 }
 
 /**

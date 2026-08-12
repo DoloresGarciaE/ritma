@@ -20,12 +20,18 @@ export const metadata: Metadata = {
   // La base de toda URL de metadatos (S5): sin esto, un path relativo en openGraph es
   // ERROR DE BUILD en Next 16. Misma fuente que los links compartidos (lib/receipts.ts).
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"),
-  title: "Ritma",
-  description: "Gestión de agenda, alumnos y cobranzas para docentes y estudios.",
-  // PWA (S6): iOS ignora los íconos del manifest — el de 180 va como apple-touch-icon.
-  icons: {
-    apple: "/brand/ritma-app-icon-180.png",
+  // Template de pestaña (ticket favicon): cada page exporta el corto ("Agenda") y esto
+  // arma "Agenda · Ritma". El comprobante público opta afuera con `absolute` (la org es
+  // la protagonista, Marca §9.1).
+  title: {
+    template: "%s · Ritma",
+    default: "Ritma",
   },
+  description: "Agenda, alumnos y cobranzas para docentes y estudios.",
+  // ⚠️ Íconos SOLO por convención de archivo (src/app/icon.svg, favicon.ico,
+  // apple-icon.png). Declarar `icons` acá SUPRIME el <link> del icon.svg file-based en
+  // Next 16 (bug encontrado en el ticket favicon: la doc dice que el file-based gana,
+  // pero en la práctica el config lo pisa). No volver a agregar `icons`.
   appleWebApp: {
     capable: true,
     title: "Ritma",
