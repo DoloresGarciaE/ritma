@@ -14,7 +14,7 @@ import { AppBar } from "../_components/app-bar";
 import { BillingSettingsCard } from "./_components/billing-settings-card";
 
 export const metadata: Metadata = {
-  title: "Ajustes · Ritma",
+  title: "Ajustes",
 };
 
 /**

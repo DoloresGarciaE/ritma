@@ -9,7 +9,7 @@ import { AppBar } from "../_components/app-bar";
 import { EmptyState } from "../_components/empty-state";
 
 export const metadata: Metadata = {
-  title: "Estudio · Ritma",
+  title: "Estudio",
 };
 
 /**

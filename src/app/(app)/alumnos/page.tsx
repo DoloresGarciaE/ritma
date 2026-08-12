@@ -7,7 +7,7 @@ import { AppBar } from "../_components/app-bar";
 import { StudentsScreen } from "./_components/students-screen";
 
 export const metadata: Metadata = {
-  title: "Alumnos · Ritma",
+  title: "Alumnos",
 };
 
 /**

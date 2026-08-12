@@ -214,7 +214,7 @@ Es la pieza más vista por personas ajenas al producto: cada alumno recibe uno. 
 
 ### 9.2 Ícono de app y favicon
 
-Ícono: contenedor redondeado (radio = 22,5% del lado) en Violeta 600, isotipo blanco centrado (archivo `ritma-app-icon.svg`, exportar a 512/192/180 px). Favicon: isotipo en Tinta 900 sobre transparente (16/32 px); en modo oscuro del navegador puede usarse la variante en Blanco roto.
+Ícono: contenedor redondeado (radio = 22,5% del lado) en Violeta 600, isotipo blanco centrado (archivo `ritma-app-icon.svg`, exportar a 512/192/180 px). Favicon: isotipo en Tinta 900 sobre transparente (16/32/48 px); en modo oscuro del navegador, los trazos en Blanco roto. (Nota ticket favicon, agosto 2026: el **pulso queda Coral 500 en los dos modos** — funciona sobre claro y oscuro como elemento gráfico y es lo que distingue la pestaña; solo los trazos cambian con el tema. El SVG resuelve ambos modos adentro con `prefers-color-scheme`.)
 
 ### 9.3 Mensajes de WhatsApp y email
 
