@@ -1,11 +1,13 @@
 name: CI
 
 # En los PR: lint + typecheck + Vitest (aislamiento contra Postgres real).
-# Al mergear a main: además, el smoke E2E contra un build de producción local.
+# Al mergear a dev: además, los tres E2E contra un build de producción local — la
+# guardia previa al release (ADR-003: main solo recibe dev entero, vía el workflow
+# Release, que exige estos checks verdes en la punta de dev).
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [dev]
 
 # Un PR que recibe otro push cancela la corrida anterior: no pagamos CI de commits viejos.
 concurrency:
@@ -82,11 +84,11 @@ jobs:
       # service, así que se corre Vitest directo. vitest.config.ts carga .env.test solo.
       - run: npx vitest run
 
-  # ── Smoke E2E: solo en main (Plan §9) ─────────────────────────────────────────
+  # ── Smoke E2E: solo al pushear a dev (Plan §9 + ADR-003) ──────────────────────
   e2e:
     name: Smoke E2E (Playwright)
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
     needs: [quality, test]
 
     services:

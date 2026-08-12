@@ -331,3 +331,40 @@ del diagnóstico. Se pueden borrar con Prisma Studio apuntando al branch de prod
 - **Próximo:** recorrido de Dolores con el guion (preview de `feat/s6-dashboard-pwa`,
   instalando la PWA); merge → corren los 3 E2E en main → tag `v0.2.0-f1`; con lo anotado,
   definir S7.
+
+## Semana 13 ter (agosto 2026) — ticket: ambientes DEV y PROD
+
+- **Hecho:** S6 squash-mergeado a `main` (Fase 1 completa en el historial). Ticket de
+  ambientes implementado en `feat/env-dev-prod` (ADR-003): `main` pasa a ser el ambiente
+  DEV (production branch de Vercel → rama-puntero `production`, creada en el estado S6);
+  producción solo por el workflow `Release` (dispatch manual con confirmación literal,
+  verifica CI verde en la punta de main, fast-forward + tag `release-YYYYMMDD-HHmm`);
+  rollback = mover el puntero al tag anterior. Migraciones con gate
+  (`scripts/vercel-build.mjs`): prod y deploys de main migran, previews de PR no. Franja
+  "DEV" en todo deploy no productivo. Cinturón del seed ahora con el endpoint de prod
+  fijado en el código (funciona sin `.env.production`; test). `dev.ritma.com.ar` +
+  `ritma-git-main-…` en trustedOrigins (test pineado). Inventario read-only de la base
+  prod: quedó basura de pruebas (seed viejo, usuarios diag del smoke, orgs de testeo) —
+  propuesta de limpieza en el reporte, para ANTES del primer release formal.
+- **Trabado:** los clicks de dashboard son de Dolores (checklist en el reporte): cambiar
+  la production branch a `production`, dominios (`ritma.com.ar`, `www`, `dev.` →
+  branch main), env vars por scope, ruleset de `production`, y abrir el PR (sin `gh` en
+  esta máquina). El cutover tiene ORDEN: primero la config de Vercel, después el merge.
+- **Próximo:** cutover guiado (config → merge → ver DEV con franja → Release → ensayo de
+  rollback); limpieza de prod aprobada; tag `v0.2.0-f1` sobre el primer release.
+
+## Semana 14 (agosto 2026) — el modelo de ambientes pasa a rama-por-ambiente
+
+- **Hecho:** a pedido de Dolores, el diseño del ticket cambió del puntero (`main`=DEV +
+  `production`) al modelo por rama: **`dev` = ambiente DEV** (default branch, integra
+  todas las features, deploya `dev.ritma.com.ar` con franja) y **`main` = producción**
+  (solo la mueve el workflow Release por fast-forward + tag). Sin doble merge por
+  feature: `main` recibe `dev` ENTERO, nunca features sueltas — main es siempre prefijo
+  exacto de dev. Reacomodado: gate de migraciones (`ref === "dev"`), Release (dev→main),
+  E2E al pushear a `dev`, trustedOrigins (`ritma-git-dev-…`), ADR-003 reescrito,
+  CLAUDE.md/README. Dolores ya había agregado `ritma.com.ar` y `www` en Vercel y abierto
+  el PR #24 (CI verde).
+- **Trabado:** nada. El puntero `production` se retira cuando Vercel confirme production
+  branch = `main` (nunca llegó a usarse como target de deploy).
+- **Próximo:** bootstrap (merge, rama `dev`, default branch, ruleset en `main`, dominio
+  `dev.` → rama `dev`), primer Release, limpieza de la base prod.

@@ -314,18 +314,38 @@ orden**, y la seguridad va primero:
 - ⚠️ El `AmountInput` controlado CONCATENA dígitos si le hacés `fill` con valor previo (los
   E2E no re-tipean precios pre-cargados: los verifican).
 
+## Entornos y releases (desde el ticket DEV/PROD — ADR-003)
+
+- **Una rama por ambiente: `dev` es DEV, `main` es producción.** `dev` es la default branch:
+  TODA rama de trabajo sale de `dev` y se mergea a `dev` (una feature = UN merge; `main` no
+  recibe features sueltas). Cada merge a `dev` deploya el ambiente DEV con URL estable
+  (`ritma-git-dev-…` / `dev.ritma.com.ar`) contra la base dev, con la franja "DEV".
+- **Release = disparar el workflow `Release`** (Actions → Release → Run workflow, escribir
+  `release`). ES el "merge de dev a main": verifica CI verde en la punta de `dev` (los tres
+  E2E corren en cada push a `dev`), fast-forwardea `main` y etiqueta `release-YYYYMMDD-HHmm`;
+  Vercel deploya producción solo. `main` **jamás** recibe commits directos ni PRs — la mueve
+  solo el workflow, así `main` es siempre un prefijo exacto de `dev`.
+- **Rollback:** mover `main` al tag anterior y dejar que Vercel redeploye:
+  `git fetch --tags && git push --force-with-lease origin <tag-anterior>^{commit}:refs/heads/main`
+  (el force es legítimo SOLO acá: producción retrocede a un estado ya deployado). El código
+  vuelve; la base NO se desmigra — por eso las migraciones son expand/contract.
+- **La franja "DEV"** ([`src/components/env-banner.tsx`](src/components/env-banner.tsx)) aparece
+  en todo `VERCEL_ENV=preview` (DEV y previews de PR) y nunca en producción ni en local.
+
 ## CI/CD y observabilidad (desde F0.7)
 
-- **Un branch de Neon por entorno.** `production` → Vercel Production; `dev` → tu `.env.local`
-  **y** los Preview deployments. Los tests **no usan Neon**: van contra el Postgres efímero de
-  `docker-compose.test.yml`. Nunca compartas base entre entornos.
-- **Las migraciones viajan con el deploy.** [`vercel.json`](vercel.json) fija el build command a
-  `npm run vercel-build`, que es `prisma generate && prisma migrate deploy && next build`. El
-  `build` normal **no** migra, así que tu build local y el de CI no tocan ninguna base. Corolario:
-  **`DIRECT_URL` es obligatoria en Vercel** (el CLI de Prisma no puede hacer DDL por el pooler);
-  sin ella, el deploy falla en el build.
+- **Un branch de Neon por entorno.** Neon `production` → Vercel Production (rama `main`);
+  Neon `dev` → tu `.env.local`, el ambiente DEV (rama `dev`) **y** los previews de PR. Los
+  tests **no usan Neon**: van contra el Postgres efímero de `docker-compose.test.yml`. Nunca
+  compartas base entre entornos.
+- **Las migraciones viajan con el deploy, con gate por entorno.** [`vercel.json`](vercel.json)
+  fija el build a `npm run vercel-build` = [`scripts/vercel-build.mjs`](scripts/vercel-build.mjs):
+  migra SOLO producción y los deploys de la rama `dev` (una migración se estrena en DEV al
+  mergear); los previews de PR usan la base dev SIN migrar, y el build local no toca ninguna
+  base. Corolario: **`DIRECT_URL` es obligatoria en Vercel en los DOS scopes** (el CLI de
+  Prisma no puede hacer DDL por el pooler); sin ella, el deploy falla en el build.
 - **CI sin secretos** ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)): en cada PR corren
-  lint + typecheck + `format:check` + Vitest; al pushear a `main`, además el smoke de Playwright.
+  lint + typecheck + `format:check` + Vitest; al pushear a `dev`, además los tres E2E de Playwright.
   El Postgres de los tests es un `services:` container mapeado a `localhost:15432`, o sea la misma
   URL que ya trae `.env.test` — sirve tal cual, sin editar nada y sin tocar la guarda de
   [`tests/db.ts`](tests/db.ts).
@@ -456,8 +476,10 @@ El gestor de paquetes es **npm** (lo fija `package-lock.json`): todo script y ej
 
 ## Flujo de trabajo
 
-- Trunk-based: ramas cortas `feat/...`, PR propio (el diff es la revisión), merge solo con CI
-  verde. **Un bloque del plan = una sesión = un commit deployable.** Nada queda a medio migrar.
+- Ramas cortas `feat/...` que salen de **`dev`** y se mergean a **`dev`** (la default branch),
+  PR propio (el diff es la revisión), merge solo con CI verde. **Un bloque del plan = una
+  sesión = un commit deployable.** Nada queda a medio migrar. `main` es producción y no se
+  toca a mano: solo el workflow Release (ADR-003).
 - **Sesión interrumpida a mitad:** lo ÚLTIMO antes de frenar es actualizar `docs/bitacora.md`
   y el snapshot de estado (los checkboxes de `docs/plan-implementacion-ritma.md`) con el
   estado parcial **real** — qué se hizo, qué no, en qué rama quedó. Nunca un snapshot que

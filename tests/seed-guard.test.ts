@@ -4,7 +4,12 @@ import { join } from "node:path";
 
 import { afterAll, describe, expect, it } from "vitest";
 
-import { endpointId, isProductionTarget, productionDbUrls } from "../prisma/seed-guard";
+import {
+  endpointId,
+  isProductionTarget,
+  PRODUCTION_ENDPOINT_IDS,
+  productionDbUrls,
+} from "../prisma/seed-guard";
 
 /**
  * El cinturón anti-producción de `seed:scenarios`: ni `--yes` puede apuntarlo a prod.
@@ -49,8 +54,19 @@ describe("isProductionTarget", () => {
     );
   });
 
-  it("sin URLs de prod no hay contra qué comparar: no bloquea", () => {
+  it("un host DESCONOCIDO sin URLs extra no bloquea (el fake no está en la lista fija)", () => {
     expect(isProductionTarget(PROD_POOLED, [])).toBe(false);
+  });
+
+  it("el endpoint REAL de prod (fijado en el código) bloquea SIN .env.production", () => {
+    // Si prod cambia de endpoint, actualizá PRODUCTION_ENDPOINT_IDS y este test juntos.
+    expect(PRODUCTION_ENDPOINT_IDS).toContain("ep-round-dawn-at0ylkcp");
+    for (const id of PRODUCTION_ENDPOINT_IDS) {
+      const pooled = `postgresql://u:p@${id}-pooler.c-9.us-east-1.aws.neon.tech/neondb`;
+      const direct = `postgresql://u:p@${id}.c-9.us-east-1.aws.neon.tech/neondb`;
+      expect(isProductionTarget(pooled, [])).toBe(true);
+      expect(isProductionTarget(direct, [])).toBe(true);
+    }
   });
 
   it("entradas de prod ilegibles se ignoran sin romper", () => {

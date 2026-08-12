@@ -42,12 +42,11 @@ async function confirmTarget() {
   const target = `${url.hostname}${url.pathname}`;
   console.log(`\nBase de datos destino: ${target}`);
 
-  // Cinturón anti-producción: NO lo saltea ni `--yes`. La referencia es el
-  // `.env.production` local (gitignored; el host de prod no se commitea al repo público).
+  // Cinturón anti-producción: NO lo saltea ni `--yes`. La referencia es doble: el endpoint
+  // de prod fijado en seed-guard.ts (funciona en cualquier máquina) + `.env.production`
+  // local si existe (por si prod cambia de endpoint antes de actualizar el código).
   const prodUrls = productionDbUrls(".env.production");
-  if (prodUrls.length === 0) {
-    console.log("(sin .env.production en esta máquina: no hay contra qué comparar el host)");
-  } else if (isProductionTarget(databaseUrl, prodUrls)) {
+  if (isProductionTarget(databaseUrl, prodUrls)) {
     console.error(
       "\n✋ Ese host es el branch de PRODUCCIÓN (según .env.production). Este script se " +
         "niega a correr contra producción, incluso con --yes. Si de verdad querés " +
