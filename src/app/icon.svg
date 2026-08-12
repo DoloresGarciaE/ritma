@@ -1,12 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="-14 3 56 56">
-  <!-- Favicon (Marca §9.2): isotipo en Tinta 900 sobre transparente; en modo oscuro del
-       navegador, la variante en Blanco roto. Un solo SVG resuelve los dos modos. -->
+  <!-- Favicon (Marca §9.2 + ticket favicon): isotipo centrado con margen mínimo, trazos
+       en Tinta 900 sobre transparente — Blanco roto en modo oscuro del navegador, resuelto
+       ADENTRO del SVG. El pulso queda Coral 500 en los DOS modos: funciona sobre claro y
+       oscuro como elemento gráfico. La geometría es la del isotipo oficial: no se redibuja. -->
   <style>
     .trazo { stroke: #23212f; }
-    .pulso { fill: #23212f; }
     @media (prefers-color-scheme: dark) {
       .trazo { stroke: #edece6; }
-      .pulso { fill: #edece6; }
     }
   </style>
   <g class="trazo" fill="none" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
@@ -14,5 +14,5 @@
     <path d="M3 42 A10 10 0 0 1 13 32" />
     <path d="M25 32 V52" />
   </g>
-  <circle class="pulso" cx="25" cy="12" r="4.5" />
+  <circle cx="25" cy="12" r="4.5" fill="#ee6a4d" />
 </svg>
