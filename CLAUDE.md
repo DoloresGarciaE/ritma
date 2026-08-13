@@ -105,6 +105,13 @@ ritma/
 
 ## Organización y shell (desde F0.5)
 
+- **`/` es SOLO un redirect server-side** ([`src/lib/landing.ts`](src/lib/landing.ts)):
+  `resolveLanding` — sin sesión → `/login`, sin org → wizard, con org → `/dashboard` — es la
+  única fuente del destino de entrada y la comparten la raíz y el layout de `(auth)`. La
+  landing pública de Fase 3 reemplaza la página; ese día la resolución se muda al CTA de
+  entrada. ⚠️ El anónimo lo redirige el **Proxy** (matchea `/`; sin cookie → `/login`), no el
+  page: el `redirect()` de un page llega tarde — el `loading.tsx` raíz ya flusheó un 200 con
+  el splash y el salto queda en el cliente. Con cookie, el page decide con la sesión real.
 - **Sin organización no hay app.** El layout de `(app)` exige sesión **y** `activeOrgId`; sin
   org manda a `/crear-organizacion` (que vive en `(onboarding)`, fuera de `(app)`, para que las
   dos guardias no se peleen).
