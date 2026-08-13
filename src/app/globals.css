@@ -174,6 +174,14 @@
   --nav-active-bg: #f6f4fd;
   --nav-active-text: #5a4bd1;
 
+  /* Botón "Continuar con Google" (Componentes §3.17) — ÚNICA excepción a "ningún hex
+     fuera de la Especificación de color": son los valores del tema Light que Google
+     publica en sus lineamientos de marca, y cumplirlos es requisito para verificar la
+     app. No se derivan de la paleta de Ritma ni se ajustan por contraste. */
+  --google-btn-bg: #ffffff;
+  --google-btn-border: #747775;
+  --google-btn-text: #1f1f1f;
+
   /* Colores de disciplina (Componentes §3.7, Color §4): la barra del bloque de sesión.
      No-texto sobre blanco: Violeta 400 4.57 · Coral 500 3.09 · Verde 400 3.20.
      Coral 400 NO existe: el interpolado (#f18269) da 2.58:1 y reprueba — se usa el 500 ◆. */
@@ -239,6 +247,11 @@
   --nav-active-bg: #2a2268;
   --nav-active-text: #c9c2f6;
 
+  /* Tema Dark del botón de Google (Componentes §3.17), tal como lo publica Google */
+  --google-btn-bg: #131314;
+  --google-btn-border: #8e918f;
+  --google-btn-text: #e3e3e3;
+
   /* Disciplinas en oscuro: stops 300 sobre superficie #201f28 — 4.96 · 7.69 · 8.34 */
   --discipline-1: #8b7ff0;
   --discipline-2: #f59b85;
@@ -300,6 +313,10 @@
     --nav-active-bg: #2a2268;
     --nav-active-text: #c9c2f6;
 
+    --google-btn-bg: #131314;
+    --google-btn-border: #8e918f;
+    --google-btn-text: #e3e3e3;
+
     --discipline-1: #8b7ff0;
     --discipline-2: #f59b85;
     --discipline-3: #7cc9a4;
@@ -360,6 +377,10 @@
 
   --color-nav-active-bg: var(--nav-active-bg);
   --color-nav-active-text: var(--nav-active-text);
+
+  --color-google-btn-bg: var(--google-btn-bg);
+  --color-google-btn-border: var(--google-btn-border);
+  --color-google-btn-text: var(--google-btn-text);
 
   --color-discipline-1: var(--discipline-1);
   --color-discipline-2: var(--discipline-2);

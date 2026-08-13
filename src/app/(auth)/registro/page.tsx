@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { buttonVariants } from "@/components/ui/button";
 import { isGoogleEnabled } from "@/lib/auth";
+import { toSocialError } from "@/lib/auth-errors";
 
 import { AuthForm } from "../_components/auth-form";
 
@@ -10,7 +11,12 @@ export const metadata: Metadata = {
   title: "Crear cuenta",
 };
 
-export default function RegistroPage() {
+/** Lo que falla en el ida y vuelta con Google vuelve acá como `?error=<código>`. */
+type Props = { searchParams: Promise<{ error?: string }> };
+
+export default async function RegistroPage({ searchParams }: Props) {
+  const { error } = await searchParams;
+
   return (
     <>
       <header className="flex flex-col gap-1">
@@ -18,7 +24,11 @@ export default function RegistroPage() {
         <p className="text-text-secondary">Empezá a ordenar tu semana y tus cobranzas.</p>
       </header>
 
-      <AuthForm mode="registro" googleEnabled={isGoogleEnabled} />
+      <AuthForm
+        mode="registro"
+        googleEnabled={isGoogleEnabled}
+        socialError={toSocialError(error)}
+      />
 
       <p className="text-center text-sm text-text-secondary">
         ¿Ya tenés cuenta?{" "}
