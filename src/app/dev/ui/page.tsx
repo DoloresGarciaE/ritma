@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, MetricCard } from "@/components/ui/card";
 import { Fab } from "@/components/ui/fab";
 import { AmountInput, Field, Input, Textarea } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { SessionBlock } from "@/components/ui/session-block";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge, type InstallmentStatus } from "@/components/ui/status-badge";
@@ -104,6 +105,18 @@ function Showcase({ title }: { title: string }) {
 
           <Field label="Monto">
             <AmountInput placeholder="0" disabled />
+          </Field>
+
+          <Field label="Contraseña" helpText="Mínimo 8 caracteres.">
+            <PasswordInput autoComplete="new-password" defaultValue="ritma-demo-2026" />
+          </Field>
+
+          <Field label="Contraseña" error="La contraseña necesita al menos 8 caracteres.">
+            <PasswordInput autoComplete="new-password" defaultValue="corta" />
+          </Field>
+
+          <Field label="Contraseña">
+            <PasswordInput autoComplete="new-password" defaultValue="ritma-demo-2026" disabled />
           </Field>
 
           <Field

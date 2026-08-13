@@ -403,3 +403,23 @@ del diagnóstico. Se pueden borrar con Prisma Studio apuntando al branch de prod
 - **Trabado:** nada.
 - **Próximo:** merge a `dev` (rama sin mergear, PR de Dolores), verificación en ventana
   privada desde su máquina, y Release cuando quiera verlo en producción.
+
+## Semana 14 quater (agosto 2026) — ticket ver/ocultar contraseña
+
+- **Hecho:** el favicon mergeado a `dev` (PR #25, squash de Dolores). Ticket nuevo en
+  `feat/password-visibility-toggle`: componente `PasswordInput` (§3.2, variante
+  contraseña) compuesto sobre el Input del sistema — toggle Lucide `Eye`/`EyeOff`
+  adentro del campo, 44×44 de área táctil, `aria-label` dinámico + `aria-pressed`,
+  orden de tab natural (campo → toggle → CTA), default oculto y re-oculto en cada
+  submit y al desmontar. Aplicado en TODO el inventario: login y registro (el único
+  campo de contraseña de la app es el `AuthForm` compartido; no hay reset ni cambio
+  de contraseña todavía). Vitrina en `/dev/ui` con normal/error/disabled en ambos
+  modos. Verificado con Playwright contra dev: 21/21 (foco y cursor sobreviven al
+  toggle, Enter no togglea, paste libre, autocomplete intacto).
+- **Trabado:** nada bloqueante. Hallazgo de navegador: al cambiar el `type` del input,
+  Chrome recrea el editor interno DESPUÉS del handler y resetea el cursor a 0 — la
+  restauración de la selección tiene que diferirse (`setTimeout 0`); restaurar
+  sincrónico pierde contra ese reset (quedó comentado en el componente).
+- **Próximo:** verificación de Dolores en el teléfono (guiada en el reporte), su PR
+  `dev...feat/password-visibility-toggle`, y aprobar la entrada §3.2 propuesta para la
+  Especificación de componentes (la agrega ella al doc).
