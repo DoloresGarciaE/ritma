@@ -444,7 +444,8 @@ del diagnóstico. Se pueden borrar con Prisma Studio apuntando al branch de prod
   anónimo lo redirige el Proxy (que ahora matchea `/`) y el page decide solo cuando hay
   cookie. **Hallazgo previo, fuera de alcance:** por la misma razón, `/r/<token-inexistente>`
   responde **200** en vez de 404 (pasa hoy en producción) — el contenido es el 404 genérico,
-  pero el status miente. Anotado como deuda.
+  pero el status miente. Verificado A/B: sacando el `loading.tsx` raíz, esa misma URL vuelve
+  a responder 404. O sea que lo introdujo el splash de S6. Anotado como deuda.
 - **Próximo:** mergear `fix/e2e-password-label` PRIMERO (destraba `dev`), después
   `fix/root-redirect`; y decidir si el status del comprobante inexistente se arregla en un
   ticket aparte.
