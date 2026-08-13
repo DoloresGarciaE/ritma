@@ -449,3 +449,29 @@ del diagnóstico. Se pueden borrar con Prisma Studio apuntando al branch de prod
 - **Próximo:** mergear `fix/e2e-password-label` PRIMERO (destraba `dev`), después
   `fix/root-redirect`; y decidir si el status del comprobante inexistente se arregla en un
   ticket aparte.
+
+## Semana 15 bis (agosto 2026) — login con Google, de verdad
+
+- **Hecho:** diagnóstico en vivo primero — el botón de Google estaba **visible en producción
+  y roto desde siempre**: Google contesta `Error 400: redirect_uri_mismatch` porque la URI
+  `https://ritma.com.ar/api/auth/callback/google` nunca se registró en el cliente OAuth (que
+  sí existe). En DEV ni eso: `PROVIDER_NOT_FOUND`, no hay credenciales en ese scope.
+  En `feat/google-login`: guarda por RAMA (`VERCEL_GIT_COMMIT_REF === "dev"`) en lugar de
+  `VERCEL_ENV`, porque el DEV de ADR-003 es "preview" igual que un PR y quedaba apagado;
+  vinculación de cuentas (mismo email → misma cuenta, con sus orgs); botón nuevo siguiendo
+  los lineamientos de marca de Google (§3.17, con sus hex y su logo, tokens `--google-btn-*`);
+  aterrizaje unificado por `resolveLanding` (`callbackURL: "/"`, y el login con contraseña
+  pasa por el mismo camino); y errores del viaje a Google con copy concreto (cancelar dice
+  "Cancelaste el ingreso con Google", no "algo salió mal"). 373 Vitest + 3 E2E + 20 checks de
+  un recorrido real (geometría del botón contra los lineamientos, ambos modos, aterrizaje).
+- **Trabado:** el bloqueante del ticket lo decidió Dolores. Better Auth 1.6.23 tiene CUATRO
+  compuertas para vincular, y la que muerde es `requireLocalEmailVerified` (default `true`):
+  exige que el usuario LOCAL tenga `emailVerified: true`, y el registro con contraseña lo crea
+  siempre en `false` — así que ninguna cuenta preexistente podía vincularse, ni con
+  `trustedProviders`. Decisión: bajar esa compuerta (`false`), sabiendo que el riesgo es el
+  pre-secuestro y que Better Auth la marcó `@deprecated` — cuando se vuelva incondicional hace
+  falta verificación de email por Resend. NO se declara `trustedProviders`: esa lista exime al
+  proveedor de declarar el email verificado, justo lo contrario de la regla dura del ticket.
+- **Próximo:** Dolores carga las credenciales y las URIs (checklist en el reporte), incluida
+  la decisión de dejar el apex `ritma.com.ar` como canónico; después la verificación guiada en
+  DEV y el merge. La rama queda SIN mergear hasta que eso pase.
