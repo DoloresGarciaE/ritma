@@ -6,6 +6,7 @@ import { z } from "zod";
 
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { authClient } from "@/lib/auth-client";
 import { toAuthFormError, type AuthField } from "@/lib/auth-errors";
 
@@ -186,9 +187,8 @@ export function AuthForm({ mode, googleEnabled }: { mode: Mode; googleEnabled: b
           error={errors.password}
           helpText={mode === "registro" ? "Mínimo 8 caracteres." : undefined}
         >
-          <Input
+          <PasswordInput
             ref={passwordRef}
-            type="password"
             autoComplete={mode === "login" ? "current-password" : "new-password"}
             value={values.password}
             onChange={(event) => handleChange("password", event.target.value)}
