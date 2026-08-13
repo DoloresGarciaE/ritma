@@ -15,7 +15,9 @@ export async function registerWithOrg(page: Page, label: string): Promise<{ orgN
   await page.goto("/registro");
   await page.getByLabel("Nombre y apellido").fill("Malena Ríos");
   await page.getByLabel("Email").fill(`malena+${label.toLowerCase()}-${stamp}@ritma.test`);
-  await page.getByLabel("Contraseña").fill("una-clave-larga");
+  // `exact` porque getByLabel matchea por substring: el botón de ver/ocultar del campo
+  // lleva aria-label "Mostrar contraseña" y sin esto el locator resuelve a dos elementos.
+  await page.getByLabel("Contraseña", { exact: true }).fill("una-clave-larga");
   await page.getByRole("button", { name: "Crear cuenta" }).click();
 
   await expect(page).toHaveURL(/\/crear-organizacion$/);

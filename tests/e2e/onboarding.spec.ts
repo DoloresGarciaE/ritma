@@ -18,7 +18,9 @@ test("un usuario nuevo se registra, crea su organización y llega al dashboard",
 
   await page.getByLabel("Nombre y apellido").fill("Malena Ríos");
   await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Contraseña").fill("una-clave-larga");
+  // `exact` porque getByLabel matchea por substring: el botón de ver/ocultar del campo
+  // lleva aria-label "Mostrar contraseña" y sin esto el locator resuelve a dos elementos.
+  await page.getByLabel("Contraseña", { exact: true }).fill("una-clave-larga");
   await page.getByRole("button", { name: "Crear cuenta" }).click();
 
   // Sin organización, quien se registra cae en el wizard (no en el dashboard).
