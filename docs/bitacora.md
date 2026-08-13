@@ -423,3 +423,29 @@ del diagnóstico. Se pueden borrar con Prisma Studio apuntando al branch de prod
 - **Próximo:** verificación de Dolores en el teléfono (guiada en el reporte), su PR
   `dev...feat/password-visibility-toggle`, y aprobar la entrada §3.2 propuesta para la
   Especificación de componentes (la agrega ella al doc).
+
+## Semana 15 (agosto 2026) — la raíz enruta (ticket root-redirect)
+
+- **Hecho:** `/` dejó de servir el placeholder "hola Ritma" de F0.1 y ahora resuelve el
+  destino de entrada server-side: sin sesión → `/login`, con sesión sin org → wizard, con
+  org → `/dashboard`. La regla vive en `resolveLanding` ([`src/lib/landing.ts`](../src/lib/landing.ts)),
+  única fuente: el layout de `(auth)` —que rebota a un logueado que abre /login— pasó a
+  llamarla en vez de repetirla. Tests del helper: los tres casos + la cookie de org forjada
+  compuesta con `resolveActiveOrg` (cae en la org propia, o en el wizard si no hay ninguna).
+  Verificado con un recorrido real contra el build de producción, 15/15: 307 sin HTML
+  intermedio, login → dashboard, logout → login, registro → wizard, y ningún loop.
+- **Trabado:** dos cosas. (1) **`dev` estaba ROJO**: el merge del toggle de contraseña
+  (`8fa6d70`) rompió los tres E2E — `getByLabel("Contraseña")` matchea por SUBSTRING y el
+  `aria-label` del ojo ("Mostrar contraseña") lo volvió ambiguo. Arreglado con `exact: true`
+  en rama propia (`fix/e2e-password-label`) para poder destrabar `dev` sin esperar este
+  ticket; 3/3 en verde. (2) El redirect de la raíz **no puede vivir en el page**: el
+  `loading.tsx` raíz (splash de S6) hace que la respuesta se streamee, así que el 200 ya
+  salió cuando corre el `redirect()` y el salto queda del lado del cliente. Por eso el
+  anónimo lo redirige el Proxy (que ahora matchea `/`) y el page decide solo cuando hay
+  cookie. **Hallazgo previo, fuera de alcance:** por la misma razón, `/r/<token-inexistente>`
+  responde **200** en vez de 404 (pasa hoy en producción) — el contenido es el 404 genérico,
+  pero el status miente. Verificado A/B: sacando el `loading.tsx` raíz, esa misma URL vuelve
+  a responder 404. O sea que lo introdujo el splash de S6. Anotado como deuda.
+- **Próximo:** mergear `fix/e2e-password-label` PRIMERO (destraba `dev`), después
+  `fix/root-redirect`; y decidir si el status del comprobante inexistente se arregla en un
+  ticket aparte.

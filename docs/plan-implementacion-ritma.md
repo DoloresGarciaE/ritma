@@ -74,6 +74,8 @@ ritma/
 - [x] `create-next-app` (TS, App Router) + ESLint + Prettier + imports absolutos `@/`.
 - [x] Estructura de carpetas de §4; README con enlaces a los docs.
 - [x] Deploy inicial "hola Ritma" en Vercel (el deploy existe desde el día 1, no al final).
+      (Ese placeholder vivió en `/` hasta el ticket root-redirect de agosto 2026: hoy la raíz
+      solo enruta —`resolveLanding`, ver CLAUDE.md— y la landing pública llega en Fase 3.)
 
 ### F0.2 — Tokens y UI base (1–2 sesiones)
 - [x] `globals.css` con los tokens de Especificación de color §8 (claro y oscuro) y escalas en Tailwind.

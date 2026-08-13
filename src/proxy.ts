@@ -25,12 +25,19 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // Allowlist explícita de rutas privadas: todo lo demás (/, /login, /registro, /api/auth,
+  // Allowlist explícita de rutas privadas: todo lo demás (/login, /registro, /api/auth,
   // /_next, /dev/ui, estáticos) ni siquiera pasa por acá.
   //
   // Ojo: tienen que ser literales. Next los analiza en build, así que una variable
   // importada de nav-items.ts se ignoraría en silencio.
+  //
+  // "/" está a propósito (ticket root-redirect): la raíz no tiene contenido, y el
+  // redirect a /login tiene que salir de ACÁ para ser un 307 real — el `redirect()` del
+  // page llega tarde porque el loading.tsx raíz (splash S6) ya flusheó el shell con 200,
+  // y el salto quedaría en manos del cliente. Con cookie, "/" pasa de largo y el page
+  // resuelve el destino real (dashboard o wizard) con la sesión validada.
   matcher: [
+    "/",
     "/dashboard/:path*",
     "/agenda/:path*",
     "/alumnos/:path*",
