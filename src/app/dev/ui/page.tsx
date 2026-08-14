@@ -5,6 +5,7 @@ import { RitmaIsotipo } from "@/components/brand/ritma-isotipo";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, MetricCard } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Fab } from "@/components/ui/fab";
 import { GoogleButton } from "@/components/ui/google-button";
 import { AmountInput, Field, Input, Textarea } from "@/components/ui/input";
@@ -276,6 +277,26 @@ function Showcase({ title }: { title: string }) {
           <span className="text-sm font-medium">Grupo activo</span>
           <Switch defaultChecked aria-label="Grupo activo" />
         </div>
+      </Section>
+
+      <Section title="Checkbox (§3.2: elecciones que se confirman con un CTA)">
+        {/* La fila entera es el objetivo táctil, como en la tanda de inscripción. */}
+        <ul className="rounded-control border border-border">
+          {DEMO_STUDENTS.map((student, index) => (
+            <li key={student.id} className="border-b border-border last:border-b-0">
+              <label className="flex min-h-11 cursor-pointer items-center gap-3 px-3 py-2 text-sm hover:bg-muted">
+                <Checkbox defaultChecked={index === 0} />
+                <span>{student.name}</span>
+              </label>
+            </li>
+          ))}
+          <li className="border-t border-border">
+            <label className="flex min-h-11 items-center gap-3 px-3 py-2 text-sm opacity-50">
+              <Checkbox disabled />
+              <span>Ya inscripta (deshabilitada)</span>
+            </label>
+          </li>
+        </ul>
       </Section>
 
       <Section title="Editor de franjas (§3.15)">

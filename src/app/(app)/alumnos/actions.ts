@@ -41,11 +41,16 @@ export async function searchStudentsAction(
   return listStudents(orgId, { query, includeInactive });
 }
 
-/** Alta express (HU2.1): solo nombre y teléfono. */
+/**
+ * Alta express (HU2.1): solo nombre y teléfono.
+ *
+ * Devuelve el `id` del alumno creado para quien lo necesite: el alta express dentro de la
+ * inscripción múltiple lo usa para dejarlo YA seleccionado en la tanda.
+ */
 export async function createStudentAction(input: {
   name: string;
   phone: string;
-}): Promise<StudentFormState> {
+}): Promise<StudentFormState & { id?: string }> {
   const orgId = await currentOrgId();
 
   // Los errores se DEVUELVEN como estado: si tiráramos, el error boundary se los comería y
@@ -53,7 +58,7 @@ export async function createStudentAction(input: {
   const parsed = quickCreateSchema.safeParse(input);
   if (!parsed.success) return { errors: toFieldErrors(parsed.error) };
 
-  await createStudent(orgId, {
+  const created = await createStudent(orgId, {
     name: parsed.data.name,
     phone: parsed.data.phone,
     email: null,
@@ -61,7 +66,7 @@ export async function createStudentAction(input: {
   });
 
   revalidatePath("/alumnos");
-  return {};
+  return { id: created.id };
 }
 
 /** Edición de la ficha completa (HU2.2). */
