@@ -5,6 +5,7 @@ import { useRef, useState } from "react";
 import { z } from "zod";
 
 import { Button } from "@/components/ui/button";
+import { GoogleButton } from "@/components/ui/google-button";
 import { Field, Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { authClient } from "@/lib/auth-client";
@@ -44,7 +45,16 @@ const COPY = {
   },
 };
 
-export function AuthForm({ mode, googleEnabled }: { mode: Mode; googleEnabled: boolean }) {
+export function AuthForm({
+  mode,
+  googleEnabled,
+  socialError,
+}: {
+  mode: Mode;
+  googleEnabled: boolean;
+  /** Lo que dejó el viaje a Google en `?error=`, ya traducido (lo resuelve la page). */
+  socialError?: string | null;
+}) {
   const router = useRouter();
   const { cta, action, fields } = COPY[mode];
 
@@ -52,6 +62,9 @@ export function AuthForm({ mode, googleEnabled }: { mode: Mode; googleEnabled: b
   const [errors, setErrors] = useState<Errors>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  // Mientras el navegador se va a Google no hay nada que esperar acá, pero el botón deja
+  // de aceptar clics: dos viajes simultáneos dejarían dos states de OAuth pisándose.
+  const [googleLoading, setGoogleLoading] = useState(false);
 
   const nameRef = useRef<HTMLInputElement>(null);
   const emailRef = useRef<HTMLInputElement>(null);
@@ -128,26 +141,39 @@ export function AuthForm({ mode, googleEnabled }: { mode: Mode; googleEnabled: b
     // Quien se acaba de registrar no tiene organización: va derecho al wizard. Pasar por
     // /dashboard sería un rebote, y ese rebote es lo que deja una entrada envenenada en el
     // cache del router (la de "dashboard = andá al wizard").
-    // Al iniciar sesión, el layout de (app) decide: si no hay org, manda al wizard igual.
-    router.push(mode === "registro" ? "/crear-organizacion" : "/dashboard");
+    // Al iniciar sesión el destino no se adivina acá: lo resuelve la raíz con la sesión ya
+    // validada (`resolveLanding`) — el MISMO camino que usa el ingreso con Google.
+    router.push(mode === "registro" ? "/crear-organizacion" : "/");
     router.refresh();
   }
 
   return (
     <div className="flex flex-col gap-4">
+      {socialError ? (
+        <p role="alert" className="rounded-control bg-danger-bg px-3 py-2 text-sm text-danger-text">
+          {socialError}
+        </p>
+      ) : null}
+
       {googleEnabled ? (
         <>
-          <Button
-            type="button"
-            variant="secondary"
-            size="lg"
-            className="w-full"
-            onClick={() =>
-              authClient.signIn.social({ provider: "google", callbackURL: "/dashboard" })
-            }
-          >
-            Continuar con Google
-          </Button>
+          <GoogleButton
+            disabled={loading || googleLoading}
+            onClick={() => {
+              setGoogleLoading(true);
+              // El flujo es una redirección de página completa: esta promesa no vuelve con
+              // el error de Google (para entonces el navegador ya se fue). Lo que falle
+              // vuelve como `?error=` a errorCallbackURL, y lo lee la página de login.
+              void authClient.signIn.social({
+                provider: "google",
+                // Entrada unificada: el destino lo decide `resolveLanding` en el server,
+                // igual que para email+contraseña. Sin org, la raíz manda al wizard.
+                callbackURL: "/",
+                // Vuelve a la pantalla desde la que salió, con el motivo en `?error=`.
+                errorCallbackURL: mode === "registro" ? "/registro" : "/login",
+              });
+            }}
+          />
           <div className="flex items-center gap-3">
             <span className="h-px flex-1 bg-border" />
             <span className="text-xs text-text-secondary">o</span>
@@ -202,7 +228,13 @@ export function AuthForm({ mode, googleEnabled }: { mode: Mode; googleEnabled: b
           </p>
         ) : null}
 
-        <Button type="submit" size="lg" className="w-full" loading={loading}>
+        <Button
+          type="submit"
+          size="lg"
+          className="w-full"
+          loading={loading}
+          disabled={googleLoading}
+        >
           {cta}
         </Button>
       </form>

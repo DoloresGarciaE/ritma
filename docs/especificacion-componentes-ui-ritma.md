@@ -161,6 +161,28 @@ La sección "Cobranzas" de Ajustes, solo para owner/admin (§4.3). Dos campos de
 
 Las variables son cuatro y se documentan en el helpText del campo: `{nombre}` (nombre de pila), `{periodo}` ("Marzo 2026"), `{monto}` (la deuda del período **completo**, en remanentes — el filtro de grupo de Deudores no la achica) y `{alias}`. Una variable desconocida o con typo queda **visible sin reemplazar** en la vista previa — un hueco silencioso sería peor. Plantilla vacía = se usa la default (el ejemplo normativo de Marca §4.2, con las variables en el lugar de los datos); el placeholder del campo la muestra. Una org **sin alias** usa la default sin la frase de la transferencia: nunca se manda "Podés transferir a .". El recordatorio por **email** sale con la misma plantilla pero sin emojis (Marca §4: solo canales conversacionales). Guardar sigue §4.1: CTA primario, toast "Ajustes guardados.".
 
+### 3.17 Botón "Continuar con Google" (ticket Google)
+
+**Propósito:** entrar o registrarse con la cuenta de Google, en `/login` y `/registro`.
+
+Es el **único componente de Ritma que no usa los tokens de Ritma**: los lineamientos de marca de Google son normativos (cumplirlos es requisito para verificar la app) y prohíben recolorear el logo, redibujarlo, usarlo suelto sin el contenedor o inventar una variante. Los valores salen del configurador oficial de Google:
+
+| Propiedad | Valor (Google) |
+|---|---|
+| Fondo / borde / texto — claro | `#FFFFFF` / `#747775` 1 px / `#1F1F1F` |
+| Fondo / borde / texto — oscuro | `#131314` / `#8E918F` 1 px / `#E3E3E3` |
+| Radio | 4 px |
+| Logo G | 20 × 20, con 10 px de aire respecto del texto; los 4 colores oficiales |
+| Tipografía | `Roboto, arial, sans-serif` 14 px / 500, `letter-spacing` 0.25 px |
+| Hover | sombra `0 1px 2px rgba(60,64,67,.30), 0 1px 3px 1px rgba(60,64,67,.15)` |
+| Disabled | opacidad 38 % |
+
+Los tres hex de cada modo viven como tokens `--google-btn-*` en `globals.css` — la excepción a "ningún hex suelto" queda acotada y con nombre.
+
+**Las dos licencias que se toman**, ambas amparadas por los propios lineamientos: alto **48 px y ancho completo** (Google publica 40; sus reglas exigen que el botón sea "at least as prominent as other sign-in options" y Ritma pide 44 px de target táctil), y el texto **traducido** a "Continuar con Google" ("localization of this text is permitted and encouraged"). El logo nunca se escala ni se recolorea.
+
+**Comportamiento.** El flujo es una redirección de página completa: al tocarlo el botón deja de aceptar clics y el navegador se va a Google — no hay spinner porque no hay nada que esperar en esta pantalla. Lo que falle vuelve como `?error=` a la pantalla desde la que salió, y se muestra como mensaje concreto arriba del formulario (§4.4): cancelar el consentimiento dice "Cancelaste el ingreso con Google. Probá de nuevo o entrá con tu email.", nunca "algo salió mal". Si faltan las credenciales del entorno, el botón **no se muestra** (§4.3): no es un permiso, es que ahí no puede funcionar.
+
 ## 4. Patrones
 
 ### 4.1 Formularios
@@ -209,6 +231,7 @@ Confirmación breve → toast. Error de acción → toast persistente o mensaje 
 | Skeleton | `Skeleton` | Pulso 1.5 s |
 | Switch | `Switch` de Base UI | Solo estados que aplican al instante (§3.2) |
 | Bottom nav / Bloque de sesión / FAB / Input de monto / Editor de franjas | — (propios) | Según §3.6, §3.7, §3.13, §3.2, §3.15 |
+| Botón de Google | — (de Google) | §3.17: lineamientos de marca de Google, no tokens de Ritma |
 
 **Nota 1 (S1).** El `sheet` del registry de shadcn está construido sobre `Dialog` y **no tiene
 cierre por gesto**, que §3.8 exige. Se usa el **`Drawer` de Base UI** (que sí lo trae) para mobile

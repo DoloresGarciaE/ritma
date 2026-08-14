@@ -89,6 +89,9 @@ ritma/
 
 ### F0.4 — Autenticación (1–2 sesiones)
 - [x] Better Auth: email+contraseña y Google; páginas login/registro con los componentes de F0.2.
+      (Google quedó implementado pero apagado hasta el ticket de agosto 2026, que lo activó de
+      verdad: credenciales por entorno, botón según los lineamientos de marca de Google (§3.17)
+      y vinculación de cuentas por email verificado.)
 - [x] Sesión con `activeOrgId`; middleware que protege el grupo de rutas `(app)`.
       (En Next 16 el middleware se llama Proxy, y solo hace el chequeo optimista de la cookie:
       la guardia real es `requireSession()` en el layout de `(app)`.)

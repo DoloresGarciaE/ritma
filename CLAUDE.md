@@ -99,9 +99,29 @@ ritma/
 - **`trustedOrigins`** lista el apex, el www, la URL de producción y —en preview— la de la rama
   **y** la del deploy: un preview se puede abrir por cualquiera de las dos. Si aparece un origen
   nuevo, **agregalo ahí**; no alcanza con cambiar `BETTER_AUTH_URL`.
-- **Google se apaga en los previews** aunque haya credenciales: su `redirect_uri` sería el de la
-  rama, que Google no tiene autorizado (habría que cargar una por rama). En preview se entra con
-  email y contraseña.
+- **Google se apaga SOLO en los previews de PR** (ticket Google, ago 2026): Google valida el
+  `redirect_uri` contra una lista fija y no acepta comodines, así que el botón se ofrece donde el
+  origen es estable y su URI está registrada —local, DEV y producción— y se apaga donde cambia con
+  cada rama. ⚠️ `VERCEL_ENV` NO distingue DEV de un PR (los dos son `preview`): el discriminador es
+  `VERCEL_GIT_COMMIT_REF === "dev"`, el mismo que el gate de migraciones. La URI a registrar es
+  `<origen>/api/auth/callback/google` y el origen sale de **`BETTER_AUTH_URL`**, no de
+  `trustedOrigins` — por eso en Vercel `BETTER_AUTH_URL` y `NEXT_PUBLIC_APP_URL` están acotadas a
+  la rama `dev` (scope Preview + branch), o el deploy de DEV le mandaría a Google la URL fea de la
+  rama.
+- **Vincular cuentas: Google entra a la cuenta que ya existe.** Con el mismo email, el ingreso con
+  Google aterriza en el `User` de siempre (mismo id → organizaciones y membresías intactas) y solo
+  suma una fila en `Account`; nunca hay dos usuarios con un email. NO se declara `trustedProviders`:
+  esa lista exime al proveedor de declarar el email verificado, que es justo la prueba que exigimos.
+  Sí se baja `requireLocalEmailVerified` (decisión del ticket): el default exige que el usuario
+  LOCAL tenga `emailVerified: true` y el registro con contraseña lo crea siempre en `false`, así que
+  ninguna cuenta preexistente podría vincularse. ⚠️ **Deuda:** Better Auth marcó esa opción
+  `@deprecated` y el gate se vuelve incondicional en el próximo minor — ahí hace falta verificación
+  de email (Resend). Fijado en [`tests/google-linking.test.ts`](tests/google-linking.test.ts).
+- **El aterrizaje es UNO SOLO** para contraseña y para Google: `callbackURL: "/"` y `resolveLanding`
+  decide (sin org → wizard). Los errores del flujo social **no llegan por la promesa** —el navegador
+  ya se fue a Google—: vuelven como `?error=<código>` al `errorCallbackURL` (la pantalla desde la
+  que salió) y los traduce `toSocialError` ([`src/lib/auth-errors.ts`](src/lib/auth-errors.ts)).
+  Sin `errorCallbackURL`, en producción Better Auth escupe al usuario en `/?error=…` sin decirle nada.
 
 ## Organización y shell (desde F0.5)
 

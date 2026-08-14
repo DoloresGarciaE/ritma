@@ -6,6 +6,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, MetricCard } from "@/components/ui/card";
 import { Fab } from "@/components/ui/fab";
+import { GoogleButton } from "@/components/ui/google-button";
 import { AmountInput, Field, Input, Textarea } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { SessionBlock } from "@/components/ui/session-block";
@@ -83,6 +84,13 @@ function Showcase({ title }: { title: string }) {
         <Button size="lg" className="w-full">
           Registrar pago
         </Button>
+      </Section>
+
+      <Section title="Botón de Google (§3.17 · colores y logo son de Google, no de Ritma)">
+        <div className="flex flex-col gap-3">
+          <GoogleButton />
+          <GoogleButton disabled />
+        </div>
       </Section>
 
       <Section title="Campos">

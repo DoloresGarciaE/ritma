@@ -63,17 +63,22 @@ const trustedOrigins = [
 ];
 
 /**
- * Google queda implementado pero apagado hasta que existan las credenciales.
- * La UI lo consulta para no ofrecer un botón que sabemos que va a fallar.
+ * Google necesita, además del par de credenciales, un ORIGEN ESTABLE: valida el
+ * `redirect_uri` contra una lista fija y NO acepta comodines. Producción y el DEV de
+ * ADR-003 tienen dominio propio, así que su URI se registra una sola vez; un preview de
+ * PR estrena URL en cada rama, y ahí el botón fallaría siempre — se apaga y se entra con
+ * email y contraseña.
  *
- * En los PREVIEWS también se apaga, por la misma razón: su `redirect_uri` sería el de la rama
- * (`ritma-git-…`), que no está —ni va a estar— entre las Authorized redirect URIs de Google;
- * habría que cargar una por rama. En preview se entra con email y contraseña.
+ * ⚠️ `VERCEL_ENV` NO alcanza para distinguirlos: el deploy de la rama `dev` también sale
+ * como `preview` (la production branch es `main`). El discriminador es la RAMA, el mismo
+ * que usa el gate de migraciones (`scripts/vercel-build.mjs`). Fijado en
+ * [`tests/auth-origins.test.ts`](../../tests/auth-origins.test.ts).
  */
+const isPrPreview =
+  process.env.VERCEL_ENV === "preview" && process.env.VERCEL_GIT_COMMIT_REF !== "dev";
+
 export const isGoogleEnabled = Boolean(
-  process.env.GOOGLE_CLIENT_ID &&
-  process.env.GOOGLE_CLIENT_SECRET &&
-  process.env.VERCEL_ENV !== "preview",
+  process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET && !isPrPreview,
 );
 
 export const auth = betterAuth({
@@ -85,6 +90,32 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
     minPasswordLength: 8,
+  },
+
+  /**
+   * Vinculación de cuentas: entrar con Google usando el email de una cuenta que ya existe
+   * con contraseña ENTRA A ESA CUENTA — mismo `User.id`, así que sus organizaciones y
+   * membresías siguen intactas; lo único que se crea es la fila en `Account`. Jamás dos
+   * usuarios con el mismo email.
+   *
+   * NO se listan `trustedProviders`: esa lista EXIME al proveedor de declarar el email
+   * verificado, que es justo la prueba que exigimos. Google manda `email_verified: true`
+   * y con eso alcanza — confiarlo de más sería vincular por un email sin verificar.
+   *
+   * ⚠️ `requireLocalEmailVerified: false` es una decisión tomada (ticket Google, ago 2026):
+   * el default exige que el usuario LOCAL tenga `emailVerified: true`, y el registro con
+   * email+contraseña de Better Auth lo crea SIEMPRE en `false` (Ritma todavía no verifica
+   * emails), así que con el default ninguna cuenta preexistente podría vincularse nunca.
+   * El riesgo que cubre ese gate es el pre-secuestro: alguien registra con contraseña un
+   * email ajeno y el dueño real, al entrar con Google, cae en esa cuenta. DEUDA: Better
+   * Auth marcó la opción `@deprecated` y el gate se vuelve incondicional en el próximo
+   * minor — cuando eso pase hace falta verificación de email (Resend) sí o sí.
+   */
+  account: {
+    accountLinking: {
+      enabled: true,
+      requireLocalEmailVerified: false,
+    },
   },
 
   ...(isGoogleEnabled
