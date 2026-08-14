@@ -5,6 +5,7 @@ import {
   createEnrollment,
   endEnrollment,
   EnrollmentRuleError,
+  enrollMany,
   listActiveEnrollmentsForGroup,
   listEnrollmentsForStudent,
 } from "@/server/services/enrollments";
@@ -270,5 +271,228 @@ describe("lecturas", () => {
     const list = await listActiveEnrollmentsForGroup(org.id, group.id, "2026-07-20");
 
     expect(list.map((e) => e.student.name)).toEqual(["Baja Próxima", "Sofía Herrera"]);
+  });
+});
+
+describe("enrollMany — inscripción de a varios (una tanda, una transacción)", () => {
+  /** Un grupo y N alumnos en la misma org: el escenario de "abrí el grupo y marcá". */
+  async function makeBatch(names: string[]) {
+    const org = await makeOrg("Danzas Malena");
+    const group = await makeGroup(org.id, "Árabe inicial", { defaultPrice: 18000 });
+    const students = [];
+    for (const name of names) students.push(await makeStudent(org.id, name));
+    return { org, group, students };
+  }
+
+  const BATCH = ["Sofía Herrera", "Iñaki Gómez", "Martina Álvarez"];
+
+  it("inscribe a todos y le genera a CADA UNO su cuota del período en curso", async () => {
+    freezeClock();
+    const { org, group, students } = await makeBatch(BATCH);
+
+    const result = await enrollMany(org.id, {
+      studentIds: students.map((s) => s.id),
+      groupId: group.id,
+      plan: "MONTHLY",
+      price: 18000,
+      startDate: "2026-07-15",
+    });
+
+    expect(result.count).toBe(3);
+    expect(await db.enrollment.count()).toBe(3);
+
+    // Una cuota por alumno, todas del período en curso y con el orgId explícito puesto.
+    const charges = await db.charge.findMany({ include: { enrollment: true } });
+    expect(charges).toHaveLength(3);
+    for (const charge of charges) {
+      expect(charge.orgId).toBe(org.id);
+      expect(charge.period).toBe("2026-07");
+      expect(charge.amount.toNumber()).toBe(18000);
+      expect(charge.status).toBe("PENDING");
+      expect(charge.dueDate.toISOString()).toBe("2026-07-10T00:00:00.000Z");
+    }
+    expect(new Set(charges.map((c) => c.enrollment.studentId)).size).toBe(3);
+  });
+
+  it("la cuota de la tanda es IDÉNTICA a la que genera el flujo individual", async () => {
+    freezeClock();
+    // Dos orgs gemelas: en una se inscribe de a uno, en la otra en tanda. Mismo resultado.
+    const solo = await makeBatch(["Sofía Herrera"]);
+    const lote = await makeBatch(["Sofía Herrera"]);
+
+    await createEnrollment(solo.org.id, {
+      studentId: solo.students[0].id,
+      groupId: solo.group.id,
+      plan: "MONTHLY",
+      price: 18000,
+      startDate: "2026-07-15",
+    });
+    await enrollMany(lote.org.id, {
+      studentIds: [lote.students[0].id],
+      groupId: lote.group.id,
+      plan: "MONTHLY",
+      price: 18000,
+      startDate: "2026-07-15",
+    });
+
+    const comparable = (orgId: string) =>
+      db.charge
+        .findFirstOrThrow({ where: { orgId } })
+        .then(({ period, amount, currency, dueDate, status }) => ({
+          period,
+          amount: amount.toNumber(),
+          currency,
+          dueDate: dueDate.toISOString(),
+          status,
+        }));
+
+    expect(await comparable(lote.org.id)).toEqual(await comparable(solo.org.id));
+  });
+
+  it("clase suelta: cada alumno de la tanda recibe su cargo único a 7 días (RN11)", async () => {
+    freezeClock();
+    const { org, group, students } = await makeBatch(["Sofía Herrera", "Iñaki Gómez"]);
+
+    await enrollMany(org.id, {
+      studentIds: students.map((s) => s.id),
+      groupId: group.id,
+      plan: "DROP_IN",
+      price: 5000,
+      startDate: "2026-07-15",
+    });
+
+    const charges = await db.charge.findMany();
+    expect(charges).toHaveLength(2);
+    for (const charge of charges) {
+      expect(charge.amount.toNumber()).toBe(5000);
+      // 7 días desde el alta, ignorando el dueDay de la org — igual que el individual.
+      expect(charge.dueDate.toISOString()).toBe("2026-07-22T00:00:00.000Z");
+    }
+  });
+
+  it("uno ya inscripto voltea la tanda ENTERA, nombrándolo y sin escribir nada", async () => {
+    freezeClock();
+    const { org, group, students } = await makeBatch(BATCH);
+    // Iñaki ya está en el grupo (la UI no lo ofrecería; el server no confía en la UI).
+    await makeEnrollment(org.id, students[1].id, group.id);
+
+    await expect(
+      enrollMany(org.id, {
+        studentIds: students.map((s) => s.id),
+        groupId: group.id,
+        plan: "MONTHLY",
+        price: 18000,
+        startDate: "2026-07-15",
+      }),
+    ).rejects.toThrow(/Iñaki Gómez ya está en este grupo/);
+
+    // Ni las dos que sí podían: o entran todos o no entra ninguno.
+    expect(await db.enrollment.count()).toBe(1); // solo la que ya existía
+    expect(await db.charge.count()).toBe(0);
+  });
+
+  it("varios ya inscriptos: los nombra a todos en un solo mensaje", async () => {
+    freezeClock();
+    const { org, group, students } = await makeBatch(BATCH);
+    await makeEnrollment(org.id, students[0].id, group.id);
+    await makeEnrollment(org.id, students[2].id, group.id);
+
+    await expect(
+      enrollMany(org.id, {
+        studentIds: students.map((s) => s.id),
+        groupId: group.id,
+        plan: "MONTHLY",
+        price: 18000,
+        startDate: "2026-07-15",
+      }),
+    ).rejects.toThrow(/Ya están en este grupo: Sofía Herrera, Martina Álvarez/);
+  });
+
+  it("un alumno de OTRA org en la tanda: rechazo total, ninguna org queda tocada", async () => {
+    freezeClock();
+    const { org, group, students } = await makeBatch(BATCH);
+    const other = await makeOrg("Estudio Compás");
+    const foreign = await makeStudent(other.id, "Malena Ríos");
+
+    await expect(
+      enrollMany(org.id, {
+        studentIds: [...students.map((s) => s.id), foreign.id],
+        groupId: group.id,
+        plan: "MONTHLY",
+        price: 18000,
+        startDate: "2026-07-15",
+      }),
+    ).rejects.toThrow(/no pertenece a esta organización/);
+
+    expect(await db.enrollment.count()).toBe(0);
+    expect(await db.charge.count()).toBe(0);
+  });
+
+  it("un grupo de otra org: rechazo antes de tocar nada", async () => {
+    freezeClock();
+    const { org, students } = await makeBatch(BATCH);
+    const other = await makeOrg("Estudio Compás");
+    const foreignGroup = await makeGroup(other.id, "Contemporáneo juvenil");
+
+    await expect(
+      enrollMany(org.id, {
+        studentIds: students.map((s) => s.id),
+        groupId: foreignGroup.id,
+        plan: "MONTHLY",
+        price: 18000,
+        startDate: "2026-07-15",
+      }),
+    ).rejects.toThrow(/El grupo no pertenece/);
+
+    expect(await db.enrollment.count()).toBe(0);
+  });
+
+  it("el mismo alumno repetido en el payload cuenta una sola vez", async () => {
+    freezeClock();
+    const { org, group, students } = await makeBatch(["Sofía Herrera"]);
+    const id = students[0].id;
+
+    const result = await enrollMany(org.id, {
+      studentIds: [id, id, id],
+      groupId: group.id,
+      plan: "MONTHLY",
+      price: 18000,
+      startDate: "2026-07-15",
+    });
+
+    expect(result.count).toBe(1);
+    expect(await db.enrollment.count()).toBe(1);
+    expect(await db.charge.count()).toBe(1);
+  });
+
+  it("sin alumnos seleccionados: regla de negocio, no crash", async () => {
+    freezeClock();
+    const { org, group } = await makeBatch([]);
+
+    await expect(
+      enrollMany(org.id, {
+        studentIds: [],
+        groupId: group.id,
+        plan: "MONTHLY",
+        price: 18000,
+        startDate: "2026-07-15",
+      }),
+    ).rejects.toThrow(EnrollmentRuleError);
+  });
+
+  it("alta futura: la tanda inscribe sin generar cuotas todavía (las hace el cron)", async () => {
+    freezeClock();
+    const { org, group, students } = await makeBatch(["Sofía Herrera", "Iñaki Gómez"]);
+
+    await enrollMany(org.id, {
+      studentIds: students.map((s) => s.id),
+      groupId: group.id,
+      plan: "MONTHLY",
+      price: 18000,
+      startDate: "2026-09-01", // dos meses después del NOW congelado
+    });
+
+    expect(await db.enrollment.count()).toBe(2);
+    expect(await db.charge.count()).toBe(0);
   });
 });
