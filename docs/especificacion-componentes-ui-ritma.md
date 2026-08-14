@@ -71,6 +71,8 @@ Tamaños: sm 32 px, md 40 px (default), lg 48 px. En mobile, el CTA de un formul
 
 **Checkbox, radio y switch.** Switch solo para estados que aplican al instante (ej. "Grupo activo"); checkbox para opciones dentro de formularios que se confirman con un botón.
 
+*(Ticket de inscripción múltiple)* Primer uso real del checkbox: **elegir varios de una lista**. El dibujo mide 20 px, pero el objetivo táctil es **la fila entera** (≥ 44 px) — el cuadradito nunca es el único blanco. La lista va scrolleable dentro del sheet, con el buscador arriba; el label del campo lleva el contador ("Alumnos · 3 seleccionados") y el CTA el número y el plural correcto ("Inscribir 3 alumnos" / "Inscribir 1 alumno"). Nunca se deshabilita: sin selección, el tap lleva el foco al buscador con el motivo (§4.1). Lo que ya no es opción —un alumno ya inscripto en ese grupo— **no se lista**, en vez de listarse deshabilitado (§4.3).
+
 ### 3.3 Badge de estado de cuota — componente firma
 
 Representa los estados del Plan RN3 con las recetas exactas de Color §5. Forma pill, texto 12 px peso 500, padding 4×10, punto indicador de 6 px opcional a la izquierda. Siempre con etiqueta de texto; el color nunca comunica solo.
@@ -230,6 +232,7 @@ Confirmación breve → toast. Error de acción → toast persistente o mensaje 
 | Avatar | `Avatar` | Iniciales, Violeta 100/800 |
 | Skeleton | `Skeleton` | Pulso 1.5 s |
 | Switch | `Switch` de Base UI | Solo estados que aplican al instante (§3.2) |
+| Checkbox | `Checkbox` de Base UI | Selección múltiple en formularios; la fila es el target (§3.2) |
 | Bottom nav / Bloque de sesión / FAB / Input de monto / Editor de franjas | — (propios) | Según §3.6, §3.7, §3.13, §3.2, §3.15 |
 | Botón de Google | — (de Google) | §3.17: lineamientos de marca de Google, no tokens de Ritma |
 

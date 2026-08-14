@@ -475,3 +475,23 @@ del diagnóstico. Se pueden borrar con Prisma Studio apuntando al branch de prod
 - **Próximo:** Dolores carga las credenciales y las URIs (checklist en el reporte), incluida
   la decisión de dejar el apex `ritma.com.ar` como canónico; después la verificación guiada en
   DEV y el merge. La rama queda SIN mergear hasta que eso pase.
+
+## Semana 16 (agosto 2026) — inscribir a varios de una vez
+
+- **Hecho:** Google quedó mergeado (#31) y funcionando: las URIs registradas andan (producción
+  ya llega a la pantalla real de Google en vez del `redirect_uri_mismatch`). Ticket nuevo en
+  `feat/bulk-enrollment`: el sheet de inscripción, cuando el grupo está fijo, pasó a
+  selección MÚLTIPLE — buscador insensible a tildes, lista con checkboxes (la fila entera es
+  el target), contador, alta express inline para el alumno que todavía no existe (vuelve ya
+  tildado) y CTA "Inscribir N alumnos" con el plural correcto. Atrás: `enrollMany`, que repite
+  el MISMO núcleo del flujo individual (`enrollOne`, extraído sin cambiar comportamiento)
+  dentro de una `$transaction`. Componente `Checkbox` nuevo (Base UI + tokens, §3.2) con su
+  vitrina. 10 tests nuevos del servicio; suite 383 verde; recorrido real 16/16.
+- **Trabado:** nada. Dos decisiones que vale registrar: (1) la validación del lote va ANTES de
+  abrir la transacción —así el error nombra a todos los que hay que sacar de la selección, en
+  vez de morir en el primero—, y adentro `enrollOne` igual revalida (última línea de defensa
+  ante una carrera); (2) el alta express se hace DESDE la lista y no abriendo otro sheet: el
+  sheet sobre sheet es justo lo que la spec del componente declara evitado.
+- **Próximo:** verificación de Dolores en el teléfono (guion en el reporte) y su PR. La rama
+  queda SIN mergear. Ojo: el recorrido de verificación dejó datos de prueba en la base DEV
+  (una tanda de 4 en "Yoga mañanas" de Estudio Meraki, con una alumna "Nueva Alumna …").
