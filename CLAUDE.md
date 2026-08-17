@@ -196,6 +196,14 @@ orden**, y la seguridad va primero:
 - **El diff de franjas protege las excepciones** (`updateGroup`): cambiar hora/duración es update
   in place (las excepciones sobreviven); cambiar el weekday o borrar la franja es identidad nueva
   y **las excepciones se van por cascada** — deliberado, testeado, y la UI lo advierte (§3.15).
+- **La franja multi-día es UI, no modelo** (ticket horarios, ago 2026): el form edita
+  {días, hora, duración} y [`src/lib/franjas.ts`](src/lib/franjas.ts) la EXPANDE a un
+  `ScheduleSlot` por día (cada día con su `slotId`, así el diff de `updateGroup` decide igual
+  que siempre); al editar, los slots se RE-AGRUPAN por (hora, duración) — misma hora con
+  distinta duración no se fusiona. Colisión interna (mismo día + misma hora) se corta en el
+  Zod con mensaje que nombra el conflicto. El resumen ("Lun, Mié y Vie · 19:00 · 90 min") es
+  `formatFranja` (§4.2): una sola función, editor y listas. El motor no se enteró del cambio
+  (hay test de equivalencia), y las excepciones huérfanas ya las ignoraba por construcción.
 - **Colores de disciplina**: tokens `discipline-1..N` (Color §4), asignación estable por orden de
   creación de la disciplina, cíclica módulo N ([`src/lib/discipline-colors.ts`](src/lib/discipline-colors.ts)).
   No existe Coral 400: reprueba el contraste (el claro usa Coral 500 — Color, changelog 1.4).
