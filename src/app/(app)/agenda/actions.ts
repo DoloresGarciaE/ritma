@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { requireSession } from "@/lib/auth";
+import { expandFranjas } from "@/lib/franjas";
 import { requireMember } from "@/server/authz";
 import { ForbiddenError } from "@/server/services/permissions";
 import {
@@ -49,25 +50,37 @@ export type GroupActionInput = {
   name: string;
   disciplineId: string;
   defaultPrice: number | null;
-  slots: { id?: string; weekday: number; startTime: string; durationMin: number | null }[];
+  /** Franjas multi-día de UI: la action las EXPANDE a un slot por día (lib/franjas). */
+  franjas: {
+    days: { weekday: number; slotId?: string }[];
+    startTime: string;
+    durationMin: number | null;
+  }[];
 };
 
-/** Alta de grupo con sus franjas (HU3.1). */
+/** Alta de grupo con sus franjas (HU3.1). Las franjas se expanden acá, tras el Zod. */
 export async function createGroupAction(input: GroupActionInput): Promise<GroupFormState> {
   const orgId = await currentOrgId();
 
   // Los errores se DEVUELVEN como estado: un throw se lo comería el error boundary y el
-  // profe vería un crash en vez del mensaje en su campo (Componentes §4.1).
+  // profe vería un crash en vez del mensaje en su campo (Componentes §4.1). El Zod
+  // también corta las colisiones internas (mismo día + misma hora, superRefine).
   const parsed = groupSchema.safeParse(input);
   if (!parsed.success) return { errors: toGroupFieldErrors(parsed.error) };
 
-  await createGroup(orgId, parsed.data);
+  const { franjas, ...groupData } = parsed.data;
+  await createGroup(orgId, { ...groupData, slots: expandFranjas(franjas) });
 
   revalidateAgenda();
   return {};
 }
 
-/** Edición de grupo (HU3.1). El diff de franjas vive en el servicio. */
+/**
+ * Edición de grupo (HU3.1). La expansión conserva el `slotId` de cada día, así el diff
+ * del servicio decide igual que siempre: hora/duración in place (las excepciones
+ * sobreviven), día quitado = slot borrado (sus excepciones se van por cascada). El diff
+ * corre en una transacción del servicio.
+ */
 export async function updateGroupAction(
   groupId: string,
   input: GroupActionInput,
@@ -77,7 +90,8 @@ export async function updateGroupAction(
   const parsed = groupSchema.safeParse(input);
   if (!parsed.success) return { errors: toGroupFieldErrors(parsed.error) };
 
-  await updateGroup(orgId, groupId, parsed.data);
+  const { franjas, ...groupData } = parsed.data;
+  await updateGroup(orgId, groupId, { ...groupData, slots: expandFranjas(franjas) });
 
   revalidateAgenda();
   return {};

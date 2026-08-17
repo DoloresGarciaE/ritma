@@ -134,6 +134,23 @@ export function formatDocumentDate(date: string): string {
   return `${day} de ${MONTHS_FULL[monthIndex].toLowerCase()} de ${year}`;
 }
 
+/**
+ * `([1, 3, 5], "19:00", 90)` → `"Lun, Mié y Vie · 19:00 · 90 min"` — el resumen de una
+ * franja multi-día (§4.2, ticket horarios): el MISMO formato en el formulario, la lista
+ * de grupos y donde haga falta leer un horario recurrente. Días lunes-primero, con "y"
+ * antes del último; un solo día → `"Sáb · 10:00 · 90 min"`.
+ */
+export function formatFranja(weekdays: number[], startTime: string, durationMin: number): string {
+  const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+  const names = [...weekdays]
+    .sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7))
+    .map((weekday) => capitalize(WEEKDAYS_SHORT[weekday]));
+
+  const days = names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} y ${names.at(-1)}`;
+
+  return `${days} · ${startTime} · ${durationMin} min`;
+}
+
 /** `("19:00", 90)` → `"19:00–20:30"`. Cruza medianoche sin drama: `("23:30", 90)` → `"23:30–01:00"`. */
 export function formatTimeRange(startTime: string, durationMin: number): string {
   const [hours, minutes] = startTime.split(":").map(Number);

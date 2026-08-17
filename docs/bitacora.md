@@ -495,3 +495,27 @@ del diagnóstico. Se pueden borrar con Prisma Studio apuntando al branch de prod
 - **Próximo:** verificación de Dolores en el teléfono (guion en el reporte) y su PR. La rama
   queda SIN mergear. Ojo: el recorrido de verificación dejó datos de prueba en la base DEV
   (una tanda de 4 en "Yoga mañanas" de Estudio Meraki, con una alumna "Nueva Alumna …").
+
+## Semana 16 bis (agosto 2026) — franjas multi-día (ticket horarios)
+
+- **Hecho:** la inscripción múltiple mergeada a `dev` (squash, verificación completa antes del
+  push). Ticket nuevo en `feat/friendly-schedule-picker`: el editor de franjas pasó a
+  **multi-día** — chips Lun…Dom con toggle, presets de duración con 120′, resumen en vivo
+  ("Lun, Mié y Vie · 19:00 · 90 min", `formatFranja`, §4.2) — y la franja quedó como concepto
+  de UI puro: [`src/lib/franjas.ts`](../src/lib/franjas.ts) expande a un `ScheduleSlot` por
+  día (cada día con su `slotId`) y re-agrupa por (hora, duración) al editar. **Cero cambios de
+  schema y cero cambios al motor**: la action expande tras el Zod y el diff de `updateGroup`
+  quedó intacto. Colisión interna con mensaje que nombra el conflicto ("Lunes 19:00 está
+  repetido."). 401 Vitest (18 nuevos: ida/vuelta, no-fusión por duración, colisiones,
+  equivalencia con el motor, huérfana mezclada con franjas vivas) + recorrido real 10/10 con
+  el guion del ticket completo, cancelación de sábado + baja del sábado incluida.
+- **Trabado:** nada. La guarda de excepciones huérfanas NO exigió arreglos: el motor ya las
+  ignoraba por construcción (la pasada base nunca consulta claves de slots ausentes; la de
+  entrantes tiene el `if (!slot) continue`) y el cascade de la base borra las filas al borrar
+  el slot — quedó pinneado con el test nuevo de huérfana mezclada. Un detalle de diseño que
+  vale registrar: destildar un día y arrepentirse EN la misma edición recupera su `slotId`
+  (`originalDays`), así un mal tap no cuesta excepciones.
+- **Próximo:** verificación de Dolores en el teléfono y su PR; la rama SIN mergear. La org
+  "Estudio Grande" de la base dev quedó con grupos de prueba DESACTIVADOS ("Debug Dos",
+  "Ritmos …") y disciplinas basura ("Cumbia Debug", "Tango Debug"): si molestan, se limpian
+  con un ticket de datos (borrar grupos no existe en la UI, a propósito).

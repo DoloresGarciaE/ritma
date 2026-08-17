@@ -151,11 +151,13 @@ Solo existe en dos pantallas: Alumnos (alta express) y Agenda (nuevo grupo). Cí
 
 Bloques `muted` con pulso de opacidad de 1.5 s, replicando la silueta real del contenido. (Nota S6: esta sección decía "Neutro 100 (claro) / `#292833` (oscuro)" — exactamente los dos valores del token `muted`; se nombra el token porque Color §8 prohíbe que los componentes consuman stops o hex, igual que la corrección previa de §3.10.) Carga de pantalla completa (splash de PWA): isotipo con la animación del **pulso** de Marca §8 — única aparición animada del logo, y SOLO el punto coral late (los trazos nunca se animan). Implementación S6: el splash es el `loading.tsx` raíz; cada pantalla del shell tiene su skeleton con su silueta. Todo respeta `prefers-reduced-motion`.
 
-### 3.15 Editor de franjas (S2)
+### 3.15 Editor de franjas (S2 · multi-día desde el ticket de horarios, ago 2026)
 
-El editor de horarios recurrentes del formulario de grupo (HU3.1): una fila por franja, franjas agregables y eliminables. Anatomía de cada fila: **pills de día** lunes-primero (`Lu Ma Mi Ju Vi Sá Do`, single-select, `aria-pressed`, target ≥ 44 px), **hora** con `<input type="time">` estilado con los tokens de §3.2 (la rueda nativa del sistema es lo correcto para el pulgar), y **duración** como pills de valores comunes (45′ · 60′ · 90′) más "Otra", que revela un input numérico en minutos (15–480). "Agregar franja" es botón secundario; eliminar, botón fantasma por fila. Un grupo necesita al menos una franja.
+El editor de horarios recurrentes del formulario de grupo (HU3.1): una fila por franja **multi-día**, franjas agregables y eliminables. Un grupo de Lun/Mié/Vie al mismo horario es UNA franja, no tres cargas. Anatomía de cada fila: **chips de día** lunes-primero (`Lun Mar Mié Jue Vie Sáb Dom`, **multi-select con toggle por tap**, `aria-pressed`, target ≥ 44 px), **hora** con `<input type="time">` estilado con los tokens de §3.2 (la rueda nativa del sistema es lo correcto para el pulgar), **duración** como pills de valores comunes (45′ · 60′ · 90′ · 120′) más "Otra", que revela un input numérico en minutos (15–480), y el **resumen en vivo** de la franja al pie de la fila, con el formato de §4.2 ("Lun, Mié y Vie · 19:00 · 90 min"). "Agregar franja" es botón secundario; eliminar, botón fantasma por fila. Un grupo necesita al menos una franja con al menos un día.
 
-En edición, el editor advierte con un helpText fijo: **si eliminás una franja o le cambiás el día, se pierden sus sesiones canceladas o movidas** — la franja con otro día es otra identidad. Cambiar solo la hora o la duración conserva las excepciones. No valida solapamientos: eso llega con los espacios (S8). Reprogramar una sesión sobre otra ocurrencia del mismo grupo está permitido a propósito, por lo mismo.
+La franja es **concepto de UI**: al guardar se expande a un `ScheduleSlot` por día, y al editar los slots existentes se re-agrupan en franjas visuales por (hora, duración) — misma hora con distinta duración NO se fusiona. **Colisión interna** (el mismo día con la misma hora en dos franjas): error concreto que nombra el conflicto — "Lunes 19:00 está repetido." — antes de guardar; el mismo día en horarios distintos es válido.
+
+En edición, el editor advierte con un helpText fijo: **si eliminás una franja o le sacás un día, se pierden las sesiones canceladas o movidas de esos días** — cada día es su propio slot, y sin el día no hay identidad. Cambiar solo la hora o la duración conserva las excepciones; destildar un día y arrepentirse EN la misma edición también las conserva (el editor recuerda la identidad). No valida solapamientos entre grupos: eso llega con los espacios (S8). Reprogramar una sesión sobre otra ocurrencia del mismo grupo está permitido a propósito, por lo mismo.
 
 ### 3.16 Editor de plantilla de recordatorio (S5)
 
@@ -198,6 +200,8 @@ Validación en `blur` y en submit, nunca al tipear la primera letra. Errores con
 Formato único en toda la app: `$20.000` (miles con punto, sin decimales salvo necesidad real); fechas `mar 12/05` en listas y `12 de mayo de 2026` en documentos; períodos como "Marzo 2026". Los montos siempre en `tabular-nums`; los negativos de liquidaciones con signo explícito, no solo color.
 
 *(S2)* Dos formatos nuevos que la agenda necesitó, fijados acá y en `lib/format.ts`: **rangos de hora** `19:00–20:30` (guion corto sin espacios; el fin sale de la duración) y **rangos de semana** `12–18 may` — cruzando mes, cada punta con su mes: `27 jul – 2 ago`. En confirmaciones que nombran el objeto (§3.8) el día va completo: `martes 12/05`.
+
+*(Ticket de horarios, ago 2026)* El **resumen de franja** — `Lun, Mié y Vie · 19:00 · 90 min` — es EL formato de un horario recurrente, en el editor (§3.15), la lista de grupos y donde haga falta leerlo: días capitalizados de 3 letras lunes-primero con "y" antes del último, hora, duración en minutos. Una sola función (`formatFranja`), jamás re-armado a mano.
 
 ### 4.3 Permisos en la UI
 
