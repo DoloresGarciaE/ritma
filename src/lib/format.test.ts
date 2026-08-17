@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  formatFranja,
   formatFullDayDate,
   formatListDate,
   formatMoney,
@@ -76,5 +77,20 @@ describe("formatTimeRange", () => {
 
   it("cruza medianoche sin drama", () => {
     expect(formatTimeRange("23:30", 90)).toBe("23:30–01:00");
+  });
+});
+
+describe("formatFranja", () => {
+  it('es el "Lun, Mié y Vie · 19:00 · 90 min" del ticket de horarios (§4.2)', () => {
+    expect(formatFranja([1, 3, 5], "19:00", 90)).toBe("Lun, Mié y Vie · 19:00 · 90 min");
+  });
+
+  it("dos días van con «y», uno solo va pelado", () => {
+    expect(formatFranja([2, 4], "18:00", 60)).toBe("Mar y Jue · 18:00 · 60 min");
+    expect(formatFranja([6], "10:00", 90)).toBe("Sáb · 10:00 · 90 min");
+  });
+
+  it("ordena lunes-primero aunque los días lleguen desordenados, y el domingo va último", () => {
+    expect(formatFranja([0, 5, 1], "19:00", 60)).toBe("Lun, Vie y Dom · 19:00 · 60 min");
   });
 });

@@ -150,6 +150,33 @@ describe("occurrencesForRange — generación base", () => {
 
     expect(occurrencesForRange([], orphans, WEEK)).toEqual([]);
   });
+
+  it("una huérfana MEZCLADA con franjas vivas tampoco aparece, y no contamina a las vivas", () => {
+    // La guarda del ticket de horarios: cancelás el sábado, después le sacás el sábado
+    // al grupo — el slot se borra (cascade en la base), pero si una excepción suelta
+    // llegara igual al motor, no puede ni renderizarse ni ensuciar la franja que quedó.
+    const vivas = [slot({ id: "martes", weekday: 2 })];
+    const orphans = [
+      exception({ slotId: "sabado-borrado", date: "2026-07-18" }),
+      exception({
+        slotId: "sabado-borrado",
+        date: "2026-07-11",
+        status: "SCHEDULED",
+        movedToDate: "2026-07-15",
+        movedToStartTime: "10:00",
+      }),
+    ];
+
+    expect(shape(occurrencesForRange(vivas, orphans, WEEK))).toEqual([
+      {
+        slotId: "martes",
+        date: "2026-07-14",
+        startTime: "19:00",
+        status: "SCHEDULED",
+        moved: false,
+      },
+    ]);
+  });
 });
 
 describe("occurrencesForRange — cancelaciones (RN8, DoD)", () => {

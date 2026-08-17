@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { isCivilDate } from "@/lib/dates";
 import { toFieldErrors as genericToFieldErrors } from "@/lib/forms";
+import { scheduleCollisionError } from "@/lib/franjas";
 
 /**
  * Validación de la agenda, compartida por formularios y server actions (patrón de
@@ -19,10 +20,20 @@ const timeField = z
 
 const civilDateField = z.string().refine(isCivilDate, "Esa fecha no es válida.");
 
-export const slotSchema = z.object({
-  /** Presente = franja existente (el diff del servicio la reconoce); ausente = nueva. */
-  id: z.string().optional(),
-  weekday: z.number().int().min(0).max(6, "Elegí el día."),
+/**
+ * Franja multi-día (ticket horarios): {días, hora, duración} — concepto de UI que la
+ * action EXPANDE a un ScheduleSlot por día (src/lib/franjas.ts). El modelo no cambia.
+ */
+export const franjaSchema = z.object({
+  days: z
+    .array(
+      z.object({
+        weekday: z.number().int().min(0).max(6, "Elegí el día."),
+        /** Presente = ese día ya existe como slot (el diff del servicio lo reconoce). */
+        slotId: z.string().optional(),
+      }),
+    )
+    .min(1, "Elegí al menos un día."),
   startTime: timeField,
   durationMin: z
     .number({ error: "Poné la duración en minutos." })
@@ -47,7 +58,15 @@ export const groupSchema = z.object({
     // Decimal(12,2): sin tope, un número gigante desborda en Prisma y revienta la action
     // en vez de dar error de campo.
     .max(9_999_999_999, "Esa tarifa es demasiado alta."),
-  slots: z.array(slotSchema).min(1, "Agregá al menos una franja."),
+  franjas: z
+    .array(franjaSchema)
+    .min(1, "Agregá al menos una franja.")
+    // Colisión interna (mismo día + misma hora en dos franjas): el error NOMBRA el
+    // conflicto — "Lunes 19:00 está repetido." — antes de guardar.
+    .superRefine((franjas, ctx) => {
+      const message = scheduleCollisionError(franjas);
+      if (message) ctx.addIssue({ code: "custom", message });
+    }),
 });
 
 export type GroupFormInput = z.infer<typeof groupSchema>;
