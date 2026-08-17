@@ -15,6 +15,7 @@ import { AmountInput, Field, Input } from "@/components/ui/input";
 import { ActionSheet, ActionSheetBody, ActionSheetFooter } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/components/ui/toast";
+import { groupSlots } from "@/lib/franjas";
 import { cn } from "@/lib/utils";
 import type { GroupListItem } from "@/server/services/groups";
 
@@ -25,7 +26,7 @@ import {
   updateGroupAction,
 } from "../actions";
 import { groupSchema, toGroupFieldErrors, type GroupFormState } from "../schema";
-import { newSlotDraft, SlotEditor, type SlotDraft } from "./slot-editor";
+import { newFranjaDraft, SlotEditor, type FranjaDraft } from "./slot-editor";
 
 /**
  * Crear/editar grupo — HU3.1, desde el FAB de la Agenda (y desde la lista de Grupos).
@@ -66,8 +67,17 @@ export function GroupSheet({
   const [name, setName] = useState(group?.name ?? "");
   const [disciplineId, setDisciplineId] = useState(group?.discipline.id ?? "");
   const [price, setPrice] = useState<number | null>(group?.defaultPrice ?? null);
-  const [slots, setSlots] = useState<SlotDraft[]>(() =>
-    group ? group.slots.map((slot) => ({ key: slot.id, ...slot })) : [newSlotDraft()],
+  // Los slots del server se RE-AGRUPAN en franjas visuales por (hora, duración): mar+jue
+  // 18:00/60 llega como UNA fila con dos chips. `originalDays` guarda los ids para que
+  // destildar y arrepentirse no cueste las excepciones de ese día.
+  const [franjas, setFranjas] = useState<FranjaDraft[]>(() =>
+    group
+      ? groupSlots(group.slots).map((franja) => ({
+          key: crypto.randomUUID(),
+          ...franja,
+          originalDays: franja.days,
+        }))
+      : [newFranjaDraft()],
   );
   const [active, setActive] = useState(group?.active ?? true);
 
@@ -92,9 +102,8 @@ export function GroupSheet({
     name,
     disciplineId,
     defaultPrice: price,
-    slots: slots.map(({ id, weekday, startTime, durationMin }) => ({
-      id,
-      weekday,
+    franjas: franjas.map(({ days, startTime, durationMin }) => ({
+      days,
       startTime,
       durationMin,
     })),
@@ -336,12 +345,12 @@ export function GroupSheet({
           </Field>
 
           <SlotEditor
-            slots={slots}
+            franjas={franjas}
             onChange={(next) => {
-              setSlots(next);
-              if (errors.slots) setErrors((prev) => ({ ...prev, slots: undefined }));
+              setFranjas(next);
+              if (errors.franjas) setErrors((prev) => ({ ...prev, franjas: undefined }));
             }}
-            error={errors.slots}
+            error={errors.franjas}
             showEditWarning={group !== null}
           />
 

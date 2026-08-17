@@ -3,7 +3,8 @@
 import { ChevronRight } from "lucide-react";
 
 import { ActionSheet, ActionSheetBody } from "@/components/ui/sheet";
-import { shortWeekday } from "@/lib/format";
+import { formatFranja } from "@/lib/format";
+import { groupSlots } from "@/lib/franjas";
 import type { GroupListItem } from "@/server/services/groups";
 
 /**
@@ -50,10 +51,17 @@ export function GroupsSheet({
                     ) : null}
                   </span>
                   <span className="truncate text-xs text-text-secondary">
+                    {/* El MISMO resumen del editor y de §4.2: una sola función de formateo. */}
                     {group.discipline.name}
                     {group.slots.length > 0
-                      ? ` · ${group.slots
-                          .map((slot) => `${shortWeekday(slot.weekday)} ${slot.startTime}`)
+                      ? ` · ${groupSlots(group.slots)
+                          .map((franja) =>
+                            formatFranja(
+                              franja.days.map((day) => day.weekday),
+                              franja.startTime,
+                              franja.durationMin,
+                            ),
+                          )
                           .join(" · ")}`
                       : ""}
                   </span>
