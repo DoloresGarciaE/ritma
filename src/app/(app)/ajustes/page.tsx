@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 
 import { Card } from "@/components/ui/card";
 import { requireSession } from "@/lib/auth";
@@ -19,9 +20,11 @@ export const metadata: Metadata = {
 
 /**
  * Ajustes. Desde S5, la sección de cobranzas (alias + plantilla de recordatorio) es lo
- * primero editable; el resto sigue siendo la foto de los defaults de HU1.2. La card de
- * cobranzas es de owner/admin: a un teacher no se le muestra (§4.3) y la action valida
- * el rol igual.
+ * primero editable; el resto sigue siendo la foto de los defaults de HU1.2.
+ *
+ * Desde S7 la página ENTERA es de owner/admin: todo lo que hay acá es configuración de
+ * la org ("Configurar organización ✖" para teacher, Plan §4). Un TEACHER ni la ve en
+ * "Más" ni confirma que existe: 404, no redirect (§4.3).
  */
 export default async function AjustesPage() {
   const session = await requireSession();
@@ -35,6 +38,7 @@ export default async function AjustesPage() {
   ]);
 
   const canConfigure = can(actor, "org:configure");
+  if (!canConfigure) notFound();
 
   // Vista previa con datos reales: el primer deudor del período en curso; sin deudores,
   // el ejemplo canónico de Marca §4.2.
