@@ -25,6 +25,7 @@ import {
   createEnrollment,
   endEnrollment,
   EnrollmentRuleError,
+  enrollMany,
 } from "@/server/services/enrollments";
 import {
   createPayment,
@@ -40,6 +41,7 @@ import {
 import { assertRole, ForbiddenError, type Actor } from "@/server/services/permissions";
 
 import {
+  bulkEnrollSchema,
   chargeAmountSchema,
   endEnrollmentSchema,
   enrollSchema,
@@ -101,6 +103,39 @@ export async function createEnrollmentAction(input: {
 
   revalidateBilling(parsed.data.studentId);
   return {};
+}
+
+/**
+ * Inscribir a VARIOS al mismo grupo en una sola operación. Misma autorización y mismo
+ * motor que la individual: el servicio itera el núcleo compartido dentro de UNA
+ * transacción, así que o entran todos o no entra ninguno.
+ */
+export async function enrollManyAction(input: {
+  studentIds: string[];
+  groupId: string;
+  plan: "MONTHLY" | "DROP_IN";
+  price: number | null;
+  startDate: string;
+}): Promise<EnrollFormState & { count?: number }> {
+  const actor = await currentActor();
+
+  const parsed = bulkEnrollSchema.safeParse(input);
+  if (!parsed.success) return { errors: toEnrollFieldErrors(parsed.error) };
+
+  let count: number;
+  try {
+    ({ count } = await enrollMany(actor.orgId, parsed.data));
+  } catch (error) {
+    // "Ya está en este grupo" es alcanzable desde la UI (dos pestañas, doble tap): vuelve
+    // como mensaje. Una referencia FORJADA sigue reventando al error boundary.
+    if (error instanceof EnrollmentRuleError) return { formError: error.message };
+    throw error;
+  }
+
+  // La tanda no tiene UN alumno: se purgan las listas y las fichas quedan al día por
+  // /alumnos (la ficha individual se revalida al entrar).
+  revalidateBilling();
+  return { count };
 }
 
 /** Baja de inscripción (RN9): endDate; las cuotas ya generadas persisten. */

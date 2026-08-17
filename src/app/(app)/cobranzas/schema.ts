@@ -26,6 +26,16 @@ export const enrollSchema = z.object({
   startDate: civilDateField,
 });
 
+/**
+ * Inscribir de a varios al MISMO grupo: la tanda comparte plan, precio y fecha de alta
+ * (decisión del ticket). Es el mismo schema menos `studentId`, más la lista.
+ */
+export const bulkEnrollSchema = enrollSchema.omit({ studentId: true }).extend({
+  studentIds: z.array(z.string().min(1)).min(1, "Elegí al menos un alumno."),
+});
+
+export type BulkEnrollInput = z.infer<typeof bulkEnrollSchema>;
+
 export type EnrollInput = z.infer<typeof enrollSchema>;
 export type EnrollField = keyof EnrollInput;
 

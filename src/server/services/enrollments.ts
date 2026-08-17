@@ -1,4 +1,4 @@
-import { withOrg } from "@/lib/db";
+import { withOrg, type OrgClient } from "@/lib/db";
 import { civilToDb, dbToCivil, periodOf, todayInTz } from "@/lib/dates";
 
 import { dropInCharge, generateCharges, type ChargeDraft } from "./billing";
@@ -43,6 +43,15 @@ export type EnrollmentInput = {
   price: number;
   /** Fecha civil de alta. */
   startDate: string;
+};
+
+/**
+ * Inscripción de a varios: una TANDA comparte grupo, plan, precio y fecha de alta
+ * (decisión del ticket). Las excepciones por alumno se hacen con el flujo individual o
+ * editando la cuota después (RN2); no existe precio por fila.
+ */
+export type BulkEnrollmentInput = Omit<EnrollmentInput, "studentId"> & {
+  studentIds: string[];
 };
 
 /**
@@ -177,21 +186,54 @@ export async function createEnrollment(
   await assertRefsInOrg(orgId, input.studentId, input.groupId);
 
   const org = withOrg(orgId);
+  const settings = await readBillingSettings(org, orgId);
 
+  const { id, hasCharge } = await enrollOne(org, orgId, input, settings);
+
+  // RN4 (S4): la cuota inicial también es "una cuota generada" — si el alumno tiene
+  // saldo a favor, se le aplica acá mismo. Transacción propia y posterior: si fallara,
+  // la inscripción y su cuota quedan consistentes y el crédito sigue disponible.
+  if (hasCharge) {
+    await applyStudentCredit(orgId, input.studentId, todayInTz(settings.timezone));
+  }
+
+  return { id };
+}
+
+type BillingSettings = { timezone: string; dueDay: number; currency: string };
+
+function readBillingSettings(client: OrgClient, orgId: string): Promise<BillingSettings> {
+  return client.organization.findUniqueOrThrow({
+    where: { id: orgId },
+    select: { timezone: true, dueDay: true, currency: true },
+  });
+}
+
+/**
+ * El núcleo de "inscribir a UNO", y la única fuente de verdad: lo comparten la inscripción
+ * individual y la tanda (`enrollMany`), que solo lo repite dentro de UNA transacción. Por
+ * eso recibe el `client` — puede ser el de `withOrg` o el `tx` de una transacción — y los
+ * `settings`, que la tanda lee una sola vez.
+ *
+ * Deja afuera dos cosas a propósito: la verificación de referencias (la tanda la hace de a
+ * lote, antes de abrir la transacción) y el crédito a favor, que corre DESPUÉS y por su
+ * cuenta, igual que hoy.
+ */
+async function enrollOne(
+  client: OrgClient,
+  orgId: string,
+  input: EnrollmentInput,
+  settings: BillingSettings,
+): Promise<{ id: string; hasCharge: boolean }> {
   // Dos inscripciones ABIERTAS del mismo alumno al mismo grupo serían dos cuotas por mes
   // del mismo concepto. Cerrada y re-abierta sí se puede: se fue y volvió (RN9).
-  const open = await org.enrollment.findFirst({
+  const open = await client.enrollment.findFirst({
     where: { studentId: input.studentId, groupId: input.groupId, endDate: null },
     select: { id: true },
   });
   if (open) {
     throw new EnrollmentRuleError("Ya está inscripto en este grupo. Dalo de baja primero.");
   }
-
-  const settings = await org.organization.findUniqueOrThrow({
-    where: { id: orgId },
-    select: { timezone: true, dueDay: true, currency: true },
-  });
 
   const enrollmentData = {
     id: "pending", // lo pisa el default cuid(); el motor puro solo necesita las fechas
@@ -210,7 +252,7 @@ export async function createEnrollment(
       generateCharges([enrollmentData], currentPeriod, settings).find(() => true) ?? null;
   }
 
-  const created = await org.enrollment.create({
+  const created = await client.enrollment.create({
     data: {
       orgId,
       studentId: input.studentId,
@@ -236,14 +278,86 @@ export async function createEnrollment(
     select: { id: true },
   });
 
-  // RN4 (S4): la cuota inicial también es "una cuota generada" — si el alumno tiene
-  // saldo a favor, se le aplica acá mismo. Transacción propia y posterior: si fallara,
-  // la inscripción y su cuota quedan consistentes y el crédito sigue disponible.
-  if (initialCharge) {
-    await applyStudentCredit(orgId, input.studentId, todayInTz(settings.timezone));
+  return { id: created.id, hasCharge: initialCharge !== null };
+}
+
+/**
+ * Inscribir a VARIOS alumnos al mismo grupo en una sola operación (ticket de inscripción
+ * múltiple). O entran todos o no entra ninguno: las N inscripciones —con su cuota inicial
+ * cada una— van dentro de UNA transacción, con el MISMO `enrollOne` del flujo individual.
+ * Cero lógica de billing nueva: cada alumno recibe exactamente la cuota que recibiría solo.
+ *
+ * Lo que puede fallar se detecta ANTES de abrir la transacción y con el lote completo, así
+ * el mensaje nombra a todos los que hay que sacar de la selección en vez de ir de a uno.
+ */
+export async function enrollMany(
+  orgId: string,
+  input: BulkEnrollmentInput,
+): Promise<{ count: number }> {
+  // Un id repetido en el payload sería la misma inscripción dos veces: la segunda chocaría
+  // contra la primera DENTRO de la transacción y voltearía la tanda entera.
+  const studentIds = [...new Set(input.studentIds)];
+  if (studentIds.length === 0) {
+    throw new EnrollmentRuleError("Elegí al menos un alumno.");
   }
 
-  return created;
+  const org = withOrg(orgId);
+
+  // Referencias contra la org, de a lote: un FK no distingue tenants, y `withOrg` filtra,
+  // así que un alumno ajeno simplemente no vuelve en el findMany.
+  const [group, students] = await Promise.all([
+    org.classGroup.findUnique({ where: { id: input.groupId }, select: { id: true } }),
+    org.student.findMany({
+      where: { id: { in: studentIds } },
+      select: { id: true, name: true },
+    }),
+  ]);
+  if (!group) throw new Error("El grupo no pertenece a esta organización.");
+  if (students.length !== studentIds.length) {
+    throw new Error("Alguno de los alumnos no pertenece a esta organización.");
+  }
+
+  // Los ya inscriptos no deberían llegar (la UI no los ofrece), pero la UI nunca es la
+  // guardia: se revalida acá y la tanda entera se rechaza nombrándolos, antes de escribir.
+  const already = await org.enrollment.findMany({
+    where: { groupId: input.groupId, studentId: { in: studentIds }, endDate: null },
+    select: { studentId: true },
+  });
+  if (already.length > 0) {
+    const taken = new Set(already.map((enrollment) => enrollment.studentId));
+    const names = students.filter((s) => taken.has(s.id)).map((s) => s.name);
+    throw new EnrollmentRuleError(
+      names.length === 1
+        ? `${names[0]} ya está en este grupo. Sacalo de la selección y probá de nuevo.`
+        : `Ya están en este grupo: ${names.join(", ")}. Sacalos de la selección y probá de nuevo.`,
+    );
+  }
+
+  const settings = await readBillingSettings(org, orgId);
+
+  const withCharge = await org.$transaction(async (tx) => {
+    const scoped = tx as unknown as OrgClient;
+    const charged: string[] = [];
+
+    // En serie a propósito: cada `enrollOne` lee el estado que dejó el anterior (la guarda
+    // de duplicados), y Prisma no promete orden en un Promise.all dentro de la transacción.
+    for (const studentId of studentIds) {
+      const { hasCharge } = await enrollOne(scoped, orgId, { ...input, studentId }, settings);
+      if (hasCharge) charged.push(studentId);
+    }
+
+    return charged;
+  });
+
+  // Igual que en el flujo individual: el crédito se aplica DESPUÉS y por alumno, fuera de
+  // la transacción de la tanda. Si fallara, las inscripciones y sus cuotas ya son
+  // consistentes y el saldo a favor sigue disponible.
+  const today = todayInTz(settings.timezone);
+  for (const studentId of withCharge) {
+    await applyStudentCredit(orgId, studentId, today);
+  }
+
+  return { count: studentIds.length };
 }
 
 /**

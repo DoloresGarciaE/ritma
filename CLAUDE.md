@@ -231,6 +231,15 @@ orden**, y la seguridad va primero:
   `timingSafeEqual`. Vercel manda el header solo. En local no hace falta el secreto:
   `npm run cron:dev -- <job> [período]` dispara el job contra la base de dev — así se simula el
   cambio de mes (el DoD de S3; el seed hace exactamente eso con los jobs reales).
+- **Inscribir de a uno o de a varios es EL MISMO núcleo** (`enrollOne`, privado de
+  [`services/enrollments.ts`](src/server/services/enrollments.ts)): `createEnrollment` lo llama
+  una vez y `enrollMany` lo repite dentro de UNA `$transaction` — o entran todos o no entra
+  ninguno, y cada alumno recibe exactamente la cuota que recibiría solo (cero billing nuevo).
+  Una tanda comparte grupo, plan, precio y fecha; las excepciones por alumno son el flujo
+  individual o editar la cuota después (RN2). Lo que puede fallar (alumno ajeno, ya inscripto)
+  se valida CON EL LOTE COMPLETO antes de abrir la transacción, así el mensaje nombra a todos
+  los que hay que sacar de la selección. El crédito a favor se aplica por alumno DESPUÉS,
+  igual que en el individual.
 - **Inscribir crea la cuota inicial en la MISMA escritura anidada** (orgId explícito en la
   cuota) y con el MISMO motor que el cron: mensual → la del período en curso si corresponde;
   clase suelta → cargo único con vencimiento a 7 días (RN11, pendiente de aprobar en Plan §8).
