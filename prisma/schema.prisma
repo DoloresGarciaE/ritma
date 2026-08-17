@@ -38,6 +38,15 @@ enum Role {
   TEACHER
 }
 
+/// Qué clase de profe es dentro de la org (Plan §7): el owner que además dicta
+/// (OWNER_TEACHER), staff con acuerdo de porcentaje (STAFF, acuerdos en S9) o un
+/// externo que alquila salón (EXTERNAL, S10 — puede no tener cuenta).
+enum TeacherKind {
+  OWNER_TEACHER
+  STAFF
+  EXTERNAL
+}
+
 /// El tenant: unidad de aislamiento de datos (Plan §3).
 model Organization {
   id               String   @id @default(cuid())
@@ -65,6 +74,63 @@ model Organization {
   payments    Payment[]
   allocations PaymentAllocation[]
   reminders   ReminderLog[]
+  teachers    TeacherProfile[]
+  invitations Invitation[]
+}
+
+/// Perfil docente de la organización (Plan §7; adelantado de S9 en S7 — ADR-004).
+///
+/// Es la IDENTIDAD DOCENTE dentro de la org, separada de la cuenta de usuario:
+/// `membershipUserId` la vincula a una Membership viva, y REVOCAR ACCESO (HU1.3) es
+/// borrar la Membership y poner esto en null — el perfil, sus grupos y todo su
+/// historial quedan intactos, re-vinculables si la persona vuelve. `null` también
+/// cubre al EXTERNAL sin cuenta (S10).
+model TeacherProfile {
+  id               String      @id @default(cuid())
+  orgId            String
+  membershipUserId String?
+  displayName      String
+  kind             TeacherKind
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  org  Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user User?        @relation(fields: [membershipUserId], references: [id], onDelete: SetNull)
+
+  groups ClassGroup[]
+
+  /// Un usuario tiene a lo sumo UN perfil por org; varios `null` conviven (perfiles
+  /// desvinculados conservando historial).
+  @@unique([orgId, membershipUserId])
+  @@index([orgId])
+}
+
+/// Invitación al EQUIPO (ADMIN/TEACHER) por link de un solo uso (HU1.3). Los alumnos
+/// NO son usuarios y jamás se invitan (Plan §3–§4).
+///
+/// El token es opaco (24 bytes aleatorios, el patrón del comprobante S5): la
+/// autorización ES el token. REVOCAR = borrar la fila — no hay estado "revocada": un
+/// token que no está en la base no autoriza nada, igual que rotar un comprobante.
+/// REGENERAR = rotar el token y correr el vencimiento. La aceptada queda con `usedAt`
+/// (un solo uso). `email` es solo el canal de envío, no restringe quién acepta: el
+/// link es la llave, con o sin email.
+model Invitation {
+  id    String  @id @default(cuid())
+  orgId String
+  email String?
+  /// Solo ADMIN o TEACHER (lo valida el servicio): OWNER no se invita, nace con la org.
+  role      Role
+  token     String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
 }
 
 /// Alumno del padrón (Plan §7, HU2.1–2.3).
@@ -132,13 +198,15 @@ enum SessionStatus {
 
 /// Grupo (comisión): la unidad central de la agenda (Plan §3, HU3.1).
 ///
-/// SIN `teacherId` (llega con TeacherProfile en S9) ni `spaceId` (Space, S8): en la
-/// Fase 1 la org independiente tiene un solo profe implícito. Desvío del borrador de
-/// §7 registrado ahí mismo; la migración que los agrega va en esos bloques.
+/// `teacherId` llegó en S7 (adelantado de S9 — ADR-004); `spaceId` sigue diferido a
+/// S8 (Space). Null = "sin profe asignado": lo ven solo owner/admin — el scope de un
+/// TEACHER es estrictamente `teacherId = su perfil`. En una org INDEPENDENT se
+/// auto-asigna al perfil del owner (el único profe implícito de la Fase 1).
 model ClassGroup {
   id           String  @id @default(cuid())
   orgId        String
   disciplineId String
+  teacherId    String?
   name         String
   /// Tarifa de referencia (HU3.1): el precio sugerido al inscribir, no un contrato.
   /// Decimal(12,2) queda como precedente de precisión para Charge/Payment (S3/S4).
@@ -153,12 +221,17 @@ model ClassGroup {
   // Restrict: hoy no hay UI para borrar disciplinas; si llega, no puede dejar grupos
   // huérfanos en silencio.
   discipline Discipline   @relation(fields: [disciplineId], references: [id], onDelete: Restrict)
+  // Restrict por la misma razón: los perfiles no se borran (revocar es desvincular),
+  // y si algún día se borrara uno, no puede desasignar grupos en silencio.
+  teacher    TeacherProfile? @relation(fields: [teacherId], references: [id], onDelete: Restrict)
 
   slots       ScheduleSlot[]
   sessions    ClassSession[]
   enrollments Enrollment[]
 
   @@index([orgId, active])
+  // El scope de teacher (S7): "sus grupos" es una query por org + perfil.
+  @@index([orgId, teacherId])
 }
 
 /// Franja recurrente de un grupo: día de semana + hora + duración (Plan §3, RN10).
@@ -447,6 +520,9 @@ model User {
   memberships Membership[]
   sessions    Session[]
   accounts    Account[]
+  /// Perfiles docentes vinculados (S7). La FK vive en TeacherProfile: SetNull ahí
+  /// para que borrar un User jamás borre la historia docente de una org.
+  teacherProfiles TeacherProfile[]
 }
 
 /// Vínculo usuario ↔ organización con un rol (Plan §4).

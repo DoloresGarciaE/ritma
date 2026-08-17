@@ -1,4 +1,4 @@
-import type { Role } from "@/generated/prisma/client";
+import type { Prisma, Role } from "@/generated/prisma/client";
 
 /**
  * Política de permisos por rol: traducción LITERAL de la matriz del Plan §4.
@@ -62,6 +62,60 @@ export function scopeOf(actor: Actor): Scope {
   return can(actor, "org:viewAll")
     ? { kind: "all" }
     : { kind: "ownTeacher", teacherUserId: actor.userId };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// El scope de DATOS (S7): la mitad concreta de `scopeOf`, cableada al fin.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * `scopeOf` describe el alcance en términos de IDENTIDAD (el userId del teacher);
+ * esto lo baja a DATOS: el id de su `TeacherProfile`, que es lo que las tablas
+ * referencian. Lo resuelve `requireScopedMember` (authz.ts) contra la base.
+ *
+ * `teacherProfileId: null` es un TEACHER sin perfil vinculado (no debería pasar:
+ * aceptar una invitación lo crea; pero si pasa, el scope es VACÍO, jamás "todo").
+ */
+export type DataScope = { kind: "all" } | { kind: "teacher"; teacherProfileId: string | null };
+
+/**
+ * Centinela para el teacher sin perfil: un id que ningún cuid real puede tener,
+ * así el `where` no matchea NADA — fail-closed por construcción.
+ */
+const NO_PROFILE = "__sin-perfil__";
+
+/**
+ * Armadores de `where` del scope de teacher — la regla transversal del Plan §4
+ * ("sus grupos y los alumnos inscriptos en ellos") escrita UNA vez. Funciones
+ * puras: los accesores de `server/services/` las componen con sus filtros y
+ * `withOrg` sigue poniendo el `orgId` — esto ACOTA, no autoriza.
+ *
+ * Decisiones fijadas en S7 (sesión con Dolores, ago 2026):
+ * - Alumnos: inscriptos en sus grupos, ABIERTOS O CERRADOS — el historial de una
+ *   ex-alumna sigue siendo suyo (RN9).
+ * - Cuotas: SOLO las de inscripciones a sus grupos (aclaración de RN4: la
+ *   imputación de un pago que registra un teacher corre sobre este subconjunto).
+ * - Pagos: los de SUS alumnos — el pago es plata del alumno con la org, no de un
+ *   grupo; un alumno compartido entre dos profes es visible para ambos.
+ */
+export function groupScopeWhere(scope: DataScope): Prisma.ClassGroupWhereInput {
+  return scope.kind === "all" ? {} : { teacherId: scope.teacherProfileId ?? NO_PROFILE };
+}
+
+export function enrollmentScopeWhere(scope: DataScope): Prisma.EnrollmentWhereInput {
+  return scope.kind === "all" ? {} : { group: groupScopeWhere(scope) };
+}
+
+export function studentScopeWhere(scope: DataScope): Prisma.StudentWhereInput {
+  return scope.kind === "all" ? {} : { enrollments: { some: enrollmentScopeWhere(scope) } };
+}
+
+export function chargeScopeWhere(scope: DataScope): Prisma.ChargeWhereInput {
+  return scope.kind === "all" ? {} : { enrollment: enrollmentScopeWhere(scope) };
+}
+
+export function paymentScopeWhere(scope: DataScope): Prisma.PaymentWhereInput {
+  return scope.kind === "all" ? {} : { student: studentScopeWhere(scope) };
 }
 
 /** Se lanza cuando el rol del actor no alcanza para la operación pedida. */

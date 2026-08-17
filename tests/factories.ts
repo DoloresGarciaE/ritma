@@ -36,7 +36,12 @@ export async function makeDiscipline(orgId: string, name: string) {
 export async function makeGroup(
   orgId: string,
   name: string,
-  extra: { disciplineId?: string; defaultPrice?: number; active?: boolean } = {},
+  extra: {
+    disciplineId?: string;
+    defaultPrice?: number;
+    active?: boolean;
+    teacherId?: string | null;
+  } = {},
 ) {
   const disciplineId =
     extra.disciplineId ?? (await makeDiscipline(orgId, `Disciplina ${randomUUID()}`)).id;
@@ -48,6 +53,7 @@ export async function makeGroup(
       name,
       defaultPrice: extra.defaultPrice ?? 20000,
       active: extra.active ?? true,
+      teacherId: extra.teacherId ?? null,
     },
   });
 }
@@ -201,6 +207,45 @@ export async function makeStudent(
       searchName: normalizeForSearch(name),
       phone: extra.phone ?? null,
       active: extra.active ?? true,
+    },
+  });
+}
+
+/** Un perfil docente, por el camino crudo. Sin usuario vinculado salvo que se pida. */
+export async function makeTeacherProfile(
+  orgId: string,
+  displayName: string,
+  extra: { membershipUserId?: string | null; kind?: "OWNER_TEACHER" | "STAFF" | "EXTERNAL" } = {},
+) {
+  return db.teacherProfile.create({
+    data: {
+      orgId,
+      displayName,
+      membershipUserId: extra.membershipUserId ?? null,
+      kind: extra.kind ?? "STAFF",
+    },
+  });
+}
+
+/** Una invitación al equipo, por el camino crudo. Vigente por 7 días salvo que se pida. */
+export async function makeInvitation(
+  orgId: string,
+  extra: {
+    role?: "ADMIN" | "TEACHER";
+    email?: string | null;
+    token?: string;
+    expiresAt?: Date;
+    usedAt?: Date | null;
+  } = {},
+) {
+  return db.invitation.create({
+    data: {
+      orgId,
+      role: extra.role ?? "TEACHER",
+      email: extra.email ?? null,
+      token: extra.token ?? randomUUID(),
+      expiresAt: extra.expiresAt ?? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      usedAt: extra.usedAt ?? null,
     },
   });
 }

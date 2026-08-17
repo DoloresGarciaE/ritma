@@ -63,6 +63,11 @@ const SCOPE: Record<Prisma.ModelName, Scope> = {
   // Membership tiene orgId y es dato del tenant. La lee la capa de permisos
   // (requireMember) a través de withOrg; el arranque de sesión la lee cruda en auth.ts.
   Membership: "orgId",
+  // S7: el equipo también es dato del tenant. La ÚNICA lectura de Invitation fuera de
+  // withOrg es la puerta pública por token (server/public/invitations.ts), como el
+  // comprobante.
+  TeacherProfile: "orgId",
+  Invitation: "orgId",
   User: "global",
   Session: "global",
   Account: "global",
