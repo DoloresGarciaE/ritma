@@ -519,3 +519,9 @@ del diagnóstico. Se pueden borrar con Prisma Studio apuntando al branch de prod
   "Estudio Grande" de la base dev quedó con grupos de prueba DESACTIVADOS ("Debug Dos",
   "Ritmos …") y disciplinas basura ("Cumbia Debug", "Tango Debug"): si molestan, se limpian
   con un ticket de datos (borrar grupos no existe en la UI, a propósito).
+
+## Semana 17 (agosto 2026) — arranca la Fase 2
+
+- **Decisión registrada (Dolores):** la Fase 2 (Estudios) arranca con S7; el hito de
+  validación formal (Plan de implementación §8) queda **pendiente en paralelo**, no como
+  bloqueante. Primer bloque: S7 — roles, invitaciones y scoping de teacher.
