@@ -520,8 +520,33 @@ del diagnóstico. Se pueden borrar con Prisma Studio apuntando al branch de prod
   "Ritmos …") y disciplinas basura ("Cumbia Debug", "Tango Debug"): si molestan, se limpian
   con un ticket de datos (borrar grupos no existe en la UI, a propósito).
 
-## Semana 17 (agosto 2026) — arranca la Fase 2
+## Semana 17 (agosto 2026) — arranca la Fase 2: S7, roles e invitaciones
 
 - **Decisión registrada (Dolores):** la Fase 2 (Estudios) arranca con S7; el hito de
   validación formal (Plan de implementación §8) queda **pendiente en paralelo**, no como
   bloqueante. Primer bloque: S7 — roles, invitaciones y scoping de teacher.
+- **Hecho:** S7 completo en `feat/s7-roles-invitations`. Migración con `TeacherProfile` +
+  `ClassGroup.teacherId` (adelantados de S9 — ADR-004) y backfill (perfil del owner en toda
+  org; grupos asignados solo en INDEPENDENT); modelo `Invitation` (token opaco patrón
+  comprobante, 7 días, un uso, revocar = borrar); gestión del equipo en `/estudio/equipo`
+  (invitar por link + email tras la guarda Resend, pendientes con compartir/regenerar/
+  revocar, revocación que conserva historial); página `/invitacion/[token]` con `?next=`
+  saneado en login/registro; y el punto de extensión de F0.6 POR FIN cableado:
+  `requireScopedMember` + armadores de `where` puros — un TEACHER ve y opera solo su mundo
+  en agenda, alumnos, cobranzas y dashboard (que cuadra con sus pantallas por construcción).
+  Cuatro grises de la matriz §4 decididos en sesión (precio/crear/desactivar: no; precio
+  pactado y eliminar pagos propios: sí; imputación de teacher SOLO sobre sus cuotas —
+  aclaración de RN4 versionada). 450 Vitest (18 de la matriz rol×recurso + el ciclo completo
+  del equipo) y recorrido real 21/21 con el guion del cierre completo (invitar → registrarse →
+  aceptar → ver solo su grupo; la dual en Meraki ve SOLO Folklore norteño; URL ajena → 404;
+  revocar → no entra más, historial intacto).
+- **Trabado:** nada bloqueante. Tres cosas para recordar: (1) el spread de un scope-where
+  dentro de un where ÚNICO le pisa el tipo a la clave — va como `AND: [...]` (y dos filtros
+  sobre `enrollment` también); (2) el mensaje de "ya inscriptos" dependía del orden de
+  Postgres — flake latente, ahora ordena por la selección; (3) el status 404 sigue mintiendo
+  200 por el streaming del loading raíz (deuda S6 ya anotada) — el contenido es el 404
+  correcto, el recorrido aserta contenido.
+- **Próximo:** verificación de Dolores en el teléfono (guion en el reporte) y su PR; la rama
+  SIN mergear. S8 (espacios y calendario del estudio) NO se arranca. El recorrido dejó un
+  pago más de Josefina Ponce en Meraki (dato verosímil, quedó); los perfiles/invitaciones de
+  prueba se limpiaron de la base dev.

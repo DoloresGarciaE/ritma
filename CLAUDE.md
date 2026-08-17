@@ -149,6 +149,56 @@ ritma/
 - La app bar la compone **cada página** (`<AppBar title=… />`), no el layout: así el título puede
   salir de los datos y cada pantalla trae su propia acción.
 
+## Equipo, roles y scoping de teacher (desde S7)
+
+- **`TeacherProfile` es la identidad docente, separada de la cuenta** (adelantado de S9 —
+  ADR-004): `membershipUserId` nullable con unique `[orgId, membershipUserId]`. **Revocar
+  acceso = borrar la Membership y desvincular el perfil** (`revokeMemberAccess`): sus grupos
+  y su historial quedan intactos, re-vinculables. Quien vuelve tras una revocación recibe un
+  perfil NUEVO (re-vincular el viejo es decisión de admin, S9 — sin magia por nombre). El
+  owner recibe su perfil (`OWNER_TEACHER`) al crear la org (`createOrganizationWithOwner`);
+  el backfill de la migración cubrió las existentes.
+- **`Invitation` es la llave del equipo** (HU1.3, [`services/team.ts`](src/server/services/team.ts)):
+  token opaco de 24 bytes (patrón comprobante), 7 días, UN uso (updateMany condicionado sobre
+  `usedAt: null` gana la carrera del doble accept). Solo ADMIN/TEACHER; los alumnos JAMÁS se
+  invitan. **Revocar = borrar la fila; regenerar = rotar el token.** El email es solo canal de
+  envío (guarda Resend; sin la env, deshabilitado CON motivo) — el link es la llave, con o sin
+  email. El token nunca viaja en listas: se pide al compartir. Aceptar (`/invitacion/[token]`,
+  fuera de ambos route groups y del matcher del Proxy) exige sesión — login/registro llevan
+  `?next=` saneado (`safeInternalPath`: solo paths internos) y el registro con next NO pasa
+  por el wizard —, crea Membership + TeacherProfile (STAFF) en UNA transacción y deja la org
+  nueva ACTIVA (cookie del selector + revalidate). La lectura por token es la tercera puerta
+  `forPublic` ([`server/public/invitations.ts`](src/server/public/invitations.ts)): válida →
+  org y rol; usada/vencida/revocada → SOLO el estado, sin nombrar la org.
+- **El scoping vive en la capa de permisos, no en las pantallas** (decisión 4 del ticket):
+  `requireScopedMember(orgId)` ([`authz.ts`](src/server/authz.ts)) resuelve el `DataScope`
+  (`all`, o `teacher` con el id del perfil — `null` si no tiene: scope VACÍO, jamás todo) y
+  TODO accesor de lectura y mutación con alcance lo recibe explícito. Los armadores de
+  `where` son funciones puras en [`permissions.ts`](src/server/services/permissions.ts):
+  grupos por `teacherId`, alumnos por inscripción en ellos (abiertas O cerradas: el
+  historial de una ex-alumna sigue siendo del profe), cuotas por sus inscripciones, pagos
+  por sus alumnos. ⚠️ En un `where` ÚNICO el scope va como `AND: [scopeWhere]`, no spread
+  (chocaría con la clave); y dos filtros que usan `enrollment` también van en `AND`.
+- **La matriz §4 afinada en sesión (ago 2026), server-enforced aunque la pantalla mienta:**
+  teacher edita nombre/disciplina/horarios de SUS grupos pero **no** precio ni profe a cargo
+  (`updateGroup` los fuerza como están); **no** crea grupos, no los desactiva, no crea
+  disciplinas, no ve Ajustes ni Estudio (404, como todo lo fuera de scope — nunca redirect).
+  SÍ fija el precio pactado al inscribir y SÍ elimina pagos de sus alumnos (RN12). **La
+  imputación de un pago que registra un teacher corre SOLO sobre sus cuotas** (aclaración de
+  RN4 en Plan §8): el excedente queda como crédito del alumno con la org; el crédito nocturno
+  del cron sigue org-completo (`applyStudentCredit`, sin actor). Alumno compartido: la ficha
+  es de ambos profes (pagos y crédito son del alumno), cada uno ve SOLO sus cuotas e
+  inscripciones. ⚠️ Un alumno creado suelto por un teacher no aparece en sus listas hasta que
+  lo inscriba (el alta express DENTRO de inscribir es el camino).
+- **Grupos sin asignar**: solo los ven owner/admin, con "Sin profe asignado" (lista de grupos,
+  bloque de sesión del estudio, §3.7/§3.18). El selector "Profe a cargo" (form de grupo,
+  STUDIO owner/admin) ofrece los perfiles VINCULADOS + el asignado actual aunque esté
+  desvinculado; en INDEPENDENT no existe y el alta auto-asigna al owner.
+- **La matriz rol×recurso se testea por API** en [`tests/teacher-scope.test.ts`](tests/teacher-scope.test.ts)
+  (dos profes + alumna compartida + grupo sin asignar + teacher sin perfil) y el ciclo
+  invitar→aceptar→revocar en [`tests/team.test.ts`](tests/team.test.ts). Todo modelo nuevo
+  del equipo sigue el patrón de abajo (SCOPE + aislamiento) como cualquier otro.
+
 ## El patrón para un modelo de negocio nuevo (desde S1)
 
 `Student` (S1) es la plantilla. Todo modelo de negocio que llegue después se construye **en este

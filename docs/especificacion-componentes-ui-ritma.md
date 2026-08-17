@@ -117,6 +117,8 @@ Chip de la vista semanal/diaria: barra de acento de 3 px a la izquierda con el c
 
 *(S2)* Esta sección decía "stops 400 de Violeta/Coral/Verde, configurable". Dos problemas al construirla: **Coral 400 y Verde 400 no existían** en la spec de color (y el coral interpolado reprueba el contraste de no-texto — Color, changelog 1.4), y Color §8 prohíbe que un componente consuma stops — el mismo motivo por el que ya se había corregido §3.10. Los colores son ahora los tokens `discipline-*`, verificados en los dos modos. "Configurable" queda post-MVP: hoy la asignación es automática y estable.
 
+*(S7)* En la agenda de un **estudio**, el bloque suma una línea en `text-secondary` con el **profe a cargo** (o "Sin profe asignado" — que solo puede aparecer para owner/admin: un teacher no ve grupos sin asignar). En una organización independiente la línea no existe: el único profe es obvio y sería ruido. El detalle de sesión lo repite en su subtítulo.
+
 ### 3.8 Sheet y Dialog
 
 **Bottom sheet (mobile)** — el contenedor de todos los formularios de acción: registrar pago, alta express, inscribir alumno. Handle superior, título, contenido scrolleable, CTA primario fijo al fondo (lg, ancho completo). Se cierra por gesto, por la X o al completar la acción; si hay cambios sin guardar, pide confirmación.
@@ -186,6 +188,18 @@ Los tres hex de cada modo viven como tokens `--google-btn-*` en `globals.css` �
 **Las dos licencias que se toman**, ambas amparadas por los propios lineamientos: alto **48 px y ancho completo** (Google publica 40; sus reglas exigen que el botón sea "at least as prominent as other sign-in options" y Ritma pide 44 px de target táctil), y el texto **traducido** a "Continuar con Google" ("localization of this text is permitted and encouraged"). El logo nunca se escala ni se recolorea.
 
 **Comportamiento.** El flujo es una redirección de página completa: al tocarlo el botón deja de aceptar clics y el navegador se va a Google — no hay spinner porque no hay nada que esperar en esta pantalla. Lo que falle vuelve como `?error=` a la pantalla desde la que salió, y se muestra como mensaje concreto arriba del formulario (§4.4): cancelar el consentimiento dice "Cancelaste el ingreso con Google. Probá de nuevo o entrá con tu email.", nunca "algo salió mal". Si faltan las credenciales del entorno, el botón **no se muestra** (§4.3): no es un permiso, es que ahí no puede funcionar.
+
+### 3.18 Gestión del equipo (S7)
+
+`/estudio/equipo`, solo STUDIO y solo owner/admin (§4.3: un teacher ni confirma que existe — 404). Tres piezas, todas compuestas con primitivos existentes:
+
+**Lista de miembros.** Card con filas de ítem de lista (§3.5 adaptado): avatar de iniciales, nombre, y subtítulo `Rol · N grupos a cargo · email` (el rol con las mismas etiquetas del selector de organización: Titular/Admin/Profe). La acción "Revocar" es botón fantasma `sm` por fila — **no aparece** en la fila de la titular ni en la propia (§4.3; el server lo impide igual). La confirmación (§3.8) nombra a la persona y la consecuencia completa: no entra más, sus grupos y su historial quedan, se la puede volver a invitar.
+
+**Invitar.** Acción contextual de la app bar → sheet (§3.8): rol como chips (Profe/Admin, con una línea que explica qué implica cada uno) y **email opcional** — el resultado es SIEMPRE un link copiable; con email además sale el mail (Marca §9.3: un solo botón primario). Sin Resend configurado, el campo queda **deshabilitado con el motivo** (§4.3: temporalmente no disponible, no un permiso). Creada, el sheet muestra el link completo con "Compartir link" (Web Share / portapapeles, mismo helper que el comprobante) y el aviso fijo: sirve una sola vez y vence a los 7 días.
+
+**Invitaciones pendientes.** Card con filas email-o-"Link sin email" + `Rol · Vence el {fecha}` (o "Vencida" — etiqueta de texto, jamás solo color). Acciones `sm` por fila: "Compartir link" (el token se pide al tocar, nunca viaja en la lista — patrón comprobante), "Regenerar" (rota el token y corre el vencimiento; la vencida no ofrece compartir un link muerto) y "Revocar" (borra la invitación: el link deja de autorizar en el acto).
+
+La **página de aceptación** (`/invitacion/[token]`) vive fuera del shell: logotipo, "{Org} te invita a su equipo", el rol, y — según haya sesión o no — "Aceptar invitación" o los CTAs de entrar/crear cuenta (que vuelven con `?next=`). Usada/vencida/revocada muestran SOLO su estado, con voz de marca y **sin nombrar la organización**: un link viejo reenviado no cuenta para quién era.
 
 ## 4. Patrones
 
