@@ -1,12 +1,20 @@
 import { withOrg } from "@/lib/db";
 import { normalizeForSearch } from "@/lib/students";
 
+import { studentScopeWhere, type DataScope } from "./permissions";
+
 /**
  * Servicios de alumnos (HU2.1–2.3, RN9).
  *
  * Todo pasa por `withOrg(orgId)`: el `orgId` sale del `activeOrgId` de la sesión (nunca de
  * la URL ni de un input) y el cliente lo inyecta y lo filtra solo. Un `orgId` ajeno acá no
  * devuelve nada ni escribe nada — está probado en tests/isolation.test.ts.
+ *
+ * Desde S7 las operaciones sobre un alumno llevan además el `DataScope` del actor: para
+ * un TEACHER, "sus alumnos" son los inscriptos (abiertos o cerrados: el historial de una
+ * ex-alumna sigue siendo suyo) en SUS grupos. La única sin scope es `createStudent` — un
+ * alumno recién creado todavía no está inscripto en ningún lado; hasta que el teacher lo
+ * inscriba en un grupo suyo, no aparece en sus listas (documentado en la sesión S7).
  *
  * Reciben datos YA validados (el Zod vive en la ruta, compartido con el formulario) y el
  * teléfono YA en E.164.
@@ -47,6 +55,7 @@ export type StudentInput = {
  */
 export async function listStudents(
   orgId: string,
+  scope: DataScope,
   options: { query?: string; includeInactive?: boolean } = {},
 ): Promise<StudentListItem[]> {
   const query = normalizeForSearch(options.query ?? "");
@@ -55,16 +64,24 @@ export async function listStudents(
     where: {
       ...(options.includeInactive ? {} : { active: true }),
       ...(query ? { searchName: { contains: query } } : {}),
+      ...studentScopeWhere(scope),
     },
     orderBy: { searchName: "asc" },
     select: LIST_FIELDS,
   });
 }
 
-/** La ficha. `null` si no existe O si es de otra organización (withOrg no la deja ver). */
-export async function getStudent(orgId: string, studentId: string): Promise<StudentDetail | null> {
+/**
+ * La ficha. `null` si no existe O si es de otra organización (withOrg no la deja ver) O
+ * si queda fuera del scope del actor (S7): las tres respuestas son la misma.
+ */
+export async function getStudent(
+  orgId: string,
+  scope: DataScope,
+  studentId: string,
+): Promise<StudentDetail | null> {
   return withOrg(orgId).student.findUnique({
-    where: { id: studentId },
+    where: { id: studentId, AND: [studentScopeWhere(scope)] },
     select: DETAIL_FIELDS,
   });
 }
@@ -87,11 +104,12 @@ export async function createStudent(orgId: string, input: StudentInput): Promise
 /** Edición de la ficha. `searchName` se recalcula acá: nunca puede quedar desfasado. */
 export async function updateStudent(
   orgId: string,
+  scope: DataScope,
   studentId: string,
   input: StudentInput,
 ): Promise<{ id: string }> {
   return withOrg(orgId).student.update({
-    where: { id: studentId },
+    where: { id: studentId, AND: [studentScopeWhere(scope)] },
     data: {
       name: input.name,
       phone: input.phone,
@@ -110,18 +128,26 @@ export async function updateStudent(
  * historial de pagos quedan consultables para siempre. Cuando existan las cuotas (S3), acá
  * se sumará "no generar cuotas futuras" — hoy no hay nada que dejar de generar.
  */
-export async function deactivateStudent(orgId: string, studentId: string): Promise<void> {
+export async function deactivateStudent(
+  orgId: string,
+  scope: DataScope,
+  studentId: string,
+): Promise<void> {
   await withOrg(orgId).student.update({
-    where: { id: studentId },
+    where: { id: studentId, AND: [studentScopeWhere(scope)] },
     data: { active: false },
     select: { id: true },
   });
 }
 
 /** Reactivar: vuelve al padrón activo, con todo su historial intacto. */
-export async function reactivateStudent(orgId: string, studentId: string): Promise<void> {
+export async function reactivateStudent(
+  orgId: string,
+  scope: DataScope,
+  studentId: string,
+): Promise<void> {
   await withOrg(orgId).student.update({
-    where: { id: studentId },
+    where: { id: studentId, AND: [studentScopeWhere(scope)] },
     data: { active: true },
     select: { id: true },
   });

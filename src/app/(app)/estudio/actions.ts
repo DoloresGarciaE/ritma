@@ -115,9 +115,7 @@ export async function regenerateInvitationAction(
   }
 }
 
-export async function revokeInvitationAction(
-  invitationId: string,
-): Promise<{ error?: string }> {
+export async function revokeInvitationAction(invitationId: string): Promise<{ error?: string }> {
   const actor = await currentAdmin();
 
   try {

@@ -25,11 +25,7 @@ export async function acceptInvitationAction(token: string): Promise<{ error: st
   if (invitation.kind === "expired") return { error: "Esta invitación venció. Pedí una nueva." };
 
   try {
-    await acceptInvitation(
-      { id: session.userId, name: session.name },
-      invitation.orgId,
-      token,
-    );
+    await acceptInvitation({ id: session.userId, name: session.name }, invitation.orgId, token);
   } catch (error) {
     if (error instanceof TeamRuleError) return { error: error.message };
     throw error;

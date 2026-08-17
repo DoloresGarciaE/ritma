@@ -21,15 +21,28 @@ export type SessionBlockData = {
   status: "SCHEDULED" | "CANCELLED" | "DONE";
   moved: boolean;
   colorIndex: number;
+  /** Profe a cargo (S7): se muestra solo con `showTeacher` (agenda del ESTUDIO). */
+  teacherName?: string | null;
 };
 
 type SessionBlockProps = Omit<React.ComponentProps<"button">, "children"> & {
   session: SessionBlockData;
   /** Para el aria-label: "martes 12/05". El bloque visual no repite la fecha. */
   dateLabel: string;
+  /**
+   * Mostrar el profe (S7): solo en la agenda de un ESTUDIO con datos de owner/admin —
+   * en una independiente el único profe es obvio y sería ruido (§4.3).
+   */
+  showTeacher?: boolean;
 };
 
-export function SessionBlock({ session, dateLabel, className, ...props }: SessionBlockProps) {
+export function SessionBlock({
+  session,
+  dateLabel,
+  showTeacher = false,
+  className,
+  ...props
+}: SessionBlockProps) {
   const cancelled = session.status === "CANCELLED";
 
   const ariaLabel = [
@@ -87,6 +100,11 @@ export function SessionBlock({ session, dateLabel, className, ...props }: Sessio
         </span>
         {session.moved && !cancelled ? (
           <span className="block text-xs text-text-secondary">Reprogramada</span>
+        ) : null}
+        {showTeacher && !cancelled ? (
+          <span className="block truncate text-xs text-text-secondary">
+            {session.teacherName ?? "Sin profe asignado"}
+          </span>
         ) : null}
       </span>
     </button>

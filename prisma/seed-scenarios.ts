@@ -138,6 +138,7 @@ async function main() {
     // ── Organizaciones ───────────────────────────────────────────────────────
     async function ensureOrg(input: {
       ownerId: string;
+      ownerName: string;
       name: string;
       type: "INDEPENDENT" | "STUDIO";
       disciplines: string[];
@@ -154,6 +155,7 @@ async function main() {
 
       const { id } = await createOrganizationWithOwner({
         ownerId: input.ownerId,
+        ownerName: input.ownerName,
         name: input.name,
         type: input.type,
         disciplines: input.disciplines,
@@ -169,6 +171,7 @@ async function main() {
 
     const meraki = await ensureOrg({
       ownerId: owner.id,
+      ownerName: owner.name,
       name: "Estudio Meraki",
       type: "STUDIO",
       disciplines: ["Árabe", "Contemporáneo", "Folklore", "Yoga", "Canto"],
@@ -180,6 +183,7 @@ async function main() {
 
     const folklore = await ensureOrg({
       ownerId: teacher.id,
+      ownerName: teacher.name,
       name: `Clases de Folklore de ${teacherFirstName}`,
       type: "INDEPENDENT",
       disciplines: ["Folklore"],
@@ -192,6 +196,30 @@ async function main() {
       where: { userId_orgId: { userId: teacher.id, orgId: meraki.id } },
       create: { userId: teacher.id, orgId: meraki.id, role: "TEACHER" },
       update: {},
+    });
+
+    // Su perfil docente en Meraki (S7): STAFF, vinculado a su cuenta — lo mismo que
+    // dejaría aceptar una invitación. El de la dueña ya existe (createOrganizationWithOwner
+    // lo crea; el backfill de la migración S7 cubrió las orgs pre-existentes).
+    const dualProfile = await db.teacherProfile.upsert({
+      where: { orgId_membershipUserId: { orgId: meraki.id, membershipUserId: teacher.id } },
+      update: { displayName: teacher.name, kind: "STAFF" },
+      create: {
+        orgId: meraki.id,
+        membershipUserId: teacher.id,
+        displayName: teacher.name,
+        kind: "STAFF",
+      },
+    });
+    const merakiOwnerProfile = await db.teacherProfile.upsert({
+      where: { orgId_membershipUserId: { orgId: meraki.id, membershipUserId: owner.id } },
+      update: {},
+      create: {
+        orgId: meraki.id,
+        membershipUserId: owner.id,
+        displayName: owner.name,
+        kind: "OWNER_TEACHER",
+      },
     });
 
     // ── Alumnos ──────────────────────────────────────────────────────────────
@@ -279,7 +307,18 @@ async function main() {
     }
 
     // Weekdays: 0=domingo … 6=sábado (convención JS del dominio).
-    const CARGO = `Folklore norteño · Salón B · a cargo de ${teacherFirstName}`;
+    //
+    // S7: la convención "a cargo de {nombre}" en el NOMBRE quedó obsoleta — ahora el
+    // grupo tiene teacherId real. Si la base ya tiene el grupo con el nombre viejo, se
+    // RENOMBRA (no se duplica: ensureGroups busca por nombre).
+    const CARGO = "Folklore norteño · Salón B";
+    await db.classGroup.updateMany({
+      where: {
+        orgId: meraki.id,
+        name: `Folklore norteño · Salón B · a cargo de ${teacherFirstName}`,
+      },
+      data: { name: CARGO },
+    });
     const merakiGroups = await ensureGroups(meraki.id, [
       {
         name: "Yoga mañanas · Terraza",
@@ -315,8 +354,7 @@ async function main() {
         price: 16000,
         slots: [{ weekday: 5, startTime: "19:00", durationMin: 60 }],
       },
-      // El cruce #2, sábado 11:00 — y el grupo "a cargo" de la docente dual: SIN
-      // teacherId todavía (S9), la convención de nombre es el placeholder.
+      // El cruce #2, sábado 11:00 — y el grupo de la docente dual (teacherId real, S7).
       {
         name: CARGO,
         discipline: "Folklore",
@@ -330,6 +368,19 @@ async function main() {
         slots: [{ weekday: 6, startTime: "11:00", durationMin: 60 }],
       },
     ]);
+
+    // ── Asignación de profes (S7): el corazón del escenario dual ─────────────
+    // La docente tiene SOLO Folklore norteño: su mundo en Meraki es ese grupo, sus
+    // alumnas y sus cobranzas. La dueña dicta el resto — menos "Canto grupal", que
+    // queda SIN profe a propósito (el indicador de owner/admin necesita datos).
+    await db.classGroup.updateMany({
+      where: { orgId: meraki.id, name: CARGO },
+      data: { teacherId: dualProfile.id },
+    });
+    await db.classGroup.updateMany({
+      where: { orgId: meraki.id, name: { notIn: [CARGO, "Canto grupal · Salón B"] } },
+      data: { teacherId: merakiOwnerProfile.id },
+    });
 
     // La agenda de la docente dual NO choca con su grupo del estudio (sáb 11:00):
     // sus clases propias son martes y jueves a la mañana.
@@ -348,6 +399,15 @@ async function main() {
       },
     ]);
 
+    // En la independiente, todos los grupos son de su dueña (el auto del alcance 4).
+    const folkOwnerProfile = await db.teacherProfile.findFirstOrThrow({
+      where: { orgId: folklore.id, membershipUserId: teacher.id },
+    });
+    await db.classGroup.updateMany({
+      where: { orgId: folklore.id },
+      data: { teacherId: folkOwnerProfile.id },
+    });
+
     // ── Inscripciones (servicio real: crea la cuota inicial con el motor) ────
     type EnrollSpec = { student: string; group: string; startDate: string; price?: number };
 
@@ -365,13 +425,17 @@ async function main() {
         });
         if (existing) continue;
         const groupRow = await db.classGroup.findUniqueOrThrow({ where: { id: group.id } });
-        await createEnrollment(orgId, {
-          studentId: student.id,
-          groupId: group.id,
-          plan: "MONTHLY",
-          price: spec.price ?? groupRow.defaultPrice.toNumber(),
-          startDate: spec.startDate,
-        });
+        await createEnrollment(
+          orgId,
+          { kind: "all" },
+          {
+            studentId: student.id,
+            groupId: group.id,
+            plan: "MONTHLY",
+            price: spec.price ?? groupRow.defaultPrice.toNumber(),
+            startDate: spec.startDate,
+          },
+        );
       }
     }
 
@@ -451,14 +515,18 @@ async function main() {
         if (charge) allocations = [{ chargeId: charge.id, amount: input.amount }];
       }
 
-      await createPayment(orgId, {
-        studentId: student.id,
-        amount: input.amount,
-        method: input.method,
-        ...(input.receivedBy ? { receivedBy: input.receivedBy } : {}),
-        paidAt: addDays(today, -input.daysAgo),
-        ...(allocations ? { allocations } : {}),
-      });
+      await createPayment(
+        orgId,
+        { kind: "all" },
+        {
+          studentId: student.id,
+          amount: input.amount,
+          method: input.method,
+          ...(input.receivedBy ? { receivedBy: input.receivedBy } : {}),
+          paidAt: addDays(today, -input.daysAgo),
+          ...(allocations ? { allocations } : {}),
+        },
+      );
     }
 
     // Meraki: el mes de un estudio de verdad — pagas totales, una parcial, crédito,
@@ -534,7 +602,7 @@ async function main() {
         where: { orgId, studentId: student.id, channel },
       });
       if (existing) return;
-      await logReminder(orgId, { studentId: student.id, channel });
+      await logReminder(orgId, { kind: "all" }, { studentId: student.id, channel });
     }
 
     await ensureReminder(meraki.id, merakiStudents, "Joaquín Ledesma", "WHATSAPP_LINK");

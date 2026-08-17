@@ -1,5 +1,7 @@
 import { withOrg } from "@/lib/db";
 
+import { groupScopeWhere, type DataScope } from "./permissions";
+
 /**
  * Servicios de grupos (HU3.1).
  *
@@ -7,11 +9,15 @@ import { withOrg } from "@/lib/db";
  * ruta; acá viven las DOS defensas que el hook no puede dar solo (límites conocidos de
  * withOrg, F0.6):
  *
- * 1. **Referencias cruzadas**: un FK no distingue tenants. `disciplineId` se verifica
- *    contra la org ANTES de escribir — una referencia ajena solo llega por request
- *    forjada, así que se corta con un throw (error boundary), no con un error de campo.
+ * 1. **Referencias cruzadas**: un FK no distingue tenants. `disciplineId` (y desde S7
+ *    `teacherId`) se verifica contra la org ANTES de escribir — una referencia ajena
+ *    solo llega por request forjada, así que se corta con un throw (error boundary),
+ *    no con un error de campo.
  * 2. **Escrituras anidadas**: crear franjas junto con el grupo no dispara el hook del
  *    hijo, así que el `orgId` de cada franja va explícito — el mismo ya validado.
+ *
+ * Desde S7 las lecturas reciben el `DataScope` del actor: para un TEACHER, "sus grupos"
+ * es `teacherId = su perfil` — un grupo sin asignar o de otro profe no existe para él.
  */
 
 export type GroupSlot = {
@@ -28,6 +34,8 @@ export type GroupListItem = {
   /** Numérico plano: `Decimal` no cruza a un client component. */
   defaultPrice: number;
   discipline: { id: string; name: string };
+  /** Profe a cargo (S7); null = "sin profe asignado" (solo lo ven owner/admin). */
+  teacher: { id: string; displayName: string } | null;
   slots: GroupSlot[];
 };
 
@@ -43,6 +51,12 @@ export type GroupInput = {
   name: string;
   disciplineId: string;
   defaultPrice: number;
+  /**
+   * Profe a cargo (S7). `undefined` = no tocar (edición) o resolver solo (alta:
+   * INDEPENDENT → el perfil del owner; STUDIO → sin asignar); `null` = explícitamente
+   * sin profe; string = ese perfil, verificado contra la org.
+   */
+  teacherId?: string | null;
   slots: SlotInput[];
 };
 
@@ -54,6 +68,7 @@ const LIST_FIELDS = {
   active: true,
   defaultPrice: true,
   discipline: { select: { id: true, name: true } },
+  teacher: { select: { id: true, displayName: true } },
   // El orden lunes-primero no se puede expresar en SQL (weekday 0 = domingo): lo hace
   // `toListItem` en JS, así que acá no hay orderBy.
   slots: { select: SLOT_FIELDS },
@@ -65,6 +80,7 @@ type GroupRow = {
   active: boolean;
   defaultPrice: { toNumber(): number } | number;
   discipline: { id: string; name: string };
+  teacher: { id: string; displayName: string } | null;
   slots: GroupSlot[];
 };
 
@@ -81,6 +97,7 @@ function toListItem(row: GroupRow): GroupListItem {
     defaultPrice:
       typeof row.defaultPrice === "number" ? row.defaultPrice : row.defaultPrice.toNumber(),
     discipline: row.discipline,
+    teacher: row.teacher,
     slots: [...row.slots].sort(
       (a, b) =>
         mondayFirst(a.weekday) - mondayFirst(b.weekday) || a.startTime.localeCompare(b.startTime),
@@ -97,12 +114,54 @@ async function assertDisciplineInOrg(orgId: string, disciplineId: string): Promi
   if (!discipline) throw new Error("La disciplina no pertenece a esta organización.");
 }
 
+/** La misma defensa para el profe a cargo (S7): un perfil ajeno no se asigna. */
+async function assertTeacherInOrg(orgId: string, teacherId: string): Promise<void> {
+  const teacher = await withOrg(orgId).teacherProfile.findUnique({
+    where: { id: teacherId },
+    select: { id: true },
+  });
+  if (!teacher) throw new Error("El perfil de profe no pertenece a esta organización.");
+}
+
+/**
+ * El profe a cargo de un grupo NUEVO cuando el form no lo trae (S7): en una INDEPENDENT
+ * es el owner (el único profe, alcance 4 — el selector ni existe); en un STUDIO queda
+ * sin asignar hasta que un admin lo asigne.
+ */
+async function resolveTeacherId(
+  orgId: string,
+  teacherId: string | null | undefined,
+): Promise<string | null> {
+  if (teacherId) {
+    await assertTeacherInOrg(orgId, teacherId);
+    return teacherId;
+  }
+  if (teacherId === null) return null;
+
+  const org = withOrg(orgId);
+  const organization = await org.organization.findUnique({
+    where: { id: orgId },
+    select: { type: true },
+  });
+  if (organization?.type !== "INDEPENDENT") return null;
+
+  const owner = await org.teacherProfile.findFirst({
+    where: { kind: "OWNER_TEACHER" },
+    select: { id: true },
+  });
+  return owner?.id ?? null;
+}
+
 export async function listGroups(
   orgId: string,
+  scope: DataScope,
   options: { includeInactive?: boolean } = {},
 ): Promise<GroupListItem[]> {
   const rows = await withOrg(orgId).classGroup.findMany({
-    where: options.includeInactive ? {} : { active: true },
+    where: {
+      ...(options.includeInactive ? {} : { active: true }),
+      ...groupScopeWhere(scope),
+    },
     orderBy: { name: "asc" },
     select: LIST_FIELDS,
   });
@@ -110,25 +169,37 @@ export async function listGroups(
   return rows.map(toListItem);
 }
 
-/** `null` si no existe O si es de otra organización (withOrg no lo deja ver). */
-export async function getGroup(orgId: string, groupId: string): Promise<GroupListItem | null> {
+/**
+ * `null` si no existe O si es de otra organización (withOrg no lo deja ver) O si queda
+ * fuera del scope del actor (S7): las tres respuestas son la misma, sin confirmar nada.
+ */
+export async function getGroup(
+  orgId: string,
+  scope: DataScope,
+  groupId: string,
+): Promise<GroupListItem | null> {
   const row = await withOrg(orgId).classGroup.findUnique({
-    where: { id: groupId },
+    where: { id: groupId, AND: [groupScopeWhere(scope)] },
     select: LIST_FIELDS,
   });
 
   return row ? toListItem(row) : null;
 }
 
-/** Alta (HU3.1): grupo + franjas en UNA escritura anidada (una transacción). */
+/**
+ * Alta (HU3.1): grupo + franjas en UNA escritura anidada (una transacción). Solo
+ * owner/admin (decisión S7): la action lo exige por rol, acá no entra scope.
+ */
 export async function createGroup(orgId: string, input: GroupInput): Promise<{ id: string }> {
   await assertDisciplineInOrg(orgId, input.disciplineId);
+  const teacherId = await resolveTeacherId(orgId, input.teacherId);
 
   return withOrg(orgId).classGroup.create({
     data: {
       orgId,
       name: input.name,
       disciplineId: input.disciplineId,
+      teacherId,
       defaultPrice: input.defaultPrice,
       slots: {
         // orgId EXPLÍCITO: la escritura anidada no pasa por el hook del hijo.
@@ -162,12 +233,41 @@ export async function createGroup(orgId: string, input: GroupInput): Promise<{ i
  */
 export async function updateGroup(
   orgId: string,
+  scope: DataScope,
   groupId: string,
   input: GroupInput,
 ): Promise<{ id: string }> {
   await assertDisciplineInOrg(orgId, input.disciplineId);
 
   const org = withOrg(orgId);
+
+  // El scope decide QUÉ grupos existen para el actor (S7): para un teacher, un grupo
+  // ajeno directamente "no existe" — mismo mensaje que una referencia forjada.
+  const editable = await org.classGroup.findUnique({
+    where: { id: groupId, AND: [groupScopeWhere(scope)] },
+    select: { id: true },
+  });
+  if (!editable) throw new Error("El grupo no pertenece a esta organización.");
+
+  // Y decide QUÉ campos puede tocar (decisión S7, sesión con Dolores): el teacher edita
+  // nombre, disciplina y horarios de SUS grupos; el precio de referencia y el profe a
+  // cargo son de owner/admin — acá se fuerzan a quedar como están, decida lo que decida
+  // la pantalla. `input.teacherId === undefined` también es "no tocar" (la edición en
+  // una INDEPENDENT no trae selector y no debe pisar nada).
+  const isTeacher = scope.kind === "teacher";
+
+  let teacherAssignment: { teacherId: string | null } | undefined;
+  if (!isTeacher && input.teacherId !== undefined) {
+    if (input.teacherId) await assertTeacherInOrg(orgId, input.teacherId);
+    teacherAssignment = { teacherId: input.teacherId };
+  }
+
+  const groupData = {
+    name: input.name,
+    disciplineId: input.disciplineId,
+    ...(isTeacher ? {} : { defaultPrice: input.defaultPrice }),
+    ...(teacherAssignment ?? {}),
+  };
 
   const current = await org.scheduleSlot.findMany({
     where: { groupId },
@@ -195,12 +295,8 @@ export async function updateGroup(
   await org.$transaction([
     // Primero el grupo: si es ajeno, P2025 aborta la transacción antes de tocar franjas.
     org.classGroup.update({
-      where: { id: groupId },
-      data: {
-        name: input.name,
-        disciplineId: input.disciplineId,
-        defaultPrice: input.defaultPrice,
-      },
+      where: { id: groupId, AND: [groupScopeWhere(scope)] },
+      data: groupData,
       select: { id: true },
     }),
     ...toDelete.map((id) => org.scheduleSlot.delete({ where: { id, groupId } })),

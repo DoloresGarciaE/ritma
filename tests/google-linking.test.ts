@@ -47,6 +47,7 @@ describe("entrar con Google con el email de una cuenta que ya existe", () => {
     const user = await signUpWithPassword();
     const org = await createOrganizationWithOwner({
       ownerId: user.id,
+      ownerName: user.name,
       name: "Estudio Meraki",
       type: "STUDIO",
       disciplines: ["Árabe"],

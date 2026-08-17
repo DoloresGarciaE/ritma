@@ -138,7 +138,7 @@ describe("rotateReceiptToken — revocar = rotar", () => {
       "Árabe inicial",
     );
 
-    const { receiptToken: fresh } = await rotateReceiptToken(org.id, payment.id);
+    const { receiptToken: fresh } = await rotateReceiptToken(org.id, { kind: "all" }, payment.id);
     expect(fresh).not.toBe(payment.receiptToken);
 
     expect(await getReceiptByToken(payment.receiptToken)).toBeNull();
@@ -154,7 +154,7 @@ describe("rotateReceiptToken — revocar = rotar", () => {
       "Contemporáneo",
     );
 
-    await expect(rotateReceiptToken(a.id, bPayment.id)).rejects.toMatchObject({
+    await expect(rotateReceiptToken(a.id, { kind: "all" }, bPayment.id)).rejects.toMatchObject({
       code: "P2025",
     });
     expect(await getReceiptByToken(bPayment.receiptToken)).not.toBeNull();

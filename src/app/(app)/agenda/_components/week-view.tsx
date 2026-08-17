@@ -16,11 +16,14 @@ export function WeekView({
   today,
   occurrences,
   onSelect,
+  showTeacher = false,
 }: {
   days: string[];
   today: string;
   occurrences: AgendaOccurrence[];
   onSelect?: (occurrence: AgendaOccurrence) => void;
+  /** S7: el profe en cada bloque, solo en la agenda de un ESTUDIO. */
+  showTeacher?: boolean;
 }) {
   const byDate = new Map<string, AgendaOccurrence[]>();
   for (const occurrence of occurrences) {
@@ -56,6 +59,7 @@ export function WeekView({
                     key={`${occurrence.slotId}|${occurrence.originalDate}`}
                     session={occurrence}
                     dateLabel={formatFullDayDate(date)}
+                    showTeacher={showTeacher}
                     onClick={onSelect ? () => onSelect(occurrence) : undefined}
                   />
                 ))}

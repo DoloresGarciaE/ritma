@@ -32,9 +32,13 @@ async function agendaFixture() {
 describe("weekData", () => {
   it("integra franjas + excepciones y enriquece con grupo, disciplina, precio y color", async () => {
     const { org, group, tuesday } = await agendaFixture();
-    await cancelSession(org.id, { slotId: tuesday.id, date: "2026-07-14", note: "Feriado" });
+    await cancelSession(
+      org.id,
+      { kind: "all" },
+      { slotId: tuesday.id, date: "2026-07-14", note: "Feriado" },
+    );
 
-    const week = await weekData(org.id, WEEK_START);
+    const week = await weekData(org.id, { kind: "all" }, WEEK_START);
 
     expect(week.occurrences.map((o) => [o.date, o.status])).toEqual([
       ["2026-07-14", "CANCELLED"],
@@ -52,24 +56,28 @@ describe("weekData", () => {
 
   it("un grupo inactivo desaparece de la agenda (sus excepciones no lo reviven)", async () => {
     const { org, tuesday } = await agendaFixture();
-    await cancelSession(org.id, { slotId: tuesday.id, date: "2026-07-14" });
+    await cancelSession(org.id, { kind: "all" }, { slotId: tuesday.id, date: "2026-07-14" });
     await db.classGroup.updateMany({ data: { active: false } });
 
-    const week = await weekData(org.id, WEEK_START);
+    const week = await weekData(org.id, { kind: "all" }, WEEK_START);
     expect(week.occurrences).toEqual([]);
   });
 
   it("trae la reprogramada HACIA esta semana desde otra (query por movedToDate)", async () => {
     const { org, tuesday } = await agendaFixture();
     // El martes de la semana ANTERIOR, movido al miércoles de esta.
-    await rescheduleSession(org.id, {
-      slotId: tuesday.id,
-      date: "2026-07-07",
-      movedToDate: "2026-07-15",
-      movedToStartTime: "10:00",
-    });
+    await rescheduleSession(
+      org.id,
+      { kind: "all" },
+      {
+        slotId: tuesday.id,
+        date: "2026-07-07",
+        movedToDate: "2026-07-15",
+        movedToStartTime: "10:00",
+      },
+    );
 
-    const week = await weekData(org.id, WEEK_START);
+    const week = await weekData(org.id, { kind: "all" }, WEEK_START);
     const moved = week.occurrences.find((o) => o.moved);
     expect(moved).toMatchObject({
       date: "2026-07-15",
@@ -84,7 +92,7 @@ describe("weekData", () => {
     const bGroup = await makeGroup(b.id, "De B");
     await makeSlot(b.id, bGroup.id, { weekday: 2, startTime: "09:00" });
 
-    const week = await weekData(org.id, WEEK_START);
+    const week = await weekData(org.id, { kind: "all" }, WEEK_START);
     expect(week.occurrences.every((o) => o.groupName === "Árabe inicial")).toBe(true);
   });
 
@@ -99,7 +107,7 @@ describe("weekData", () => {
       groups.push(group.id);
     }
 
-    const week = await weekData(org.id, WEEK_START);
+    const week = await weekData(org.id, { kind: "all" }, WEEK_START);
     const colorByGroup = new Map(week.occurrences.map((o) => [o.groupId, o.colorIndex]));
 
     // 3 tokens: la cuarta disciplina repite el ciclo (paleta parametrizada, Color §4).
@@ -111,8 +119,12 @@ describe("cancelSession", () => {
   it("crea la excepción una sola vez: cancelar dos veces es idempotente", async () => {
     const { org, tuesday } = await agendaFixture();
 
-    await cancelSession(org.id, { slotId: tuesday.id, date: "2026-07-14", note: "Feriado" });
-    await cancelSession(org.id, { slotId: tuesday.id, date: "2026-07-14" });
+    await cancelSession(
+      org.id,
+      { kind: "all" },
+      { slotId: tuesday.id, date: "2026-07-14", note: "Feriado" },
+    );
+    await cancelSession(org.id, { kind: "all" }, { slotId: tuesday.id, date: "2026-07-14" });
 
     const rows = await db.classSession.findMany({ where: { slotId: tuesday.id } });
     expect(rows).toHaveLength(1);
@@ -126,9 +138,9 @@ describe("cancelSession", () => {
     const bGroup = await makeGroup(b.id, "De B");
     const bSlot = await makeSlot(b.id, bGroup.id, { weekday: 2 });
 
-    await expect(cancelSession(org.id, { slotId: bSlot.id, date: "2026-07-14" })).rejects.toThrow(
-      /franja/i,
-    );
+    await expect(
+      cancelSession(org.id, { kind: "all" }, { slotId: bSlot.id, date: "2026-07-14" }),
+    ).rejects.toThrow(/franja/i);
 
     expect(await db.classSession.count()).toBe(0);
   });
@@ -137,9 +149,9 @@ describe("cancelSession", () => {
     const { org, tuesday } = await agendaFixture();
 
     // 2026-07-15 es miércoles; la franja es de martes.
-    await expect(cancelSession(org.id, { slotId: tuesday.id, date: "2026-07-15" })).rejects.toThrow(
-      /ocurrencia/i,
-    );
+    await expect(
+      cancelSession(org.id, { kind: "all" }, { slotId: tuesday.id, date: "2026-07-15" }),
+    ).rejects.toThrow(/ocurrencia/i);
 
     expect(await db.classSession.count()).toBe(0);
   });
@@ -149,12 +161,16 @@ describe("rescheduleSession", () => {
   it("guarda la nueva posición con la identidad original intacta", async () => {
     const { org, tuesday } = await agendaFixture();
 
-    await rescheduleSession(org.id, {
-      slotId: tuesday.id,
-      date: "2026-07-14",
-      movedToDate: "2026-07-17",
-      movedToStartTime: "18:30",
-    });
+    await rescheduleSession(
+      org.id,
+      { kind: "all" },
+      {
+        slotId: tuesday.id,
+        date: "2026-07-14",
+        movedToDate: "2026-07-17",
+        movedToStartTime: "18:30",
+      },
+    );
 
     const row = await db.classSession.findFirstOrThrow({ where: { slotId: tuesday.id } });
     expect(row.date.toISOString()).toBe("2026-07-14T00:00:00.000Z");
@@ -165,14 +181,18 @@ describe("rescheduleSession", () => {
 
   it("mover una cancelada la DES-cancela", async () => {
     const { org, tuesday } = await agendaFixture();
-    await cancelSession(org.id, { slotId: tuesday.id, date: "2026-07-14" });
+    await cancelSession(org.id, { kind: "all" }, { slotId: tuesday.id, date: "2026-07-14" });
 
-    await rescheduleSession(org.id, {
-      slotId: tuesday.id,
-      date: "2026-07-14",
-      movedToDate: "2026-07-17",
-      movedToStartTime: "18:00",
-    });
+    await rescheduleSession(
+      org.id,
+      { kind: "all" },
+      {
+        slotId: tuesday.id,
+        date: "2026-07-14",
+        movedToDate: "2026-07-17",
+        movedToStartTime: "18:00",
+      },
+    );
 
     const row = await db.classSession.findFirstOrThrow({ where: { slotId: tuesday.id } });
     expect(row.status).toBe("SCHEDULED");
@@ -185,12 +205,16 @@ describe("rescheduleSession", () => {
     const bSlot = await makeSlot(b.id, bGroup.id, { weekday: 2 });
 
     await expect(
-      rescheduleSession(org.id, {
-        slotId: bSlot.id,
-        date: "2026-07-14",
-        movedToDate: "2026-07-17",
-        movedToStartTime: "10:00",
-      }),
+      rescheduleSession(
+        org.id,
+        { kind: "all" },
+        {
+          slotId: bSlot.id,
+          date: "2026-07-14",
+          movedToDate: "2026-07-17",
+          movedToStartTime: "10:00",
+        },
+      ),
     ).rejects.toThrow(/franja/i);
 
     expect(await db.classSession.count()).toBe(0);
@@ -200,12 +224,12 @@ describe("rescheduleSession", () => {
 describe("restoreSession", () => {
   it("borra la excepción: la verdad vuelve a ser la calculada", async () => {
     const { org, tuesday } = await agendaFixture();
-    await cancelSession(org.id, { slotId: tuesday.id, date: "2026-07-14" });
+    await cancelSession(org.id, { kind: "all" }, { slotId: tuesday.id, date: "2026-07-14" });
 
-    await restoreSession(org.id, { slotId: tuesday.id, date: "2026-07-14" });
+    await restoreSession(org.id, { kind: "all" }, { slotId: tuesday.id, date: "2026-07-14" });
 
     expect(await db.classSession.count()).toBe(0);
-    const week = await weekData(org.id, WEEK_START);
+    const week = await weekData(org.id, { kind: "all" }, WEEK_START);
     expect(week.occurrences.find((o) => o.date === "2026-07-14")?.status).toBe("SCHEDULED");
   });
 
@@ -217,11 +241,11 @@ describe("restoreSession", () => {
     const bSession = await makeSession(b.id, bGroup.id, bSlot.id, "2026-07-14");
 
     await expect(
-      restoreSession(org.id, { slotId: tuesday.id, date: "2026-07-14" }),
+      restoreSession(org.id, { kind: "all" }, { slotId: tuesday.id, date: "2026-07-14" }),
     ).rejects.toMatchObject({ code: "P2025" });
 
     await expect(
-      restoreSession(org.id, { slotId: bSlot.id, date: "2026-07-14" }),
+      restoreSession(org.id, { kind: "all" }, { slotId: bSlot.id, date: "2026-07-14" }),
     ).rejects.toMatchObject({ code: "P2025" });
 
     expect(await db.classSession.findUnique({ where: { id: bSession.id } })).not.toBeNull();

@@ -118,6 +118,7 @@ export async function createInvitation(
 
   return org.invitation.create({
     data: {
+      orgId: actor.orgId,
       role: input.role,
       email: input.email?.trim() || null,
       token: generateInvitationToken(),
@@ -314,6 +315,7 @@ export async function acceptInvitation(
     if (invitation.role === "TEACHER") {
       await scoped.teacherProfile.create({
         data: {
+          orgId,
           membershipUserId: user.id,
           displayName: user.name,
           kind: "STAFF",

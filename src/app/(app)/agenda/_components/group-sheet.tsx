@@ -52,12 +52,20 @@ export function GroupSheet({
   onOpenChange,
   disciplines,
   group,
+  manage,
+  isStudio,
+  teachers,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   disciplines: { id: string; name: string }[];
   /** `null` = crear. Con grupo = editar. */
   group: GroupListItem | null;
+  /** Owner/admin (S7, §4.3): tarifa, disciplina nueva, switch de activo y profe a cargo. */
+  manage: boolean;
+  isStudio: boolean;
+  /** Opciones del selector "Profe a cargo": vacío salvo owner/admin de un STUDIO. */
+  teachers: { id: string; displayName: string }[];
 }) {
   const toast = useToast();
   const [pending, startSubmit] = useTransition();
@@ -67,6 +75,16 @@ export function GroupSheet({
   const [name, setName] = useState(group?.name ?? "");
   const [disciplineId, setDisciplineId] = useState(group?.discipline.id ?? "");
   const [price, setPrice] = useState<number | null>(group?.defaultPrice ?? null);
+  const [teacherId, setTeacherId] = useState<string | null>(group?.teacher?.id ?? null);
+
+  // El selector aparece SOLO para owner/admin de un STUDIO (§4.3). Si el grupo apunta a
+  // un perfil desvinculado (docente revocada), se suma como opción para que la asignación
+  // actual se VEA — y siga asignable hasta que alguien la cambie.
+  const showTeacherPicker = manage && isStudio;
+  const teacherOptions =
+    group?.teacher && !teachers.some((teacher) => teacher.id === group.teacher!.id)
+      ? [group.teacher, ...teachers]
+      : teachers;
   // Los slots del server se RE-AGRUPAN en franjas visuales por (hora, duración): mar+jue
   // 18:00/60 llega como UNA fila con dos chips. `originalDays` guarda los ids para que
   // destildar y arrepentirse no cueste las excepciones de ese día.
@@ -102,6 +120,9 @@ export function GroupSheet({
     name,
     disciplineId,
     defaultPrice: price,
+    // Solo cuando el selector existe: ausente = "no tocar" (el server además ignora
+    // cualquier teacherId de un teacher — la pantalla nunca es la única guardia).
+    ...(showTeacherPicker ? { teacherId } : {}),
     franjas: franjas.map(({ days, startTime, durationMin }) => ({
       days,
       startTime,
@@ -277,18 +298,20 @@ export function GroupSheet({
                   </button>
                 );
               })}
-              <button
-                type="button"
-                aria-expanded={newDisciplineOpen}
-                onClick={() => setNewDisciplineOpen((prev) => !prev)}
-                className={chipStyles(false)}
-              >
-                <Plus aria-hidden className="size-4" />
-                Nueva
-              </button>
+              {manage ? (
+                <button
+                  type="button"
+                  aria-expanded={newDisciplineOpen}
+                  onClick={() => setNewDisciplineOpen((prev) => !prev)}
+                  className={chipStyles(false)}
+                >
+                  <Plus aria-hidden className="size-4" />
+                  Nueva
+                </button>
+              ) : null}
             </div>
 
-            {newDisciplineOpen ? (
+            {manage && newDisciplineOpen ? (
               <div className="mt-1 flex items-start gap-2">
                 <div className="flex-1">
                   <Input
@@ -329,20 +352,58 @@ export function GroupSheet({
             ) : null}
           </div>
 
-          <Field
-            label="Tarifa de referencia"
-            helpText="El precio sugerido al inscribir. Después lo ajustás por alumno."
-            error={errors.defaultPrice}
-          >
-            <AmountInput
-              value={price}
-              onValueChange={(value) => {
-                setPrice(value);
-                if (errors.defaultPrice)
-                  setErrors((prev) => ({ ...prev, defaultPrice: undefined }));
-              }}
-            />
-          </Field>
+          {/* La tarifa es configuración de precios (Plan §4): un teacher no la ve (§4.3);
+              su submit manda la vigente sin tocar y el server la fuerza igual. */}
+          {manage ? (
+            <Field
+              label="Tarifa de referencia"
+              helpText="El precio sugerido al inscribir. Después lo ajustás por alumno."
+              error={errors.defaultPrice}
+            >
+              <AmountInput
+                value={price}
+                onValueChange={(value) => {
+                  setPrice(value);
+                  if (errors.defaultPrice)
+                    setErrors((prev) => ({ ...prev, defaultPrice: undefined }));
+                }}
+              />
+            </Field>
+          ) : null}
+
+          {showTeacherPicker ? (
+            <div className="flex flex-col gap-1.5">
+              <span className="text-sm font-medium text-text">Profe a cargo</span>
+              <div role="group" aria-label="Profe a cargo" className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  aria-pressed={teacherId === null}
+                  onClick={() => setTeacherId(null)}
+                  className={chipStyles(teacherId === null)}
+                >
+                  Sin asignar
+                </button>
+                {teacherOptions.map((teacher) => {
+                  const selected = teacherId === teacher.id;
+                  return (
+                    <button
+                      key={teacher.id}
+                      type="button"
+                      aria-pressed={selected}
+                      onClick={() => setTeacherId(teacher.id)}
+                      className={chipStyles(selected)}
+                    >
+                      {selected ? <Check aria-hidden className="size-4" /> : null}
+                      {teacher.displayName}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-xs text-text-secondary">
+                Quien lo tiene a cargo lo ve como suyo: su agenda, sus alumnos, sus cobranzas.
+              </p>
+            </div>
+          ) : null}
 
           <SlotEditor
             franjas={franjas}
@@ -354,7 +415,8 @@ export function GroupSheet({
             showEditWarning={group !== null}
           />
 
-          {group ? (
+          {/* Desactivar un grupo es estructura (S7): solo owner/admin lo ven (§4.3). */}
+          {group && manage ? (
             <div className="flex items-center justify-between rounded-card border border-border bg-surface p-3">
               <div className="flex flex-col">
                 <span className="text-sm font-medium text-text">Grupo activo</span>

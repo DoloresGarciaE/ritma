@@ -52,7 +52,11 @@ export default async function EquipoPage() {
 
   return (
     <>
-      <AppBar title="Equipo" back="/estudio" action={<InviteTeam emailEnabled={isEmailConfigured()} />} />
+      <AppBar
+        title="Equipo"
+        back="/estudio"
+        action={<InviteTeam emailEnabled={isEmailConfigured()} />}
+      />
 
       <div className="flex flex-col gap-6 px-4 py-6 md:px-6">
         <TeamSection members={team} selfUserId={actor.userId} />

@@ -38,6 +38,9 @@ export function AgendaScreen({
   students,
   roster,
   autoOpenCreate,
+  manage,
+  isStudio,
+  teachers,
 }: {
   weekStart: string;
   today: string;
@@ -51,6 +54,11 @@ export function AgendaScreen({
   /** Inscriptos vigentes por grupo (S3): pinta el detalle de sesión. */
   roster: Record<string, GroupEnrollmentItem[]>;
   autoOpenCreate: boolean;
+  /** Owner/admin (S7, §4.3): crear grupos, precio, switch de activo y profe a cargo. */
+  manage: boolean;
+  isStudio: boolean;
+  /** Opciones del selector "Profe a cargo": vacío salvo owner/admin de un STUDIO. */
+  teachers: { id: string; displayName: string }[];
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -134,8 +142,12 @@ export function AgendaScreen({
         <EmptyState
           icon={CalendarDays}
           title="Tu semana está vacía"
-          description="Creá tu primer grupo y armá la agenda: sus clases se generan solas, semana a semana."
-          action={{ label: "Crear mi primer grupo", onClick: openCreate }}
+          description={
+            manage
+              ? "Creá tu primer grupo y armá la agenda: sus clases se generan solas, semana a semana."
+              : "Cuando te asignen un grupo, sus clases van a aparecer acá solas."
+          }
+          action={manage ? { label: "Crear mi primer grupo", onClick: openCreate } : undefined}
         />
       ) : (
         <>
@@ -145,12 +157,14 @@ export function AgendaScreen({
             today={today}
             occurrences={shownOccurrences}
             onSelect={openDetail}
+            showTeacher={isStudio}
           />
         </>
       )}
 
-      {/* El FAB solo cuando ya hay CTA de lista, no encima del EmptyState (§3.13). */}
-      {groups.length > 0 ? <Fab label="Nuevo grupo" onClick={openCreate} /> : null}
+      {/* El FAB solo cuando ya hay CTA de lista, no encima del EmptyState (§3.13);
+          crear grupos es de owner/admin (S7, §4.3). */}
+      {manage && groups.length > 0 ? <Fab label="Nuevo grupo" onClick={openCreate} /> : null}
 
       <GroupSheet
         key={`${editing?.id ?? "nuevo"}-${sheetKey}`}
@@ -158,6 +172,9 @@ export function AgendaScreen({
         onOpenChange={setGroupSheetOpen}
         disciplines={disciplines}
         group={editing}
+        manage={manage}
+        isStudio={isStudio}
+        teachers={teachers}
       />
 
       <GroupsSheet
@@ -165,6 +182,8 @@ export function AgendaScreen({
         onOpenChange={setGroupsListOpen}
         groups={groups}
         onEdit={openEdit}
+        manage={manage}
+        isStudio={isStudio}
       />
 
       <SessionDetailSheet
@@ -172,6 +191,7 @@ export function AgendaScreen({
         open={detailOpen}
         onOpenChange={setDetailOpen}
         occurrence={selected}
+        showTeacher={isStudio}
         enrolled={selected ? (roster[selected.groupId] ?? []) : []}
         onEditGroup={(groupId) => {
           const group = groups.find((g) => g.id === groupId);

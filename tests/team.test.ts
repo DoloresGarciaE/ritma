@@ -49,7 +49,11 @@ describe("createInvitation (HU1.3)", () => {
 
     const pending = await listPendingInvitations(admin);
     expect(pending.map((i) => i.id)).toEqual([id]);
-    expect(pending[0]).toMatchObject({ email: "caro@example.com", role: "TEACHER", expired: false });
+    expect(pending[0]).toMatchObject({
+      email: "caro@example.com",
+      role: "TEACHER",
+      expired: false,
+    });
 
     const days = (new Date(pending[0].expiresAt).getTime() - Date.now()) / (24 * 60 * 60 * 1000);
     expect(days).toBeGreaterThan(6.9);
@@ -154,9 +158,9 @@ describe("acceptInvitation (HU1.3)", () => {
     await revokeInvitation(admin, id);
     const user = await makeUser("Tarde");
 
-    await expect(
-      acceptInvitation({ id: user.id, name: user.name }, org.id, token),
-    ).rejects.toThrow("Esta invitación no existe o fue revocada.");
+    await expect(acceptInvitation({ id: user.id, name: user.name }, org.id, token)).rejects.toThrow(
+      "Esta invitación no existe o fue revocada.",
+    );
   });
 
   it("quien ya es parte no consume la invitación", async () => {
@@ -166,9 +170,9 @@ describe("acceptInvitation (HU1.3)", () => {
     const existing = await makeMember(org.id, "TEACHER");
     const user = await db.user.findUniqueOrThrow({ where: { id: existing.userId } });
 
-    await expect(
-      acceptInvitation({ id: user.id, name: user.name }, org.id, token),
-    ).rejects.toThrow("Ya sos parte de esta organización.");
+    await expect(acceptInvitation({ id: user.id, name: user.name }, org.id, token)).rejects.toThrow(
+      "Ya sos parte de esta organización.",
+    );
 
     // La invitación sigue viva para la persona correcta.
     const invitation = await db.invitation.findFirstOrThrow({ where: { orgId: org.id } });

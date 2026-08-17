@@ -33,7 +33,11 @@ describe("logReminder — referencias cruzadas primero", () => {
     const org = await makeOrg("Danzas Malena");
     const student = await makeStudent(org.id, "Sofía Herrera");
 
-    const { id } = await logReminder(org.id, { studentId: student.id, channel: "WHATSAPP_LINK" });
+    const { id } = await logReminder(
+      org.id,
+      { kind: "all" },
+      { studentId: student.id, channel: "WHATSAPP_LINK" },
+    );
 
     const row = await db.reminderLog.findUniqueOrThrow({ where: { id } });
     expect(row.orgId).toBe(org.id);
@@ -49,7 +53,7 @@ describe("logReminder — referencias cruzadas primero", () => {
     const bStudent = await makeStudent(b.id, "Malena Ríos");
 
     await expect(
-      logReminder(a.id, { studentId: bStudent.id, channel: "EMAIL" }),
+      logReminder(a.id, { kind: "all" }, { studentId: bStudent.id, channel: "EMAIL" }),
     ).rejects.toBeInstanceOf(ReminderRuleError);
     expect(await db.reminderLog.count()).toBe(0);
   });
@@ -64,11 +68,15 @@ describe("logReminder — referencias cruzadas primero", () => {
     const bCharge = await makeCharge(b.id, bEnrollment.id);
 
     await expect(
-      logReminder(a.id, {
-        studentId: aStudent.id,
-        channel: "WHATSAPP_LINK",
-        chargeId: bCharge.id,
-      }),
+      logReminder(
+        a.id,
+        { kind: "all" },
+        {
+          studentId: aStudent.id,
+          channel: "WHATSAPP_LINK",
+          chargeId: bCharge.id,
+        },
+      ),
     ).rejects.toBeInstanceOf(ReminderRuleError);
     expect(await db.reminderLog.count()).toBe(0);
   });
@@ -88,7 +96,7 @@ describe("listRemindersForStudent — el historial de la ficha", () => {
       sentAt: new Date("2026-07-14T18:00:00Z"),
     });
 
-    const history = await listRemindersForStudent(org.id, student.id, TZ);
+    const history = await listRemindersForStudent(org.id, { kind: "all" }, student.id, TZ);
     expect(history.map((h) => [h.date, h.channel])).toEqual([
       ["2026-07-14", "EMAIL"],
       ["2026-07-10", "WHATSAPP_LINK"],
@@ -101,7 +109,7 @@ describe("listRemindersForStudent — el historial de la ficha", () => {
     const julieta = await makeStudent(org.id, "Julieta Paz");
     await makeReminderLog(org.id, julieta.id);
 
-    expect(await listRemindersForStudent(org.id, sofia.id, TZ)).toEqual([]);
+    expect(await listRemindersForStudent(org.id, { kind: "all" }, sofia.id, TZ)).toEqual([]);
   });
 });
 
@@ -138,7 +146,7 @@ describe("buildReminder — el mensaje del DoD", () => {
     const { org, student } = await makeScenario();
     await db.organization.update({ where: { id: org.id }, data: { paymentAlias: "malena.mp" } });
 
-    const draft = await buildReminder(org.id, student.id, "2026-07");
+    const draft = await buildReminder(org.id, { kind: "all" }, student.id, "2026-07");
     expect(draft.debt).toBe(28000);
     expect(draft.message).toBe(
       "Hola Sofía 👋 Te paso el resumen de Julio 2026: $28.000. " +
@@ -154,7 +162,7 @@ describe("buildReminder — el mensaje del DoD", () => {
       data: { reminderTemplate: "{nombre} debe {monto} de {periodo}. Alias: {alias}" },
     });
 
-    const draft = await buildReminder(org.id, student.id, "2026-07");
+    const draft = await buildReminder(org.id, { kind: "all" }, student.id, "2026-07");
     expect(draft.message).toBe("Sofía debe $28.000 de Julio 2026. Alias: ");
   });
 
@@ -162,7 +170,7 @@ describe("buildReminder — el mensaje del DoD", () => {
     const org = await makeOrg("Danzas Malena");
     const student = await makeStudent(org.id, "Julieta Paz");
 
-    const draft = await buildReminder(org.id, student.id, "2026-07");
+    const draft = await buildReminder(org.id, { kind: "all" }, student.id, "2026-07");
     expect(draft.debt).toBe(0);
     expect(draft.message).toContain("$0");
     expect(DEFAULT_REMINDER_TEMPLATE).toContain("{monto}"); // el render usó la default
@@ -171,7 +179,7 @@ describe("buildReminder — el mensaje del DoD", () => {
   it("org sin alias con plantilla default: la frase de la transferencia no existe", async () => {
     const { org, student } = await makeScenario(); // makeOrg no setea paymentAlias
 
-    const draft = await buildReminder(org.id, student.id, "2026-07");
+    const draft = await buildReminder(org.id, { kind: "all" }, student.id, "2026-07");
     expect(draft.message).toBe(
       "Hola Sofía 👋 Te paso el resumen de Julio 2026: $28.000. ¡Gracias!",
     );
@@ -183,8 +191,8 @@ describe("buildReminder — el mensaje del DoD", () => {
     const b = await makeOrg("Estudio B");
     const bStudent = await makeStudent(b.id, "Malena Ríos");
 
-    await expect(buildReminder(a.id, bStudent.id, "2026-07")).rejects.toBeInstanceOf(
-      ReminderRuleError,
-    );
+    await expect(
+      buildReminder(a.id, { kind: "all" }, bStudent.id, "2026-07"),
+    ).rejects.toBeInstanceOf(ReminderRuleError);
   });
 });

@@ -43,13 +43,17 @@ describe("createEnrollment — MONTHLY", () => {
     freezeClock();
     const { org, student, group } = await makeBase();
 
-    const { id } = await createEnrollment(org.id, {
-      studentId: student.id,
-      groupId: group.id,
-      plan: "MONTHLY",
-      price: 18000,
-      startDate: "2026-07-15",
-    });
+    const { id } = await createEnrollment(
+      org.id,
+      { kind: "all" },
+      {
+        studentId: student.id,
+        groupId: group.id,
+        plan: "MONTHLY",
+        price: 18000,
+        startDate: "2026-07-15",
+      },
+    );
 
     // Verificación con db crudo: la escritura anidada NO pasa por el hook.
     const charges = await db.charge.findMany({ where: { enrollmentId: id } });
@@ -66,13 +70,17 @@ describe("createEnrollment — MONTHLY", () => {
     freezeClock();
     const { org, student, group } = await makeBase();
 
-    const { id } = await createEnrollment(org.id, {
-      studentId: student.id,
-      groupId: group.id,
-      plan: "MONTHLY",
-      price: 18000,
-      startDate: "2026-08-01",
-    });
+    const { id } = await createEnrollment(
+      org.id,
+      { kind: "all" },
+      {
+        studentId: student.id,
+        groupId: group.id,
+        plan: "MONTHLY",
+        price: 18000,
+        startDate: "2026-08-01",
+      },
+    );
 
     expect(await db.charge.count({ where: { enrollmentId: id } })).toBe(0);
   });
@@ -81,13 +89,17 @@ describe("createEnrollment — MONTHLY", () => {
     freezeClock();
     const { org, student, group } = await makeBase();
 
-    const { id } = await createEnrollment(org.id, {
-      studentId: student.id,
-      groupId: group.id,
-      plan: "MONTHLY",
-      price: 18000,
-      startDate: "2026-03-01",
-    });
+    const { id } = await createEnrollment(
+      org.id,
+      { kind: "all" },
+      {
+        studentId: student.id,
+        groupId: group.id,
+        plan: "MONTHLY",
+        price: 18000,
+        startDate: "2026-03-01",
+      },
+    );
 
     const charges = await db.charge.findMany({ where: { enrollmentId: id } });
     expect(charges.map((c) => c.period)).toEqual(["2026-07"]);
@@ -98,13 +110,17 @@ describe("createEnrollment — MONTHLY", () => {
     const { org, student, group } = await makeBase();
     await db.organization.update({ where: { id: org.id }, data: { dueDay: 28 } });
 
-    const { id } = await createEnrollment(org.id, {
-      studentId: student.id,
-      groupId: group.id,
-      plan: "MONTHLY",
-      price: 18000,
-      startDate: "2026-07-15",
-    });
+    const { id } = await createEnrollment(
+      org.id,
+      { kind: "all" },
+      {
+        studentId: student.id,
+        groupId: group.id,
+        plan: "MONTHLY",
+        price: 18000,
+        startDate: "2026-07-15",
+      },
+    );
 
     const charge = await db.charge.findFirstOrThrow({ where: { enrollmentId: id } });
     expect(charge.dueDate.toISOString()).toBe("2026-07-28T00:00:00.000Z");
@@ -116,13 +132,17 @@ describe("createEnrollment — DROP_IN (propuesta RN11)", () => {
     freezeClock();
     const { org, student, group } = await makeBase();
 
-    const { id } = await createEnrollment(org.id, {
-      studentId: student.id,
-      groupId: group.id,
-      plan: "DROP_IN",
-      price: 9000,
-      startDate: "2026-07-30",
-    });
+    const { id } = await createEnrollment(
+      org.id,
+      { kind: "all" },
+      {
+        studentId: student.id,
+        groupId: group.id,
+        plan: "DROP_IN",
+        price: 9000,
+        startDate: "2026-07-30",
+      },
+    );
 
     const charges = await db.charge.findMany({ where: { enrollmentId: id } });
     expect(charges).toHaveLength(1);
@@ -141,13 +161,17 @@ describe("createEnrollment — defensas", () => {
     const foreignStudent = await makeStudent(other.id, "Malena Ríos");
 
     await expect(
-      createEnrollment(org.id, {
-        studentId: foreignStudent.id,
-        groupId: group.id,
-        plan: "MONTHLY",
-        price: 18000,
-        startDate: "2026-07-15",
-      }),
+      createEnrollment(
+        org.id,
+        { kind: "all" },
+        {
+          studentId: foreignStudent.id,
+          groupId: group.id,
+          plan: "MONTHLY",
+          price: 18000,
+          startDate: "2026-07-15",
+        },
+      ),
     ).rejects.toThrow(/alumno no pertenece/);
 
     expect(await db.enrollment.count()).toBe(0);
@@ -161,13 +185,17 @@ describe("createEnrollment — defensas", () => {
     const foreignGroup = await makeGroup(other.id, "Folklore adultos");
 
     await expect(
-      createEnrollment(org.id, {
-        studentId: student.id,
-        groupId: foreignGroup.id,
-        plan: "MONTHLY",
-        price: 18000,
-        startDate: "2026-07-15",
-      }),
+      createEnrollment(
+        org.id,
+        { kind: "all" },
+        {
+          studentId: student.id,
+          groupId: foreignGroup.id,
+          plan: "MONTHLY",
+          price: 18000,
+          startDate: "2026-07-15",
+        },
+      ),
     ).rejects.toThrow(/grupo no pertenece/);
 
     expect(await db.enrollment.count()).toBe(0);
@@ -185,13 +213,15 @@ describe("createEnrollment — defensas", () => {
       startDate: "2026-07-01",
     };
 
-    const first = await createEnrollment(org.id, input);
-    await expect(createEnrollment(org.id, input)).rejects.toThrow(EnrollmentRuleError);
+    const first = await createEnrollment(org.id, { kind: "all" }, input);
+    await expect(createEnrollment(org.id, { kind: "all" }, input)).rejects.toThrow(
+      EnrollmentRuleError,
+    );
     expect(await db.enrollment.count()).toBe(1);
 
     // Se fue y volvió: baja a la primera, y la nueva inscripción entra.
-    await endEnrollment(org.id, first.id, "2026-07-10");
-    await createEnrollment(org.id, { ...input, startDate: "2026-07-20" });
+    await endEnrollment(org.id, { kind: "all" }, first.id, "2026-07-10");
+    await createEnrollment(org.id, { kind: "all" }, { ...input, startDate: "2026-07-20" });
     expect(await db.enrollment.count()).toBe(2);
   });
 });
@@ -200,15 +230,19 @@ describe("endEnrollment — baja (RN9)", () => {
   it("pone endDate y las cuotas ya generadas PERSISTEN", async () => {
     freezeClock();
     const { org, student, group } = await makeBase();
-    const { id } = await createEnrollment(org.id, {
-      studentId: student.id,
-      groupId: group.id,
-      plan: "MONTHLY",
-      price: 18000,
-      startDate: "2026-07-01",
-    });
+    const { id } = await createEnrollment(
+      org.id,
+      { kind: "all" },
+      {
+        studentId: student.id,
+        groupId: group.id,
+        plan: "MONTHLY",
+        price: 18000,
+        startDate: "2026-07-01",
+      },
+    );
 
-    await endEnrollment(org.id, id, "2026-07-20");
+    await endEnrollment(org.id, { kind: "all" }, id, "2026-07-20");
 
     const after = await db.enrollment.findUniqueOrThrow({ where: { id } });
     expect(after.endDate?.toISOString()).toBe("2026-07-20T00:00:00.000Z");
@@ -222,9 +256,9 @@ describe("endEnrollment — baja (RN9)", () => {
       startDate: "2026-07-10",
     });
 
-    await expect(endEnrollment(org.id, enrollment.id, "2026-07-05")).rejects.toThrow(
-      EnrollmentRuleError,
-    );
+    await expect(
+      endEnrollment(org.id, { kind: "all" }, enrollment.id, "2026-07-05"),
+    ).rejects.toThrow(EnrollmentRuleError);
   });
 
   it("una inscripción ajena no se puede dar de baja", async () => {
@@ -234,7 +268,9 @@ describe("endEnrollment — baja (RN9)", () => {
     const group = await makeGroup(other.id, "Folklore adultos");
     const foreign = await makeEnrollment(other.id, student.id, group.id);
 
-    await expect(endEnrollment(org.id, foreign.id, "2026-07-20")).rejects.toThrow(/no pertenece/);
+    await expect(endEnrollment(org.id, { kind: "all" }, foreign.id, "2026-07-20")).rejects.toThrow(
+      /no pertenece/,
+    );
 
     const after = await db.enrollment.findUniqueOrThrow({ where: { id: foreign.id } });
     expect(after.endDate).toBeNull();
@@ -251,7 +287,7 @@ describe("lecturas", () => {
     });
     await makeEnrollment(org.id, student.id, other.id, { startDate: "2026-06-01" });
 
-    const list = await listEnrollmentsForStudent(org.id, student.id);
+    const list = await listEnrollmentsForStudent(org.id, { kind: "all" }, student.id);
 
     expect(list).toHaveLength(2);
     expect(list[0].group.name).toBe("Folklore adultos"); // la abierta primero
@@ -268,7 +304,12 @@ describe("lecturas", () => {
     await makeEnrollment(org.id, past.id, group.id, { endDate: "2026-07-10" });
     await makeEnrollment(org.id, leaving.id, group.id, { endDate: "2026-07-25" });
 
-    const list = await listActiveEnrollmentsForGroup(org.id, group.id, "2026-07-20");
+    const list = await listActiveEnrollmentsForGroup(
+      org.id,
+      { kind: "all" },
+      group.id,
+      "2026-07-20",
+    );
 
     expect(list.map((e) => e.student.name)).toEqual(["Baja Próxima", "Sofía Herrera"]);
   });
@@ -290,13 +331,17 @@ describe("enrollMany — inscripción de a varios (una tanda, una transacción)"
     freezeClock();
     const { org, group, students } = await makeBatch(BATCH);
 
-    const result = await enrollMany(org.id, {
-      studentIds: students.map((s) => s.id),
-      groupId: group.id,
-      plan: "MONTHLY",
-      price: 18000,
-      startDate: "2026-07-15",
-    });
+    const result = await enrollMany(
+      org.id,
+      { kind: "all" },
+      {
+        studentIds: students.map((s) => s.id),
+        groupId: group.id,
+        plan: "MONTHLY",
+        price: 18000,
+        startDate: "2026-07-15",
+      },
+    );
 
     expect(result.count).toBe(3);
     expect(await db.enrollment.count()).toBe(3);
@@ -320,20 +365,28 @@ describe("enrollMany — inscripción de a varios (una tanda, una transacción)"
     const solo = await makeBatch(["Sofía Herrera"]);
     const lote = await makeBatch(["Sofía Herrera"]);
 
-    await createEnrollment(solo.org.id, {
-      studentId: solo.students[0].id,
-      groupId: solo.group.id,
-      plan: "MONTHLY",
-      price: 18000,
-      startDate: "2026-07-15",
-    });
-    await enrollMany(lote.org.id, {
-      studentIds: [lote.students[0].id],
-      groupId: lote.group.id,
-      plan: "MONTHLY",
-      price: 18000,
-      startDate: "2026-07-15",
-    });
+    await createEnrollment(
+      solo.org.id,
+      { kind: "all" },
+      {
+        studentId: solo.students[0].id,
+        groupId: solo.group.id,
+        plan: "MONTHLY",
+        price: 18000,
+        startDate: "2026-07-15",
+      },
+    );
+    await enrollMany(
+      lote.org.id,
+      { kind: "all" },
+      {
+        studentIds: [lote.students[0].id],
+        groupId: lote.group.id,
+        plan: "MONTHLY",
+        price: 18000,
+        startDate: "2026-07-15",
+      },
+    );
 
     const comparable = (orgId: string) =>
       db.charge
@@ -353,13 +406,17 @@ describe("enrollMany — inscripción de a varios (una tanda, una transacción)"
     freezeClock();
     const { org, group, students } = await makeBatch(["Sofía Herrera", "Iñaki Gómez"]);
 
-    await enrollMany(org.id, {
-      studentIds: students.map((s) => s.id),
-      groupId: group.id,
-      plan: "DROP_IN",
-      price: 5000,
-      startDate: "2026-07-15",
-    });
+    await enrollMany(
+      org.id,
+      { kind: "all" },
+      {
+        studentIds: students.map((s) => s.id),
+        groupId: group.id,
+        plan: "DROP_IN",
+        price: 5000,
+        startDate: "2026-07-15",
+      },
+    );
 
     const charges = await db.charge.findMany();
     expect(charges).toHaveLength(2);
@@ -377,13 +434,17 @@ describe("enrollMany — inscripción de a varios (una tanda, una transacción)"
     await makeEnrollment(org.id, students[1].id, group.id);
 
     await expect(
-      enrollMany(org.id, {
-        studentIds: students.map((s) => s.id),
-        groupId: group.id,
-        plan: "MONTHLY",
-        price: 18000,
-        startDate: "2026-07-15",
-      }),
+      enrollMany(
+        org.id,
+        { kind: "all" },
+        {
+          studentIds: students.map((s) => s.id),
+          groupId: group.id,
+          plan: "MONTHLY",
+          price: 18000,
+          startDate: "2026-07-15",
+        },
+      ),
     ).rejects.toThrow(/Iñaki Gómez ya está en este grupo/);
 
     // Ni las dos que sí podían: o entran todos o no entra ninguno.
@@ -398,13 +459,17 @@ describe("enrollMany — inscripción de a varios (una tanda, una transacción)"
     await makeEnrollment(org.id, students[2].id, group.id);
 
     await expect(
-      enrollMany(org.id, {
-        studentIds: students.map((s) => s.id),
-        groupId: group.id,
-        plan: "MONTHLY",
-        price: 18000,
-        startDate: "2026-07-15",
-      }),
+      enrollMany(
+        org.id,
+        { kind: "all" },
+        {
+          studentIds: students.map((s) => s.id),
+          groupId: group.id,
+          plan: "MONTHLY",
+          price: 18000,
+          startDate: "2026-07-15",
+        },
+      ),
     ).rejects.toThrow(/Ya están en este grupo: Sofía Herrera, Martina Álvarez/);
   });
 
@@ -415,13 +480,17 @@ describe("enrollMany — inscripción de a varios (una tanda, una transacción)"
     const foreign = await makeStudent(other.id, "Malena Ríos");
 
     await expect(
-      enrollMany(org.id, {
-        studentIds: [...students.map((s) => s.id), foreign.id],
-        groupId: group.id,
-        plan: "MONTHLY",
-        price: 18000,
-        startDate: "2026-07-15",
-      }),
+      enrollMany(
+        org.id,
+        { kind: "all" },
+        {
+          studentIds: [...students.map((s) => s.id), foreign.id],
+          groupId: group.id,
+          plan: "MONTHLY",
+          price: 18000,
+          startDate: "2026-07-15",
+        },
+      ),
     ).rejects.toThrow(/no pertenece a esta organización/);
 
     expect(await db.enrollment.count()).toBe(0);
@@ -435,13 +504,17 @@ describe("enrollMany — inscripción de a varios (una tanda, una transacción)"
     const foreignGroup = await makeGroup(other.id, "Contemporáneo juvenil");
 
     await expect(
-      enrollMany(org.id, {
-        studentIds: students.map((s) => s.id),
-        groupId: foreignGroup.id,
-        plan: "MONTHLY",
-        price: 18000,
-        startDate: "2026-07-15",
-      }),
+      enrollMany(
+        org.id,
+        { kind: "all" },
+        {
+          studentIds: students.map((s) => s.id),
+          groupId: foreignGroup.id,
+          plan: "MONTHLY",
+          price: 18000,
+          startDate: "2026-07-15",
+        },
+      ),
     ).rejects.toThrow(/El grupo no pertenece/);
 
     expect(await db.enrollment.count()).toBe(0);
@@ -452,13 +525,17 @@ describe("enrollMany — inscripción de a varios (una tanda, una transacción)"
     const { org, group, students } = await makeBatch(["Sofía Herrera"]);
     const id = students[0].id;
 
-    const result = await enrollMany(org.id, {
-      studentIds: [id, id, id],
-      groupId: group.id,
-      plan: "MONTHLY",
-      price: 18000,
-      startDate: "2026-07-15",
-    });
+    const result = await enrollMany(
+      org.id,
+      { kind: "all" },
+      {
+        studentIds: [id, id, id],
+        groupId: group.id,
+        plan: "MONTHLY",
+        price: 18000,
+        startDate: "2026-07-15",
+      },
+    );
 
     expect(result.count).toBe(1);
     expect(await db.enrollment.count()).toBe(1);
@@ -470,13 +547,17 @@ describe("enrollMany — inscripción de a varios (una tanda, una transacción)"
     const { org, group } = await makeBatch([]);
 
     await expect(
-      enrollMany(org.id, {
-        studentIds: [],
-        groupId: group.id,
-        plan: "MONTHLY",
-        price: 18000,
-        startDate: "2026-07-15",
-      }),
+      enrollMany(
+        org.id,
+        { kind: "all" },
+        {
+          studentIds: [],
+          groupId: group.id,
+          plan: "MONTHLY",
+          price: 18000,
+          startDate: "2026-07-15",
+        },
+      ),
     ).rejects.toThrow(EnrollmentRuleError);
   });
 
@@ -484,13 +565,17 @@ describe("enrollMany — inscripción de a varios (una tanda, una transacción)"
     freezeClock();
     const { org, group, students } = await makeBatch(["Sofía Herrera", "Iñaki Gómez"]);
 
-    await enrollMany(org.id, {
-      studentIds: students.map((s) => s.id),
-      groupId: group.id,
-      plan: "MONTHLY",
-      price: 18000,
-      startDate: "2026-09-01", // dos meses después del NOW congelado
-    });
+    await enrollMany(
+      org.id,
+      { kind: "all" },
+      {
+        studentIds: students.map((s) => s.id),
+        groupId: group.id,
+        plan: "MONTHLY",
+        price: 18000,
+        startDate: "2026-09-01", // dos meses después del NOW congelado
+      },
+    );
 
     expect(await db.enrollment.count()).toBe(2);
     expect(await db.charge.count()).toBe(0);

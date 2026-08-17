@@ -45,7 +45,8 @@ export default async function AjustesPage() {
   const period = periodOf(todayInTz(settings?.timezone ?? ""));
   let preview = { nombre: "Sofía", periodo: formatPeriod(period), monto: "$20.000" };
   if (canConfigure) {
-    const { students } = await debtorsForPeriod(orgId, period);
+    // Scope "all" directo: la página entera ya es de owner/admin (notFound arriba).
+    const { students } = await debtorsForPeriod(orgId, { kind: "all" }, period);
     const first = students[0];
     if (first) {
       preview = {

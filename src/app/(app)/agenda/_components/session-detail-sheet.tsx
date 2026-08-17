@@ -38,6 +38,7 @@ export function SessionDetailSheet({
   enrolled,
   onEditGroup,
   onEnroll,
+  showTeacher = false,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -47,6 +48,8 @@ export function SessionDetailSheet({
   onEditGroup: (groupId: string) => void;
   /** Abre el sheet de inscripción con este grupo fijo (HU4.1 desde la agenda). */
   onEnroll: (groupId: string) => void;
+  /** S7: el profe a cargo en el subtítulo, solo en la agenda de un ESTUDIO. */
+  showTeacher?: boolean;
 }) {
   const toast = useToast();
   // Transiciones separadas: que "Mover sesión" no dibuje spinners en los otros botones.
@@ -163,7 +166,13 @@ export function SessionDetailSheet({
       open={open}
       onOpenChange={handleOpenChange}
       title={occurrence.groupName}
-      description={`${formatFullDayDate(occurrence.date)} · ${formatTimeRange(occurrence.startTime, occurrence.durationMin)} · ${occurrence.disciplineName}`}
+      description={[
+        formatFullDayDate(occurrence.date),
+        formatTimeRange(occurrence.startTime, occurrence.durationMin),
+        occurrence.disciplineName,
+        // S7: el profe a cargo, solo en la agenda del estudio.
+        ...(showTeacher ? [occurrence.teacherName ?? "Sin profe asignado"] : []),
+      ].join(" · ")}
     >
       <ActionSheetBody className="flex flex-col gap-4 pb-4">
         {cancelled ? (

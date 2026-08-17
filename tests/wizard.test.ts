@@ -15,6 +15,7 @@ describe("createOrganizationWithOwner", () => {
 
     const { id } = await createOrganizationWithOwner({
       ownerId: owner.id,
+      ownerName: owner.name,
       name: "Danzas Malena",
       type: "INDEPENDENT",
       disciplines: ["Árabe", "Folklore"],
@@ -22,7 +23,7 @@ describe("createOrganizationWithOwner", () => {
 
     const org = await db.organization.findUniqueOrThrow({
       where: { id },
-      include: { memberships: true, disciplines: true },
+      include: { memberships: true, disciplines: true, teachers: true },
     });
 
     expect(org.type).toBe("INDEPENDENT");
@@ -31,6 +32,14 @@ describe("createOrganizationWithOwner", () => {
     expect(org.timezone).toBe("America/Argentina/Buenos_Aires");
     expect(org.memberships).toEqual([expect.objectContaining({ userId: owner.id, role: "OWNER" })]);
     expect(new Set(org.disciplines.map((d) => d.name))).toEqual(new Set(["Árabe", "Folklore"]));
+    // S7: el perfil docente del owner nace con la org (OWNER_TEACHER, vinculado).
+    expect(org.teachers).toEqual([
+      expect.objectContaining({
+        membershipUserId: owner.id,
+        displayName: "Malena Ríos",
+        kind: "OWNER_TEACHER",
+      }),
+    ]);
   });
 
   it("si falla a mitad de camino, no queda basura (rollback atómico)", async () => {
@@ -41,6 +50,7 @@ describe("createOrganizationWithOwner", () => {
     await expect(
       createOrganizationWithOwner({
         ownerId: "user-que-no-existe",
+        ownerName: "Nadie",
         name: "Organización Fantasma",
         type: "STUDIO",
         disciplines: ["Canto"],

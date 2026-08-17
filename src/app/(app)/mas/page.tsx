@@ -67,31 +67,31 @@ export default async function MasPage() {
         ) : null}
 
         {links.length === 0 ? null : (
-        <Card className="flex flex-col gap-0 p-0">
-          <ul className="flex flex-col">
-            {links.map((link, index) => {
-              const Icon = link.icon;
+          <Card className="flex flex-col gap-0 p-0">
+            <ul className="flex flex-col">
+              {links.map((link, index) => {
+                const Icon = link.icon;
 
-              return (
-                <li key={link.href}>
-                  <Link
-                    href={link.href}
-                    className={`flex min-h-16 items-center gap-3 px-4 transition-colors hover:bg-muted ${
-                      index > 0 ? "border-t border-border" : ""
-                    }`}
-                  >
-                    <Icon aria-hidden className="size-5 text-text-secondary" />
-                    <span className="flex flex-1 flex-col">
-                      <span className="font-medium text-text">{link.label}</span>
-                      <span className="text-xs text-text-secondary">{link.hint}</span>
-                    </span>
-                    <ChevronRight aria-hidden className="size-5 text-text-muted" />
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        </Card>
+                return (
+                  <li key={link.href}>
+                    <Link
+                      href={link.href}
+                      className={`flex min-h-16 items-center gap-3 px-4 transition-colors hover:bg-muted ${
+                        index > 0 ? "border-t border-border" : ""
+                      }`}
+                    >
+                      <Icon aria-hidden className="size-5 text-text-secondary" />
+                      <span className="flex flex-1 flex-col">
+                        <span className="font-medium text-text">{link.label}</span>
+                        <span className="text-xs text-text-secondary">{link.hint}</span>
+                      </span>
+                      <ChevronRight aria-hidden className="size-5 text-text-muted" />
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </Card>
         )}
 
         <div className="flex flex-col gap-1">

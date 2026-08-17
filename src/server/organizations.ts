@@ -47,3 +47,17 @@ export const getOrgSettings = cache(async (orgId: string) =>
     select: { timezone: true, paymentAlias: true, reminderTemplate: true },
   }),
 );
+
+/**
+ * Los perfiles docentes de la org para el selector "Profe a cargo" (S7): solo los
+ * VINCULADOS a una cuenta — un perfil desvinculado es historia, no una opción de
+ * asignación. Los grupos que ya apuntan a uno desvinculado lo siguen mostrando por
+ * nombre (la relación del grupo, no esta lista). Lo consumen páginas de owner/admin.
+ */
+export const listTeacherOptions = cache(async (orgId: string) =>
+  withOrg(orgId).teacherProfile.findMany({
+    where: { membershipUserId: { not: null } },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    select: { id: true, displayName: true },
+  }),
+);

@@ -47,9 +47,7 @@ export default async function EstudioPage() {
                 <Users aria-hidden className="size-5 text-text-secondary" />
                 <span className="flex flex-1 flex-col">
                   <span className="font-medium text-text">Equipo</span>
-                  <span className="text-xs text-text-secondary">
-                    Profes, admins e invitaciones
-                  </span>
+                  <span className="text-xs text-text-secondary">Profes, admins e invitaciones</span>
                 </span>
                 <ChevronRight aria-hidden className="size-5 text-text-muted" />
               </Link>

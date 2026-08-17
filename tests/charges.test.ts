@@ -52,7 +52,7 @@ describe("listChargesForStudent", () => {
     const foreignEnrollment = await makeEnrollment(org.id, otherStudent.id, group.id);
     await makeCharge(org.id, foreignEnrollment.id, { period: "2026-07" });
 
-    const list = await listChargesForStudent(org.id, student.id);
+    const list = await listChargesForStudent(org.id, { kind: "all" }, student.id);
 
     expect(list).toHaveLength(3);
     expect(list.map((c) => c.period)).toEqual(["2026-07", "2026-07", "2026-06"]);
@@ -88,7 +88,7 @@ describe("debtorsForPeriod", () => {
     );
     await makeCharge(org.id, waivedEnrollment.id, { period: "2026-07", status: "WAIVED" });
 
-    const { total, debtors } = await debtorsForPeriod(org.id, "2026-07");
+    const { total, debtors } = await debtorsForPeriod(org.id, { kind: "all" }, "2026-07");
 
     expect(debtors).toHaveLength(2);
     expect(total).toBe(33000);
@@ -103,7 +103,7 @@ describe("debtorsForPeriod", () => {
     await makeCharge(org.id, enrollment.id, { period: "2026-07" });
     await makeCharge(org.id, otherEnrollment.id, { period: "2026-07", amount: 15000 });
 
-    const { total, debtors } = await debtorsForPeriod(org.id, "2026-07", {
+    const { total, debtors } = await debtorsForPeriod(org.id, { kind: "all" }, "2026-07", {
       groupId: otherGroup.id,
     });
 
@@ -116,7 +116,7 @@ describe("debtorsForPeriod", () => {
     const { org, enrollment } = await makeCharged();
     await makeCharge(org.id, enrollment.id, { period: "2026-07", status: "PAID" });
 
-    const { total, debtors } = await debtorsForPeriod(org.id, "2026-07");
+    const { total, debtors } = await debtorsForPeriod(org.id, { kind: "all" }, "2026-07");
 
     expect(debtors).toEqual([]);
     expect(total).toBe(0);
@@ -131,7 +131,7 @@ describe("debtorsForPeriod", () => {
     await makeCharge(org.id, ez.id, { period: "2026-07" });
     await makeCharge(org.id, ea.id, { period: "2026-07" });
 
-    const { debtors } = await debtorsForPeriod(org.id, "2026-07");
+    const { debtors } = await debtorsForPeriod(org.id, { kind: "all" }, "2026-07");
 
     expect(debtors.map((d) => d.student.name)).toEqual(["Ángela Álvarez", "Zoe Zapata"]);
   });
