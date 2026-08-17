@@ -49,11 +49,19 @@ export function AuthForm({
   mode,
   googleEnabled,
   socialError,
+  next,
 }: {
   mode: Mode;
   googleEnabled: boolean;
   /** Lo que dejó el viaje a Google en `?error=`, ya traducido (lo resuelve la page). */
   socialError?: string | null;
+  /**
+   * A dónde volver después de entrar (S7: la invitación). Ya viene SANEADO por la page
+   * (`safeInternalPath`): solo paths internos. Con `next`, el destino le gana a
+   * `resolveLanding` en los dos modos — quien se registra para aceptar una invitación
+   * NO pasa por el wizard: se está sumando a una org que ya existe.
+   */
+  next?: string | null;
 }) {
   const router = useRouter();
   const { cta, action, fields } = COPY[mode];
@@ -143,7 +151,8 @@ export function AuthForm({
     // cache del router (la de "dashboard = andá al wizard").
     // Al iniciar sesión el destino no se adivina acá: lo resuelve la raíz con la sesión ya
     // validada (`resolveLanding`) — el MISMO camino que usa el ingreso con Google.
-    router.push(mode === "registro" ? "/crear-organizacion" : "/");
+    // Con `next` (la invitación, S7), el destino ya se sabe: se vuelve ahí.
+    router.push(next ?? (mode === "registro" ? "/crear-organizacion" : "/"));
     router.refresh();
   }
 
@@ -168,9 +177,13 @@ export function AuthForm({
                 provider: "google",
                 // Entrada unificada: el destino lo decide `resolveLanding` en el server,
                 // igual que para email+contraseña. Sin org, la raíz manda al wizard.
-                callbackURL: "/",
-                // Vuelve a la pantalla desde la que salió, con el motivo en `?error=`.
-                errorCallbackURL: mode === "registro" ? "/registro" : "/login",
+                // Con `next` (la invitación, S7), Google también desemboca ahí.
+                callbackURL: next ?? "/",
+                // Vuelve a la pantalla desde la que salió, con el motivo en `?error=`
+                // (y con el `next` intacto: el reintento no pierde la invitación).
+                errorCallbackURL:
+                  (mode === "registro" ? "/registro" : "/login") +
+                  (next ? `?next=${encodeURIComponent(next)}` : ""),
               });
             }}
           />

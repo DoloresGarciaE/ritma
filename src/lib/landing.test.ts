@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { resolveActiveOrg } from "./active-org";
-import { resolveLanding } from "./landing";
+import { resolveLanding, safeInternalPath } from "./landing";
 
 describe("resolveLanding", () => {
   it("sin sesión → login", () => {
@@ -27,5 +27,23 @@ describe("resolveLanding", () => {
       const activeOrgId = resolveActiveOrg([], "org-ajena");
       expect(resolveLanding({ activeOrgId })).toBe("/crear-organizacion");
     });
+  });
+});
+
+describe("safeInternalPath (el ?next= de la invitación, S7)", () => {
+  it("acepta solo paths internos", () => {
+    expect(safeInternalPath("/invitacion/abc123")).toBe("/invitacion/abc123");
+    expect(safeInternalPath("/dashboard")).toBe("/dashboard");
+  });
+
+  it("rechaza URLs absolutas, protocol-relative y basura", () => {
+    // "//evil.com" es la trampa clásica: el navegador lo lee como https://evil.com.
+    expect(safeInternalPath("//evil.com/phish")).toBeNull();
+    expect(safeInternalPath("https://evil.com")).toBeNull();
+    expect(safeInternalPath("javascript:alert(1)")).toBeNull();
+    expect(safeInternalPath("invitacion/abc")).toBeNull();
+    expect(safeInternalPath("")).toBeNull();
+    expect(safeInternalPath(null)).toBeNull();
+    expect(safeInternalPath(undefined)).toBeNull();
   });
 });
