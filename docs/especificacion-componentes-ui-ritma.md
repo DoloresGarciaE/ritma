@@ -119,6 +119,8 @@ Chip de la vista semanal/diaria: barra de acento de 3 px a la izquierda con el c
 
 *(S7)* En la agenda de un **estudio**, el bloque suma una línea en `text-secondary` con el **profe a cargo** (o "Sin profe asignado" — que solo puede aparecer para owner/admin: un teacher no ve grupos sin asignar). En una organización independiente la línea no existe: el único profe es obvio y sería ruido. El detalle de sesión lo repite en su subtítulo.
 
+*(S8)* El **salón** del encabezado de esta sección existe por fin: en la misma línea del profe, "`{profe} · {salón}`" (solo estudios, solo si el grupo tiene salón — sin salón no se agrega nada). En el **calendario por salón** (§3.19) el bloque NO repite el salón: la columna ya lo dice.
+
 ### 3.8 Sheet y Dialog
 
 **Bottom sheet (mobile)** — el contenedor de todos los formularios de acción: registrar pago, alta express, inscribir alumno. Handle superior, título, contenido scrolleable, CTA primario fijo al fondo (lg, ancho completo). Se cierra por gesto, por la X o al completar la acción; si hay cambios sin guardar, pide confirmación.
@@ -159,7 +161,9 @@ El editor de horarios recurrentes del formulario de grupo (HU3.1): una fila por 
 
 La franja es **concepto de UI**: al guardar se expande a un `ScheduleSlot` por día, y al editar los slots existentes se re-agrupan en franjas visuales por (hora, duración) — misma hora con distinta duración NO se fusiona. **Colisión interna** (el mismo día con la misma hora en dos franjas): error concreto que nombra el conflicto — "Lunes 19:00 está repetido." — antes de guardar; el mismo día en horarios distintos es válido.
 
-En edición, el editor advierte con un helpText fijo: **si eliminás una franja o le sacás un día, se pierden las sesiones canceladas o movidas de esos días** — cada día es su propio slot, y sin el día no hay identidad. Cambiar solo la hora o la duración conserva las excepciones; destildar un día y arrepentirse EN la misma edición también las conserva (el editor recuerda la identidad). No valida solapamientos entre grupos: eso llega con los espacios (S8). Reprogramar una sesión sobre otra ocurrencia del mismo grupo está permitido a propósito, por lo mismo.
+En edición, el editor advierte con un helpText fijo: **si eliminás una franja o le sacás un día, se pierden las sesiones canceladas o movidas de esos días** — cada día es su propio slot, y sin el día no hay identidad. Cambiar solo la hora o la duración conserva las excepciones; destildar un día y arrepentirse EN la misma edición también las conserva (el editor recuerda la identidad). Reprogramar una sesión sobre otra ocurrencia del mismo grupo está permitido a propósito.
+
+*(S8)* El form del grupo suma el selector **"Salón"** (chips "Sin salón" + salones activos; solo owner/admin de un estudio, mismas reglas que "Profe a cargo") y **la validación de solapamientos entre grupos** que esta sección difería: al guardar, un cruce detectado abre una confirmación (§3.8) que **nombra salón, grupo y el rango exacto del cruce** — "Salón B ya está ocupado el sábado 12:00–12:30 por Folklore norteño." — con los conflictos listados sobre fondo `warning-bg`/`warning-text` (Color §5). Tres niveles: mismo salón o mismo profe cruzado = título fuerte ("Este horario choca con otra clase"); alguno sin salón = aviso suave ("Puede haber un cruce"). **Nunca bloquea**: "Guardar igual" guarda, "Volver a revisar" no. Para un teacher, el grupo ajeno del aviso no se nombra ("otro grupo del estudio" — S7).
 
 ### 3.16 Editor de plantilla de recordatorio (S5)
 
@@ -200,6 +204,14 @@ Los tres hex de cada modo viven como tokens `--google-btn-*` en `globals.css` �
 **Invitaciones pendientes.** Card con filas email-o-"Link sin email" + `Rol · Vence el {fecha}` (o "Vencida" — etiqueta de texto, jamás solo color). Acciones `sm` por fila: "Compartir link" (el token se pide al tocar, nunca viaja en la lista — patrón comprobante), "Regenerar" (rota el token y corre el vencimiento; la vencida no ofrece compartir un link muerto) y "Revocar" (borra la invitación: el link deja de autorizar en el acto).
 
 La **página de aceptación** (`/invitacion/[token]`) vive fuera del shell: logotipo, "{Org} te invita a su equipo", el rol, y — según haya sesión o no — "Aceptar invitación" o los CTAs de entrar/crear cuenta (que vuelven con `?next=`). Usada/vencida/revocada muestran SOLO su estado, con voz de marca y **sin nombrar la organización**: un link viejo reenviado no cuenta para quién era.
+
+### 3.19 Calendario por salón (S8)
+
+La tercera vista de la Agenda (`Semana | Día | Salones`), **solo estudios** (en una independiente la pestaña no existe y el param cae a la semana). Un DÍA por vez: columnas de espacio sobre un eje horario vertical, bloques §3.7 con grupo y profe adentro, y los **huecos explícitos** — "Libre · HH:mm–HH:mm" en `text-muted` sobre borde punteado, solo huecos de 30 minutos o más (menos que eso es aire sin cartel). HU3.4: los huecos se leen sin interpretar la grilla, listos para ofrecer.
+
+Decisiones fijadas (sesión S8): eje **fijo 8:00–22:00**, estirado a la hora en punto si una clase cae afuera (marco estable: los huecos se comparan día a día y un día vacío muestra el rango entero libre); columna **"Sin salón" última y solo si ese día hay clases sin salón para quien mira**; un **teacher ve todas las columnas con solo sus clases** (los salones son estructura física del estudio; sus huecos no le dicen qué hay de otros). Dos clases cruzadas en el MISMO salón se ven **lado a lado** (carriles con leve corrimiento): el choque que la validación avisa también se ve.
+
+Mobile-first: un panel con scroll propio en ambos ejes — encabezados de columna fijos arriba y la regla horaria fija a la izquierda mientras las columnas se deslizan (columnas de 192 px, targets intactos). Navegación de días con ‹ › y "Hoy" (la posición vive en la URL, como toda la agenda); el **filtro por profe** (chips "Todos los profes" + cada perfil vinculado) es de owner/admin — un teacher no lo ve: su scope ya filtra. Canceladas: tachadas en su lugar (§3.7) y **siguen ocupando su hueco** — el calendario cuenta lo programado; recuperar ese espacio es restablecer o mover la sesión. El tap abre el mismo detalle de sesión de siempre.
 
 ## 4. Patrones
 

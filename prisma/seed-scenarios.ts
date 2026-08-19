@@ -421,14 +421,25 @@ async function main() {
 
     // ── Asignación de profes (S7): el corazón del escenario dual ─────────────
     // La docente tiene SOLO Folklore norteño: su mundo en Meraki es ese grupo, sus
-    // alumnas y sus cobranzas. La dueña dicta el resto — menos "Canto grupal", que
-    // queda SIN profe a propósito (el indicador de owner/admin necesita datos).
+    // alumnas y sus cobranzas. La dueña dicta el resto — menos "Canto grupal" y
+    // "Contemporáneo juvenil", que quedan SIN profe a propósito: el indicador de
+    // owner/admin necesita datos, y la dueña NO puede dictar el martes 18:00 en dos
+    // salones a la vez — el eje por profe de S8 (con razón) lo marcaría imposible.
+    // Así el cruce del martes queda como lo que es: dos salones, dos clases, y un
+    // grupo esperando al próximo profe que se invite.
     await db.classGroup.updateMany({
       where: { orgId: meraki.id, name: CARGO },
       data: { teacherId: dualProfile.id },
     });
     await db.classGroup.updateMany({
-      where: { orgId: meraki.id, name: { notIn: [CARGO, "Canto grupal"] } },
+      where: { orgId: meraki.id, name: { in: ["Canto grupal", "Contemporáneo juvenil"] } },
+      data: { teacherId: null },
+    });
+    await db.classGroup.updateMany({
+      where: {
+        orgId: meraki.id,
+        name: { notIn: [CARGO, "Canto grupal", "Contemporáneo juvenil"] },
+      },
       data: { teacherId: merakiOwnerProfile.id },
     });
 

@@ -255,7 +255,7 @@ model Agreement {
   validFrom     DateTime
 }
 
-model Space      { id String @id @default(cuid()); orgId String; name String }
+model Space      { id String @id @default(cuid()); orgId String; name String; active Boolean @default(true) } // S8: baja lógica; unique [orgId, name] — ver nota S8
 model Discipline { id String @id @default(cuid()); orgId String; name String }
 
 model ClassGroup {
@@ -263,7 +263,7 @@ model ClassGroup {
   orgId        String
   teacherId    String   // DIFERIDO a S9 (TeacherProfile) — ver nota S2 al pie de §7
   disciplineId String
-  spaceId      String?  // DIFERIDO a S8 (Space) — ver nota S2
+  spaceId      String?  // S8: SIEMPRE opcional — un grupo sin salón es ciudadano pleno (nota S8)
   name         String
   defaultPrice Decimal  // @db.Decimal(12, 2) desde S2: el precedente de precisión de montos
   active       Boolean @default(true)
@@ -426,6 +426,13 @@ Toda tabla lleva además `createdAt` (`@default(now())`) y `updatedAt` (`@update
 2. **Modelo `Invitation`** (nuevo; propuesto en el reporte de S7 y aceptado con el merge): `orgId`, `email` opcional (canal de envío, NO restringe quién acepta: el link es la llave), `role` (solo ADMIN/TEACHER — OWNER nace con la org), `token` opaco `@unique` (24 bytes, el patrón del comprobante S5), `expiresAt` (7 días), `usedAt` (un solo uso). **Revocar = borrar la fila** (un token que no está en la base no autoriza nada; no hay estado "revocada"); regenerar = rotar el token. Aceptar crea `Membership` + `TeacherProfile` (kind STAFF) en una transacción.
 3. **El backfill de la migración** dio a toda org existente el perfil de su OWNER (`OWNER_TEACHER`) y asignó los grupos SOLO en las INDEPENDENT; en un STUDIO quedaron "sin profe asignado" hasta que un admin los asigne. `createOrganizationWithOwner` crea el perfil del owner desde entonces.
 4. **El scope de teacher quedó cableado a datos** (la regla transversal de §4): grupos por `teacherId`, alumnos por inscripción en ellos (abiertas o cerradas: el historial de una ex-alumna sigue siendo del profe), cuotas por sus inscripciones, pagos por sus alumnos (el pago es plata del alumno con la org: en un compartido lo ven ambos profes). Matriz rol×recurso en `tests/teacher-scope.test.ts`.
+
+**Nota S8 (al construir espacios y calendario).** Cuatro decisiones sobre el borrador, ya reflejadas arriba:
+
+1. **`Space` con `active` y unique `[orgId, name]`** (patrón Discipline); `ClassGroup.spaceId` **siempre opcional** — un grupo sin salón es ciudadano pleno (columna "Sin salón" en el calendario). Solo STUDIO; una INDEPENDENT no ve ni un pixel de espacios. **Desactivar un salón desasigna sus grupos en la misma transacción** (quedan "sin salón"; la confirmación anticipa el número real) — un salón fuera de uso no puede seguir ocupando el calendario; reactivarlo no re-asigna nada. Los alquileres (precios, bookings, `RentalCharge`) siguen en S10.
+2. **La migración HEREDÓ la convención de nombre**: en orgs STUDIO, todo grupo con sufijo "· Salón X" / "· Terraza" creó su `Space`, recibió el `spaceId` y perdió el sufijo — idempotente, y el seed de escenarios crea los salones reales de una.
+3. **La "validación de superposición" de HU3.1 es advertencia con confirmación, NUNCA bloqueo** (decisión sostenida del ticket original de S2, que nunca se implementó — nació completa acá): mismo salón cruzado = conflicto fuerte que nombra salón, grupo y rango; **mismo profe cruzado = fuerte también** (una persona no está en dos aulas — eje que S7 habilitó); salones distintos = silencio; alguno sin salón = aviso suave. Espalda-con-espalda no es cruce. La detección es org-completa pero respeta el scope de S7: el grupo ajeno participa de la física sin nombrarse.
+4. **El calendario por salón (HU3.4) no materializa nada**: columnas de espacio sobre las ocurrencias calculadas del día (`occurrencesForRange`, cero motor nuevo), eje fijo 8:00–22:00 estirable, huecos explícitos ("Libre · HH:mm–HH:mm", ≥30 min), canceladas tachadas ocupando su lugar, y filtro por profe (owner/admin). Un teacher ve todas las columnas con solo sus clases.
 
 ## 8. Reglas de negocio
 

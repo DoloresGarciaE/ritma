@@ -71,7 +71,9 @@ export const listTeacherOptions = cache(async (orgId: string) =>
 export const listActiveSpaces = cache(async (orgId: string) =>
   withOrg(orgId).space.findMany({
     where: { active: true },
-    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    // Orden de creación; el desempate es por NOMBRE — los salones heredados por la
+    // migración S8 comparten el timestamp y el id (uuid) los barajaría.
+    orderBy: [{ createdAt: "asc" }, { name: "asc" }],
     select: { id: true, name: true },
   }),
 );

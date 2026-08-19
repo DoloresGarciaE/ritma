@@ -199,6 +199,47 @@ ritma/
   invitar→aceptar→revocar en [`tests/team.test.ts`](tests/team.test.ts). Todo modelo nuevo
   del equipo sigue el patrón de abajo (SCOPE + aislamiento) como cualquier otro.
 
+## Espacios y calendario del estudio (desde S8)
+
+- **`Space` es entidad real y el salón SIEMPRE opcional** (`ClassGroup.spaceId` nullable):
+  un grupo sin salón es ciudadano pleno. Solo STUDIO ve algo de espacios; **INDEPENDENT
+  intacta** (regla dura: hasta el detector de solapamientos devuelve vacío ahí). La
+  migración S8 **heredó la convención de nombre**: en orgs STUDIO, los sufijos "· Salón X"
+  y "· Terraza" crearon su Space, asignaron el `spaceId` y se limpiaron del nombre
+  (idempotente; en dev convirtió los 7 grupos de Meraki en 3 salones). Gestión en
+  `/estudio/salones` ([`services/spaces.ts`](src/server/services/spaces.ts), patrón actor
+  de team.ts — `spaces:manage` owner/admin): **desactivar es baja lógica QUE DESASIGNA sus
+  grupos en la misma transacción** (la confirmación anticipa el número real); reactivar no
+  re-asigna nada. Un salón inactivo no se puede asignar (`assertSpaceInOrg` exige activo).
+- **`findScheduleOverlaps` nació completo en S8** (el ticket de solapamientos de S2 nunca
+  existió — [`services/overlaps.ts`](src/server/services/overlaps.ts), núcleo puro):
+  mismo salón cruzado = FUERTE (imposibilidad física); mismo profe cruzado = FUERTE (una
+  persona no está en dos aulas — ojo: esto exige seeds/datos donde los grupos que se
+  cruzan NO compartan profe); salones distintos = silencio; alguno sin salón = aviso
+  SUAVE. Espalda-con-espalda no es cruce; la edición excluye el propio grupo; **siempre
+  advertencia/confirmación, JAMÁS bloqueo** ("Guardar igual"). La detección es
+  org-completa pero respeta S7: el vecino fuera del scope del actor participa de la
+  física SIN nombrarse ("otro grupo del estudio"). Corre en las actions del form ANTES
+  de escribir (`confirmOverlaps` reenvía); mensajes formateados en el server
+  (`overlapMessage`, tokens warning para el listado).
+- **El calendario por salón es la tercera vista de la Agenda** (`?vista=salones&dia=…`,
+  solo STUDIO — en INDEPENDENT el param cae a la semana): columnas por salón activo
+  (orden de creación, desempate por NOMBRE: los heredados comparten timestamp) + "Sin
+  salón" ÚLTIMA y solo si ese día hay clases sin salón PARA QUIEN MIRA. El armado es puro
+  ([`lib/salon-calendar.ts`](src/lib/salon-calendar.ts)) sobre `occurrencesForRange` —
+  cero motor nuevo: eje FIJO 8:00–22:00 estirado a la hora en punto si algo cae afuera,
+  huecos EXPLÍCITOS ("Libre · HH:mm–HH:mm", solo ≥30 min), canceladas tachadas OCUPANDO
+  su lugar, y cruces en el mismo salón lado a lado por carriles (el choque se VE). Panel
+  con scroll propio en ambos ejes (headers y regla horaria sticky ADENTRO del panel: un
+  sticky vertical no funciona contra el scroll del body dentro de un overflow-x). Filtro
+  `?profe=` solo owner/admin (id validado contra la org; forjado cae a "todos"); un
+  TEACHER ve TODAS las columnas con solo sus clases (decisión de sesión).
+- **El salón viaja con la ocurrencia** (`AgendaOccurrence.spaceId/spaceName` + `teacherId`
+  para el filtro) y se muestra junto al profe (§3.7 "ahora de verdad"): bloque de semana
+  (`showSpace`), detalle de sesión y lista de grupos. El selector "Salón" del form sigue
+  las reglas del "Profe a cargo": solo owner/admin de STUDIO, forzado como está para un
+  teacher (`updateGroup`), verificado contra la org al escribir.
+
 ## El patrón para un modelo de negocio nuevo (desde S1)
 
 `Student` (S1) es la plantilla. Todo modelo de negocio que llegue después se construye **en este

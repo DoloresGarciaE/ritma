@@ -59,7 +59,8 @@ export async function listSpaces(actor: Actor): Promise<SpaceListItem[]> {
   await assertStudio(org, actor.orgId);
 
   const rows = await org.space.findMany({
-    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    // Mismo desempate por nombre que listActiveSpaces: los heredados comparten timestamp.
+    orderBy: [{ createdAt: "asc" }, { name: "asc" }],
     select: {
       id: true,
       name: true,
