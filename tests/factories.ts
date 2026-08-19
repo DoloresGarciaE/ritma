@@ -41,6 +41,7 @@ export async function makeGroup(
     defaultPrice?: number;
     active?: boolean;
     teacherId?: string | null;
+    spaceId?: string | null;
   } = {},
 ) {
   const disciplineId =
@@ -54,7 +55,19 @@ export async function makeGroup(
       defaultPrice: extra.defaultPrice ?? 20000,
       active: extra.active ?? true,
       teacherId: extra.teacherId ?? null,
+      spaceId: extra.spaceId ?? null,
     },
+  });
+}
+
+/** Un salón del estudio, por el camino crudo (S8). */
+export async function makeSpace(
+  orgId: string,
+  name: string,
+  extra: { active?: boolean } = {},
+) {
+  return db.space.create({
+    data: { orgId, name, active: extra.active ?? true },
   });
 }
 

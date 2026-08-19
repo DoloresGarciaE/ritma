@@ -76,6 +76,32 @@ model Organization {
   reminders   ReminderLog[]
   teachers    TeacherProfile[]
   invitations Invitation[]
+  spaces      Space[]
+}
+
+/// Salón del estudio (Plan §3/§7, HU3.1/HU3.4 — S8). Solo una org STUDIO lo usa; en
+/// una INDEPENDENT no existe ni un pixel de espacios.
+///
+/// RN9: la baja es LÓGICA (`active = false`) y, decisión S8, desasigna sus grupos en la
+/// misma transacción (quedan "sin salón"): un salón que el estudio dejó de usar no puede
+/// seguir ocupando el calendario. Reactivarlo no re-asigna nada — la confirmación lo
+/// avisa. Los alquileres (precios, bookings, RentalCharge) llegan en S10.
+model Space {
+  id     String  @id @default(cuid())
+  orgId  String
+  name   String
+  active Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  groups ClassGroup[]
+
+  // El unique ya indexa por orgId (columna líder): cumple la convención de §7 y evita
+  // dos "Salón A" en la misma org (patrón Discipline).
+  @@unique([orgId, name])
 }
 
 /// Perfil docente de la organización (Plan §7; adelantado de S9 en S7 — ADR-004).
@@ -198,15 +224,18 @@ enum SessionStatus {
 
 /// Grupo (comisión): la unidad central de la agenda (Plan §3, HU3.1).
 ///
-/// `teacherId` llegó en S7 (adelantado de S9 — ADR-004); `spaceId` sigue diferido a
-/// S8 (Space). Null = "sin profe asignado": lo ven solo owner/admin — el scope de un
+/// `teacherId` llegó en S7 (adelantado de S9 — ADR-004); `spaceId` en S8. Null en
+/// `teacherId` = "sin profe asignado": lo ven solo owner/admin — el scope de un
 /// TEACHER es estrictamente `teacherId = su perfil`. En una org INDEPENDENT se
 /// auto-asigna al perfil del owner (el único profe implícito de la Fase 1).
+/// `spaceId` es SIEMPRE opcional (decisión S8): un grupo sin salón es ciudadano
+/// pleno — aparece en el calendario en la columna "Sin salón".
 model ClassGroup {
   id           String  @id @default(cuid())
   orgId        String
   disciplineId String
   teacherId    String?
+  spaceId      String?
   name         String
   /// Tarifa de referencia (HU3.1): el precio sugerido al inscribir, no un contrato.
   /// Decimal(12,2) queda como precedente de precisión para Charge/Payment (S3/S4).
@@ -224,6 +253,8 @@ model ClassGroup {
   // Restrict por la misma razón: los perfiles no se borran (revocar es desvincular),
   // y si algún día se borrara uno, no puede desasignar grupos en silencio.
   teacher    TeacherProfile? @relation(fields: [teacherId], references: [id], onDelete: Restrict)
+  // Restrict ídem: los salones no se borran (la baja es lógica y desasigna explícito).
+  space      Space?          @relation(fields: [spaceId], references: [id], onDelete: Restrict)
 
   slots       ScheduleSlot[]
   sessions    ClassSession[]
