@@ -16,8 +16,8 @@ import { isProductionTarget, productionDbUrls } from "./seed-guard";
  * Reglas del guion:
  * - Los datos se cuelgan de los emails de abajo; solo se crea un usuario si el email no
  *   existe (y se avisa, con la contraseña impresa).
- * - SALONES POR CONVENCIÓN DE NOMBRE ("· Salón A"): placeholder hasta que S8 traiga el
- *   modelo Space. Cero migraciones acá.
+ * - SALONES: desde S8 son entidad real (Space + spaceId) — el sufijo "· Salón X" murió;
+ *   la migración S8 convirtió los nombres viejos y acá los grupos nacen limpios.
  * - DATOS LEGÍTIMOS O NADA: cuotas por `runGenerateCharges`/`runMarkOverdue` (los jobs
  *   reales), pagos por `createPayment` (imputación + recompute reales), exoneración por
  *   `waiveCharge`, recordatorios por `logReminder`. Nunca inserts crudos de plata.
@@ -273,19 +273,37 @@ async function main() {
       { name: "Carmen Ocampo", phone: "+5491176667788", active: false },
     ]);
 
+    // ── Salones (S8): entidad real, ya sin convención de nombre ──────────────
+    async function ensureSpaces(orgId: string, names: string[]) {
+      const byName = new Map<string, string>();
+      for (const name of names) {
+        const space = await db.space.upsert({
+          where: { orgId_name: { orgId, name } },
+          update: {},
+          create: { orgId, name },
+        });
+        byName.set(name, space.id);
+      }
+      return byName;
+    }
+
+    const merakiSpaces = await ensureSpaces(meraki.id, ["Salón A", "Salón B", "Terraza"]);
+
     // ── Grupos y franjas ─────────────────────────────────────────────────────
-    // SALONES POR CONVENCIÓN: el sufijo "· Salón X" es un placeholder que S8 reemplaza
-    // por el modelo Space. Dos grupos a la misma hora en salones distintos, a propósito.
+    // Desde S8 el salón es dato (`spaceId`), no sufijo del nombre: la migración
+    // convirtió los nombres viejos; acá los grupos nacen limpios y asignados.
     type GroupSpec = {
       name: string;
       discipline: string;
       price: number;
+      salon?: string;
       slots: { weekday: number; startTime: string; durationMin: number }[];
     };
 
-    async function ensureGroups(orgId: string, specs: GroupSpec[]) {
+    async function ensureGroups(orgId: string, specs: GroupSpec[], spaces?: Map<string, string>) {
       const byName = new Map<string, { id: string }>();
       for (const spec of specs) {
+        const spaceId = spec.salon ? (spaces?.get(spec.salon) ?? null) : null;
         let group = await db.classGroup.findFirst({ where: { orgId, name: spec.name } });
         if (!group) {
           const discipline = await db.discipline.findUniqueOrThrow({
@@ -297,9 +315,14 @@ async function main() {
               name: spec.name,
               disciplineId: discipline.id,
               defaultPrice: spec.price,
+              spaceId,
               slots: { create: spec.slots.map((slot) => ({ ...slot, orgId })) },
             },
           });
+        } else if (group.spaceId !== spaceId) {
+          // Idempotente: si el grupo ya existe (o lo heredó la migración), el salón se
+          // realinea con el spec sin tocar nada más.
+          await db.classGroup.update({ where: { id: group.id }, data: { spaceId } });
         }
         byName.set(spec.name, group);
       }
@@ -308,66 +331,93 @@ async function main() {
 
     // Weekdays: 0=domingo … 6=sábado (convención JS del dominio).
     //
-    // S7: la convención "a cargo de {nombre}" en el NOMBRE quedó obsoleta — ahora el
-    // grupo tiene teacherId real. Si la base ya tiene el grupo con el nombre viejo, se
-    // RENOMBRA (no se duplica: ensureGroups busca por nombre).
-    const CARGO = "Folklore norteño · Salón B";
+    // Los nombres LEGADOS (el "a cargo de" de S2 y los sufijos "· Salón X" pre-S8) se
+    // renombran si todavía existen — no se duplica: ensureGroups busca por nombre. La
+    // migración S8 ya limpió los sufijos; esto cubre una base sembrada entre medio.
+    const CARGO = "Folklore norteño";
     await db.classGroup.updateMany({
       where: {
         orgId: meraki.id,
-        name: `Folklore norteño · Salón B · a cargo de ${teacherFirstName}`,
+        name: {
+          in: [
+            `Folklore norteño · Salón B · a cargo de ${teacherFirstName}`,
+            "Folklore norteño · Salón B",
+          ],
+        },
       },
       data: { name: CARGO },
     });
-    const merakiGroups = await ensureGroups(meraki.id, [
-      {
-        name: "Yoga mañanas · Terraza",
-        discipline: "Yoga",
-        price: 14000,
-        slots: [
-          { weekday: 1, startTime: "09:00", durationMin: 60 },
-          { weekday: 3, startTime: "09:00", durationMin: 60 },
-        ],
-      },
-      // El cruce verosímil #1: martes 18:00 en Salón A y Salón B a la vez.
-      {
-        name: "Árabe inicial · Salón A",
-        discipline: "Árabe",
-        price: 18000,
-        slots: [{ weekday: 2, startTime: "18:00", durationMin: 60 }],
-      },
-      {
-        name: "Contemporáneo juvenil · Salón B",
-        discipline: "Contemporáneo",
-        price: 20000,
-        slots: [{ weekday: 2, startTime: "18:00", durationMin: 60 }],
-      },
-      {
-        name: "Árabe avanzado · Salón A",
-        discipline: "Árabe",
-        price: 24000,
-        slots: [{ weekday: 4, startTime: "20:00", durationMin: 90 }],
-      },
-      {
-        name: "Canto grupal · Salón B",
-        discipline: "Canto",
-        price: 16000,
-        slots: [{ weekday: 5, startTime: "19:00", durationMin: 60 }],
-      },
-      // El cruce #2, sábado 11:00 — y el grupo de la docente dual (teacherId real, S7).
-      {
-        name: CARGO,
-        discipline: "Folklore",
-        price: 17000,
-        slots: [{ weekday: 6, startTime: "11:00", durationMin: 90 }],
-      },
-      {
-        name: "Contemporáneo adultos · Salón A",
-        discipline: "Contemporáneo",
-        price: 21000,
-        slots: [{ weekday: 6, startTime: "11:00", durationMin: 60 }],
-      },
-    ]);
+    const merakiGroups = await ensureGroups(
+      meraki.id,
+      [
+        {
+          name: "Yoga mañanas",
+          discipline: "Yoga",
+          price: 14000,
+          salon: "Terraza",
+          slots: [
+            { weekday: 1, startTime: "09:00", durationMin: 60 },
+            { weekday: 3, startTime: "09:00", durationMin: 60 },
+          ],
+        },
+        // El cruce verosímil #1: martes 18:00 en Salón A y Salón B a la vez — desde S8,
+        // salones DISTINTOS de verdad: legítimo y en silencio.
+        {
+          name: "Árabe inicial",
+          discipline: "Árabe",
+          price: 18000,
+          salon: "Salón A",
+          slots: [{ weekday: 2, startTime: "18:00", durationMin: 60 }],
+        },
+        {
+          name: "Contemporáneo juvenil",
+          discipline: "Contemporáneo",
+          price: 20000,
+          salon: "Salón B",
+          slots: [{ weekday: 2, startTime: "18:00", durationMin: 60 }],
+        },
+        {
+          name: "Árabe avanzado",
+          discipline: "Árabe",
+          price: 24000,
+          salon: "Salón A",
+          slots: [{ weekday: 4, startTime: "20:00", durationMin: 90 }],
+        },
+        {
+          name: "Canto grupal",
+          discipline: "Canto",
+          price: 16000,
+          salon: "Salón B",
+          slots: [{ weekday: 5, startTime: "19:00", durationMin: 60 }],
+        },
+        // El cruce #2, sábado 11:00 — salones distintos: también legítimo.
+        {
+          name: CARGO,
+          discipline: "Folklore",
+          price: 17000,
+          salon: "Salón B",
+          slots: [{ weekday: 6, startTime: "11:00", durationMin: 90 }],
+        },
+        {
+          name: "Contemporáneo adultos",
+          discipline: "Contemporáneo",
+          price: 21000,
+          salon: "Salón A",
+          slots: [{ weekday: 6, startTime: "11:00", durationMin: 60 }],
+        },
+        // El cruce EN EL MISMO salón, dejado A PROPÓSITO (S8): sábado 12:00–12:30 pisa
+        // a Folklore norteño (11:00–12:30) en Salón B — el calendario lo muestra lado a
+        // lado y editar cualquiera de los dos dispara el aviso fuerte de la demo.
+        {
+          name: "Canto infantil",
+          discipline: "Canto",
+          price: 12000,
+          salon: "Salón B",
+          slots: [{ weekday: 6, startTime: "12:00", durationMin: 60 }],
+        },
+      ],
+      merakiSpaces,
+    );
 
     // ── Asignación de profes (S7): el corazón del escenario dual ─────────────
     // La docente tiene SOLO Folklore norteño: su mundo en Meraki es ese grupo, sus
@@ -378,7 +428,7 @@ async function main() {
       data: { teacherId: dualProfile.id },
     });
     await db.classGroup.updateMany({
-      where: { orgId: meraki.id, name: { notIn: [CARGO, "Canto grupal · Salón B"] } },
+      where: { orgId: meraki.id, name: { notIn: [CARGO, "Canto grupal"] } },
       data: { teacherId: merakiOwnerProfile.id },
     });
 
@@ -442,34 +492,34 @@ async function main() {
     const first = (period: string) => `${period}-01`;
 
     await ensureEnrollments(meraki.id, merakiStudents, merakiGroups, [
-      { student: "Lola Márquez", group: "Yoga mañanas · Terraza", startDate: first(TWO_AGO) },
-      { student: "Bianca Suárez", group: "Árabe inicial · Salón A", startDate: first(TWO_AGO) },
-      { student: "Federica Paz", group: "Árabe inicial · Salón A", startDate: first(PREV) },
+      { student: "Lola Márquez", group: "Yoga mañanas", startDate: first(TWO_AGO) },
+      { student: "Bianca Suárez", group: "Árabe inicial", startDate: first(TWO_AGO) },
+      { student: "Federica Paz", group: "Árabe inicial", startDate: first(PREV) },
       {
         student: "Joaquín Ledesma",
-        group: "Contemporáneo juvenil · Salón B",
+        group: "Contemporáneo juvenil",
         startDate: first(PREV),
       },
       {
         student: "Milagros Funes",
-        group: "Contemporáneo juvenil · Salón B",
+        group: "Contemporáneo juvenil",
         startDate: first(TWO_AGO),
       },
-      { student: "Catalina Ríos", group: "Árabe avanzado · Salón A", startDate: first(PREV) },
-      { student: "Bruno Acosta", group: "Árabe avanzado · Salón A", startDate: first(TWO_AGO) },
-      { student: "Delfina Castro", group: "Canto grupal · Salón B", startDate: addDays(today, -4) },
+      { student: "Catalina Ríos", group: "Árabe avanzado", startDate: first(PREV) },
+      { student: "Bruno Acosta", group: "Árabe avanzado", startDate: first(TWO_AGO) },
+      { student: "Delfina Castro", group: "Canto grupal", startDate: addDays(today, -4) },
       { student: "Emilia Vega", group: CARGO, startDate: first(PREV) },
       { student: "Josefina Ponce", group: CARGO, startDate: first(PREV) },
       { student: "Ramiro Sosa", group: CARGO, startDate: first(CUR) },
       {
         student: "Abril Domínguez",
-        group: "Contemporáneo adultos · Salón A",
+        group: "Contemporáneo adultos",
         startDate: first(TWO_AGO),
       },
-      { student: "Paula Giordano", group: "Yoga mañanas · Terraza", startDate: first(PREV) },
+      { student: "Paula Giordano", group: "Yoga mañanas", startDate: first(PREV) },
       {
         student: "Franco Medina",
-        group: "Contemporáneo adultos · Salón A",
+        group: "Contemporáneo adultos",
         startDate: first(PREV),
       },
     ]);
