@@ -9,6 +9,7 @@ import {
   type ChargeStatusValue,
   type Money,
 } from "./billing";
+import { chargeScopeWhere, type DataScope } from "./permissions";
 
 /**
  * Servicios de cuotas (RN2, RN3): el estado de cuenta de la ficha, la lista de deudores
@@ -107,10 +108,14 @@ function toListItem(row: ChargeRow): ChargeListItem {
  */
 export async function listChargesForStudent(
   orgId: string,
+  scope: DataScope,
   studentId: string,
 ): Promise<ChargeListItem[]> {
   const rows = await withOrg(orgId).charge.findMany({
-    where: { enrollment: { studentId } },
+    // Con scope de teacher (S7), solo las cuotas de SUS inscripciones: en un alumno
+    // compartido, las cuotas del otro profe son datos del otro profe. En AND explícito:
+    // el filtro y el scope usan los dos la clave `enrollment`.
+    where: { AND: [{ enrollment: { studentId } }, chargeScopeWhere(scope)] },
     orderBy: [{ period: "desc" }, { dueDate: "desc" }, { id: "asc" }],
     select: CHARGE_SELECT,
   });
@@ -127,6 +132,7 @@ export async function listChargesForStudent(
  */
 export async function debtorsForPeriod(
   orgId: string,
+  scope: DataScope,
   period: string,
   options: { groupId?: string; studentId?: string } = {},
 ): Promise<{ total: number; debtors: DebtorRow[]; students: StudentDebt[] }> {
@@ -134,11 +140,15 @@ export async function debtorsForPeriod(
     where: {
       period,
       status: { in: OWING },
-      // `studentId` (S5): la deuda del período de UN alumno — lo que dice el recordatorio.
-      enrollment:
+      // En AND explícito: el scope (S7) y el filtro de la pantalla usan los dos la clave
+      // `enrollment` — un spread pisaría al otro. Para un teacher, "la deuda del período
+      // de un alumno" (S5, el recordatorio) significa la deuda del período CON ÉL.
+      AND: [
+        chargeScopeWhere(scope),
         options.groupId || options.studentId
-          ? { groupId: options.groupId, studentId: options.studentId }
-          : undefined,
+          ? { enrollment: { groupId: options.groupId, studentId: options.studentId } }
+          : {},
+      ],
     },
     orderBy: [{ enrollment: { student: { searchName: "asc" } } }, { id: "asc" }],
     select: {

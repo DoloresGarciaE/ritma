@@ -4,8 +4,8 @@ import { revalidatePath } from "next/cache";
 
 import { requireSession } from "@/lib/auth";
 import { expandFranjas } from "@/lib/franjas";
-import { requireMember } from "@/server/authz";
-import { ForbiddenError } from "@/server/services/permissions";
+import { requireRole, requireScopedMember } from "@/server/authz";
+import { ForbiddenError, type DataScope } from "@/server/services/permissions";
 import {
   createDiscipline,
   createGroup,
@@ -28,16 +28,24 @@ import {
  * Server actions de la agenda.
  *
  * OJO: el layout de `(app)` NO protege las server actions — se invocan por POST directo,
- * sin pasar por él. Por eso cada una revalida la membresía con `requireMember`. El orgId
- * sale SIEMPRE de la sesión, nunca de un input del cliente. `groups:manage` incluye a los
- * tres roles (Plan §4), así que la membresía alcanza como guardia en Fase 1.
+ * sin pasar por él. Por eso cada una revalida membresía Y alcance (S7): el `scope` baja
+ * al servicio, que para un TEACHER solo deja tocar SUS grupos y sesiones. Crear grupos,
+ * activarlos/desactivarlos y crear disciplinas quedó para owner/admin (decisión S7 de la
+ * matriz). El orgId sale SIEMPRE de la sesión, nunca de un input del cliente.
  */
-async function currentOrgId(): Promise<string> {
+async function currentScoped(): Promise<{ orgId: string; scope: DataScope }> {
   const session = await requireSession();
   // Sin org activa no hay nada que autorizar: el mismo error controlado que "no sos
   // miembro" (un `!` acá dejaría pasar un null a Prisma, que revienta con un 500 crudo).
   if (!session.activeOrgId) throw new ForbiddenError("La sesión no tiene organización activa.");
-  const actor = await requireMember(session.activeOrgId);
+  const { actor, scope } = await requireScopedMember(session.activeOrgId);
+  return { orgId: actor.orgId, scope };
+}
+
+async function currentAdminOrgId(): Promise<string> {
+  const session = await requireSession();
+  if (!session.activeOrgId) throw new ForbiddenError("La sesión no tiene organización activa.");
+  const actor = await requireRole(session.activeOrgId, "OWNER", "ADMIN");
   return actor.orgId;
 }
 
@@ -50,6 +58,8 @@ export type GroupActionInput = {
   name: string;
   disciplineId: string;
   defaultPrice: number | null;
+  /** Profe a cargo (S7, solo STUDIO): `null` = sin asignar; ausente = no tocar. */
+  teacherId?: string | null;
   /** Franjas multi-día de UI: la action las EXPANDE a un slot por día (lib/franjas). */
   franjas: {
     days: { weekday: number; slotId?: string }[];
@@ -58,9 +68,12 @@ export type GroupActionInput = {
   }[];
 };
 
-/** Alta de grupo con sus franjas (HU3.1). Las franjas se expanden acá, tras el Zod. */
+/**
+ * Alta de grupo con sus franjas (HU3.1). Las franjas se expanden acá, tras el Zod.
+ * Owner/admin (decisión S7): en un estudio, la estructura la arma quien gestiona.
+ */
 export async function createGroupAction(input: GroupActionInput): Promise<GroupFormState> {
-  const orgId = await currentOrgId();
+  const orgId = await currentAdminOrgId();
 
   // Los errores se DEVUELVEN como estado: un throw se lo comería el error boundary y el
   // profe vería un crash en vez del mensaje en su campo (Componentes §4.1). El Zod
@@ -80,26 +93,32 @@ export async function createGroupAction(input: GroupActionInput): Promise<GroupF
  * del servicio decide igual que siempre: hora/duración in place (las excepciones
  * sobreviven), día quitado = slot borrado (sus excepciones se van por cascada). El diff
  * corre en una transacción del servicio.
+ *
+ * Los tres roles editan (S7): el servicio acota QUÉ grupos (los suyos, por scope) y QUÉ
+ * campos (a un teacher, precio y profe a cargo se le fuerzan como están).
  */
 export async function updateGroupAction(
   groupId: string,
   input: GroupActionInput,
 ): Promise<GroupFormState> {
-  const orgId = await currentOrgId();
+  const { orgId, scope } = await currentScoped();
 
   const parsed = groupSchema.safeParse(input);
   if (!parsed.success) return { errors: toGroupFieldErrors(parsed.error) };
 
   const { franjas, ...groupData } = parsed.data;
-  await updateGroup(orgId, groupId, { ...groupData, slots: expandFranjas(franjas) });
+  await updateGroup(orgId, scope, groupId, { ...groupData, slots: expandFranjas(franjas) });
 
   revalidateAgenda();
   return {};
 }
 
-/** El switch "Grupo activo" (§3.2): aplica al instante, sin esperar el Guardar (RN9). */
+/**
+ * El switch "Grupo activo" (§3.2): aplica al instante, sin esperar el Guardar (RN9).
+ * Owner/admin (decisión S7): sacar un grupo de la agenda es estructura, no gestión diaria.
+ */
 export async function setGroupActiveAction(groupId: string, active: boolean): Promise<void> {
-  const orgId = await currentOrgId();
+  const orgId = await currentAdminOrgId();
   await setGroupActive(orgId, groupId, active);
 
   revalidateAgenda();
@@ -110,10 +129,10 @@ export async function setGroupActiveAction(groupId: string, active: boolean): Pr
  * los inputs forjados los corta el servicio (franja ajena, fecha que no es ocurrencia).
  */
 export async function cancelSessionAction(input: { slotId: string; date: string }): Promise<void> {
-  const orgId = await currentOrgId();
+  const { orgId, scope } = await currentScoped();
 
   const parsed = occurrenceRefSchema.parse(input);
-  await cancelSession(orgId, parsed);
+  await cancelSession(orgId, scope, parsed);
 
   revalidateAgenda();
 }
@@ -125,12 +144,12 @@ export async function rescheduleSessionAction(input: {
   movedToDate: string;
   movedToStartTime: string;
 }): Promise<RescheduleFormState> {
-  const orgId = await currentOrgId();
+  const { orgId, scope } = await currentScoped();
 
   const parsed = rescheduleSchema.safeParse(input);
   if (!parsed.success) return { errors: toRescheduleFieldErrors(parsed.error) };
 
-  await rescheduleSession(orgId, parsed.data);
+  await rescheduleSession(orgId, scope, parsed.data);
 
   revalidateAgenda();
   return {};
@@ -138,19 +157,22 @@ export async function rescheduleSessionAction(input: {
 
 /** Restablece la ocurrencia: borra la excepción (cancelada o movida) y vuelve la regla. */
 export async function restoreSessionAction(input: { slotId: string; date: string }): Promise<void> {
-  const orgId = await currentOrgId();
+  const { orgId, scope } = await currentScoped();
 
   const parsed = occurrenceRefSchema.parse(input);
-  await restoreSession(orgId, parsed);
+  await restoreSession(orgId, scope, parsed);
 
   revalidateAgenda();
 }
 
-/** Disciplina "al vuelo" desde el form de grupo (HU3.1). Idempotente por [orgId, name]. */
+/**
+ * Disciplina "al vuelo" desde el form de grupo (HU3.1). Idempotente por [orgId, name].
+ * Owner/admin (S7): el catálogo de disciplinas es configuración de la org.
+ */
 export async function createDisciplineAction(
   name: string,
 ): Promise<{ id: string; name: string } | { error: string }> {
-  const orgId = await currentOrgId();
+  const orgId = await currentAdminOrgId();
 
   const trimmed = name.trim();
   if (trimmed.length === 0) return { error: "Poné el nombre de la disciplina." };

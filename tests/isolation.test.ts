@@ -9,6 +9,7 @@ import {
   makeDiscipline,
   makeEnrollment,
   makeGroup,
+  makeInvitation,
   makeMember,
   makeOrg,
   makePayment,
@@ -16,6 +17,7 @@ import {
   makeSession,
   makeSlot,
   makeStudent,
+  makeTeacherProfile,
 } from "./factories";
 
 /**
@@ -963,5 +965,152 @@ describe("cambio de organización activa (selector, S7 adelantado)", () => {
     });
     const dualIds = (await listMembershipsForUser(dual.userId)).map((m) => m.orgId);
     expect(resolveActiveOrg(dualIds, b.id)).toBe(b.id);
+  });
+});
+
+/** S7: el equipo entra al aislamiento con el mismo bloque que Student. */
+describe("aislamiento org × org — TeacherProfile", () => {
+  it("A no ve los perfiles de B; solo los propios", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+    await makeTeacherProfile(a.id, "Caro Suárez");
+    await makeTeacherProfile(b.id, "Malena Ríos");
+
+    const seenByA = await withOrg(a.id).teacherProfile.findMany();
+    expect(seenByA.map((p) => p.displayName)).toEqual(["Caro Suárez"]);
+  });
+
+  it("findUnique por el id de un perfil de B, desde A, devuelve null", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+    const bProfile = await makeTeacherProfile(b.id, "Malena Ríos");
+
+    expect(
+      await withOrg(a.id).teacherProfile.findUnique({ where: { id: bProfile.id } }),
+    ).toBeNull();
+  });
+
+  it("A no puede editar ni desvincular un perfil de B (P2025)", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+    const bUser = await makeMember(b.id, "TEACHER");
+    const bProfile = await makeTeacherProfile(b.id, "Malena Ríos", {
+      membershipUserId: bUser.userId,
+    });
+
+    await expect(
+      withOrg(a.id).teacherProfile.update({
+        where: { id: bProfile.id },
+        data: { displayName: "Hackeada" },
+      }),
+    ).rejects.toMatchObject({ code: "P2025" });
+
+    // Desvincular (la revocación) tampoco alcanza a B.
+    await expect(
+      withOrg(a.id).teacherProfile.update({
+        where: { id: bProfile.id },
+        data: { membershipUserId: null },
+      }),
+    ).rejects.toMatchObject({ code: "P2025" });
+
+    const after = await db.teacherProfile.findUniqueOrThrow({ where: { id: bProfile.id } });
+    expect(after.displayName).toBe("Malena Ríos");
+    expect(after.membershipUserId).toBe(bUser.userId);
+  });
+
+  it("A no puede borrar un perfil de B; un deleteMany desde A no lo alcanza", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+    const bProfile = await makeTeacherProfile(b.id, "Malena Ríos");
+
+    await expect(
+      withOrg(a.id).teacherProfile.delete({ where: { id: bProfile.id } }),
+    ).rejects.toMatchObject({ code: "P2025" });
+
+    await withOrg(a.id).teacherProfile.deleteMany({});
+    expect(await db.teacherProfile.count({ where: { orgId: b.id } })).toBe(1);
+  });
+
+  it("un perfil creado vía withOrg(A) no puede aterrizar en B: el orgId se fuerza", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+
+    const created = await withOrg(a.id).teacherProfile.create({
+      data: { displayName: "Caro Suárez", kind: "STAFF", orgId: b.id },
+    });
+
+    expect(created.orgId).toBe(a.id);
+    expect(await db.teacherProfile.count({ where: { orgId: b.id } })).toBe(0);
+  });
+});
+
+describe("aislamiento org × org — Invitation", () => {
+  it("A no ve las invitaciones de B; solo las propias", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+    await makeInvitation(a.id, { email: "propia@test.local" });
+    await makeInvitation(b.id, { email: "ajena@test.local" });
+
+    const seenByA = await withOrg(a.id).invitation.findMany();
+    expect(seenByA.map((i) => i.email)).toEqual(["propia@test.local"]);
+  });
+
+  it("el token de B, buscado desde A, devuelve null — la llave no cruza tenants", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+    const bInvitation = await makeInvitation(b.id);
+
+    // El unique global encuentra la fila; el orgId inyectado la descarta. Este es el
+    // caso que hace imposible "usar en B una invitación de A" (la aceptación relee el
+    // token vía withOrg de la org que dice el propio token — ver team.test.ts).
+    expect(
+      await withOrg(a.id).invitation.findUnique({ where: { token: bInvitation.token } }),
+    ).toBeNull();
+  });
+
+  it("A no puede marcar usada ni regenerar una invitación de B (P2025)", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+    const bInvitation = await makeInvitation(b.id);
+
+    await expect(
+      withOrg(a.id).invitation.update({
+        where: { id: bInvitation.id },
+        data: { usedAt: new Date() },
+      }),
+    ).rejects.toMatchObject({ code: "P2025" });
+
+    const after = await db.invitation.findUniqueOrThrow({ where: { id: bInvitation.id } });
+    expect(after.usedAt).toBeNull();
+  });
+
+  it("A no puede revocar (borrar) una invitación de B; un deleteMany no la alcanza", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+    const bInvitation = await makeInvitation(b.id);
+
+    await expect(
+      withOrg(a.id).invitation.delete({ where: { id: bInvitation.id } }),
+    ).rejects.toMatchObject({ code: "P2025" });
+
+    await withOrg(a.id).invitation.deleteMany({});
+    expect(await db.invitation.count({ where: { orgId: b.id } })).toBe(1);
+  });
+
+  it("una invitación creada vía withOrg(A) no puede aterrizar en B: el orgId se fuerza", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+
+    const created = await withOrg(a.id).invitation.create({
+      data: {
+        role: "TEACHER",
+        token: "token-de-prueba-aterrizaje",
+        expiresAt: new Date(Date.now() + 1000 * 60),
+        orgId: b.id,
+      },
+    });
+
+    expect(created.orgId).toBe(a.id);
+    expect(await db.invitation.count({ where: { orgId: b.id } })).toBe(0);
   });
 });

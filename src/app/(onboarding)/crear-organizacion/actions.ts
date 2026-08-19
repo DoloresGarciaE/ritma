@@ -44,6 +44,7 @@ export async function createOrganization(
   // defaults del schema (ARS, 10, America/Argentina/Buenos_Aires — HU1.2).
   await createOrganizationWithOwner({
     ownerId: session.userId,
+    ownerName: session.name,
     name,
     type,
     disciplines: uniqueDisciplines,

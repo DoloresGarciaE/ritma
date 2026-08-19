@@ -10,6 +10,7 @@ import { isR2Configured } from "@/lib/r2";
 import { defaultReminderTemplate, firstNameOf, renderTemplate } from "@/lib/reminders";
 import { cn } from "@/lib/utils";
 import { waLink } from "@/lib/whatsapp";
+import { requireScopedMember } from "@/server/authz";
 import { getOrgSettings, getShellOrganization } from "@/server/organizations";
 import { debtorsForPeriod } from "@/server/services/charges";
 import { listGroups } from "@/server/services/groups";
@@ -40,11 +41,12 @@ export default async function CobranzasPage({
 
   const first = (value: string | string[] | undefined) => (Array.isArray(value) ? value[0] : value);
 
-  const [settings, groups, shellOrg] = await Promise.all([
+  const [{ scope }, settings, shellOrg] = await Promise.all([
+    requireScopedMember(orgId),
     getOrgSettings(orgId),
-    listGroups(orgId),
     getShellOrganization(orgId),
   ]);
+  const groups = await listGroups(orgId, scope);
   const today = todayInTz(settings?.timezone ?? DEFAULT_TIMEZONE);
   const currentPeriod = periodOf(today);
 
@@ -54,14 +56,15 @@ export default async function CobranzasPage({
   const grupoParam = first(params.grupo);
   const groupId = groups.some((g) => g.id === grupoParam) ? grupoParam : undefined;
 
-  const { total, debtors, students } = await debtorsForPeriod(orgId, period, { groupId });
+  const { total, debtors, students } = await debtorsForPeriod(orgId, scope, period, { groupId });
 
   // El recordatorio de cada alumno (HU5.2): la plantilla de la org renderizada con la
   // deuda del PERÍODO COMPLETO (§3.16 define {monto} así — con el filtro de grupo
-  // activo, el mensaje NO subdeclara la deuda) y el link wa.me armado acá en el server.
+  // activo, el mensaje NO subdeclara la deuda; para un teacher, S7, "período completo"
+  // es su scope: la deuda del período CON ÉL) y el link wa.me armado acá en el server.
   // El log se registra recién al tocar (F2 paso 3).
   const { students: periodStudents } = groupId
-    ? await debtorsForPeriod(orgId, period)
+    ? await debtorsForPeriod(orgId, scope, period)
     : { students };
   const alias = settings?.paymentAlias ?? "";
   const template = settings?.reminderTemplate ?? defaultReminderTemplate(alias);

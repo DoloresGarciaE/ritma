@@ -2,6 +2,7 @@ import { civilToDb, dbToCivil, addDays, weekdayOf } from "@/lib/dates";
 import { withOrg } from "@/lib/db";
 import { DISCIPLINE_COLOR_COUNT } from "@/lib/discipline-colors";
 
+import { groupScopeWhere, type DataScope } from "./permissions";
 import {
   occurrencesForRange,
   type Occurrence,
@@ -30,6 +31,8 @@ export type AgendaOccurrence = Occurrence & {
   defaultPrice: number;
   /** Estable por orden de creación de la disciplina, ya módulo N (lib/discipline-colors). */
   colorIndex: number;
+  /** Profe a cargo (S7): se muestra en el bloque de la agenda del ESTUDIO; null = sin asignar. */
+  teacherName: string | null;
 };
 
 export type AgendaWeek = {
@@ -44,20 +47,29 @@ export type AgendaWeek = {
  * Las excepciones se buscan por fecha original EN la semana **o** `movedToDate` EN la
  * semana (índices `[orgId, date]` y `[orgId, movedToDate]`): así entran también las
  * reprogramadas HACIA esta semana desde otra.
+ *
+ * El `scope` (S7) filtra los GRUPOS: un teacher ve solo la semana de los suyos. Las
+ * excepciones se traen igual completas — el motor descarta solo las de slots ausentes
+ * (huérfanas por construcción, ver schedule.ts).
  */
-export async function weekData(orgId: string, weekStart: string): Promise<AgendaWeek> {
+export async function weekData(
+  orgId: string,
+  scope: DataScope,
+  weekStart: string,
+): Promise<AgendaWeek> {
   const weekEnd = addDays(weekStart, 6);
   const org = withOrg(orgId);
 
   const [groups, disciplines, exceptionRows] = await Promise.all([
     org.classGroup.findMany({
-      where: { active: true },
+      where: { active: true, ...groupScopeWhere(scope) },
       select: {
         id: true,
         name: true,
         defaultPrice: true,
         disciplineId: true,
         discipline: { select: { name: true } },
+        teacher: { select: { displayName: true } },
         slots: { select: { id: true, weekday: true, startTime: true, durationMin: true } },
       },
     }),
@@ -115,20 +127,26 @@ export async function weekData(orgId: string, weekStart: string): Promise<Agenda
       disciplineName: group.discipline.name,
       defaultPrice: group.defaultPrice.toNumber(),
       colorIndex: colorIndexByDiscipline.get(group.disciplineId) ?? 0,
+      teacherName: group.teacher?.displayName ?? null,
     };
   });
 
   return { weekStart, occurrences };
 }
 
-/** La franja, verificada contra la org — o throw: acá solo se llega con request forjada. */
-async function assertSlotInOrg(
+/**
+ * La franja, verificada contra la org Y contra el scope del actor (S7) — o throw: acá
+ * solo se llega con request forjada. Para un teacher, la franja de un grupo ajeno "no
+ * pertenece", igual que la de otra org: la misma respuesta no confirma nada.
+ */
+async function assertSlotInScope(
   orgId: string,
+  scope: DataScope,
   slotId: string,
   date: string,
 ): Promise<{ groupId: string }> {
   const slot = await withOrg(orgId).scheduleSlot.findUnique({
-    where: { id: slotId },
+    where: { id: slotId, group: groupScopeWhere(scope) },
     select: { groupId: true, weekday: true },
   });
   if (!slot) throw new Error("La franja no pertenece a esta organización.");
@@ -141,9 +159,10 @@ async function assertSlotInOrg(
 /** Cancela SOLO esa fecha (HU3.3, RN8). Una movida se cancela donde está: movedTo queda. */
 export async function cancelSession(
   orgId: string,
+  scope: DataScope,
   input: { slotId: string; date: string; note?: string | null },
 ): Promise<void> {
-  const { groupId } = await assertSlotInOrg(orgId, input.slotId, input.date);
+  const { groupId } = await assertSlotInScope(orgId, scope, input.slotId, input.date);
   const date = civilToDb(input.date);
 
   await withOrg(orgId).classSession.upsert({
@@ -171,9 +190,10 @@ export async function cancelSession(
  */
 export async function rescheduleSession(
   orgId: string,
+  scope: DataScope,
   input: { slotId: string; date: string; movedToDate: string; movedToStartTime: string },
 ): Promise<void> {
-  const { groupId } = await assertSlotInOrg(orgId, input.slotId, input.date);
+  const { groupId } = await assertSlotInScope(orgId, scope, input.slotId, input.date);
   const date = civilToDb(input.date);
   const movedToDate = civilToDb(input.movedToDate);
 
@@ -204,10 +224,14 @@ export async function rescheduleSession(
  */
 export async function restoreSession(
   orgId: string,
+  scope: DataScope,
   input: { slotId: string; date: string },
 ): Promise<void> {
   await withOrg(orgId).classSession.delete({
-    where: { slotId_date: { slotId: input.slotId, date: civilToDb(input.date) } },
+    where: {
+      slotId_date: { slotId: input.slotId, date: civilToDb(input.date) },
+      group: groupScopeWhere(scope),
+    },
     select: { id: true },
   });
 }

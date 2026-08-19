@@ -14,3 +14,14 @@ export function resolveLanding(
   if (!session) return "/login";
   return session.activeOrgId ? "/dashboard" : "/crear-organizacion";
 }
+
+/**
+ * Valida un `?next=` (S7: la invitación manda a login/registro y VUELVE). Solo paths
+ * internos: tiene que empezar con "/" y no con "//" (que el navegador lee como
+ * protocol-relative — sería un open redirect a otro dominio). Cualquier otra cosa
+ * cae a null y el flujo sigue por `resolveLanding`, como siempre.
+ */
+export function safeInternalPath(path: string | null | undefined): string | null {
+  if (!path || !path.startsWith("/") || path.startsWith("//")) return null;
+  return path;
+}

@@ -3,6 +3,7 @@ import { civilToDb, dbToCivil, periodOf, todayInTz } from "@/lib/dates";
 
 import { dropInCharge, generateCharges, type ChargeDraft } from "./billing";
 import { applyStudentCredit } from "./payments";
+import { enrollmentScopeWhere, groupScopeWhere, type DataScope } from "./permissions";
 
 /**
  * Servicios de inscripciones (HU4.1, RN9).
@@ -86,13 +87,18 @@ function toListItem(row: EnrollmentRow): EnrollmentListItem {
   };
 }
 
-/** Las inscripciones de la ficha del alumno: abiertas primero, después por alta desc. */
+/**
+ * Las inscripciones de la ficha del alumno: abiertas primero, después por alta desc.
+ * Con scope de teacher (S7), SOLO las de sus grupos: en un alumno compartido, las
+ * inscripciones con otro profe son datos de ese profe.
+ */
 export async function listEnrollmentsForStudent(
   orgId: string,
+  scope: DataScope,
   studentId: string,
 ): Promise<EnrollmentListItem[]> {
   const rows = await withOrg(orgId).enrollment.findMany({
-    where: { studentId },
+    where: { studentId, AND: [enrollmentScopeWhere(scope)] },
     orderBy: [{ endDate: { sort: "asc", nulls: "first" } }, { startDate: "desc" }],
     select: {
       id: true,
@@ -113,12 +119,14 @@ export async function listEnrollmentsForStudent(
  */
 export async function listActiveEnrollmentsForGroup(
   orgId: string,
+  scope: DataScope,
   groupId: string,
   today: string,
 ): Promise<GroupEnrollmentItem[]> {
   const rows = await withOrg(orgId).enrollment.findMany({
     where: {
       groupId,
+      ...enrollmentScopeWhere(scope),
       OR: [{ endDate: null }, { endDate: { gte: civilToDb(today) } }],
     },
     orderBy: { student: { searchName: "asc" } },
@@ -139,10 +147,14 @@ export async function listActiveEnrollmentsForGroup(
  */
 export async function activeRosterByGroup(
   orgId: string,
+  scope: DataScope,
   today: string,
 ): Promise<Record<string, GroupEnrollmentItem[]>> {
   const rows = await withOrg(orgId).enrollment.findMany({
-    where: { OR: [{ endDate: null }, { endDate: { gte: civilToDb(today) } }] },
+    where: {
+      ...enrollmentScopeWhere(scope),
+      OR: [{ endDate: null }, { endDate: { gte: civilToDb(today) } }],
+    },
     orderBy: { student: { searchName: "asc" } },
     select: {
       id: true,
@@ -159,12 +171,27 @@ export async function activeRosterByGroup(
   return byGroup;
 }
 
-/** `throw` genérico: a este punto solo se llega con una request forjada (groups.ts). */
-async function assertRefsInOrg(orgId: string, studentId: string, groupId: string): Promise<void> {
+/**
+ * `throw` genérico: a este punto solo se llega con una request forjada (groups.ts).
+ *
+ * El GRUPO se verifica contra el scope (S7): un teacher inscribe solo en los suyos. El
+ * ALUMNO se verifica contra la org entera a propósito: inscribirlo es exactamente cómo
+ * un alumno SE VUELVE suyo (el alta express del sheet, o un alumno del padrón que se
+ * suma a su clase) — scopearlo acá dejaría al teacher sin forma de sumar a nadie.
+ */
+async function assertRefsInScope(
+  orgId: string,
+  scope: DataScope,
+  studentId: string,
+  groupId: string,
+): Promise<void> {
   const org = withOrg(orgId);
   const [student, group] = await Promise.all([
     org.student.findUnique({ where: { id: studentId }, select: { id: true } }),
-    org.classGroup.findUnique({ where: { id: groupId }, select: { id: true } }),
+    org.classGroup.findUnique({
+      where: { id: groupId, AND: [groupScopeWhere(scope)] },
+      select: { id: true },
+    }),
   ]);
   if (!student) throw new Error("El alumno no pertenece a esta organización.");
   if (!group) throw new Error("El grupo no pertenece a esta organización.");
@@ -181,9 +208,10 @@ async function assertRefsInOrg(orgId: string, studentId: string, groupId: string
  */
 export async function createEnrollment(
   orgId: string,
+  scope: DataScope,
   input: EnrollmentInput,
 ): Promise<{ id: string }> {
-  await assertRefsInOrg(orgId, input.studentId, input.groupId);
+  await assertRefsInScope(orgId, scope, input.studentId, input.groupId);
 
   const org = withOrg(orgId);
   const settings = await readBillingSettings(org, orgId);
@@ -292,6 +320,7 @@ async function enrollOne(
  */
 export async function enrollMany(
   orgId: string,
+  scope: DataScope,
   input: BulkEnrollmentInput,
 ): Promise<{ count: number }> {
   // Un id repetido en el payload sería la misma inscripción dos veces: la segunda chocaría
@@ -304,9 +333,14 @@ export async function enrollMany(
   const org = withOrg(orgId);
 
   // Referencias contra la org, de a lote: un FK no distingue tenants, y `withOrg` filtra,
-  // así que un alumno ajeno simplemente no vuelve en el findMany.
+  // así que un alumno ajeno simplemente no vuelve en el findMany. El grupo además contra
+  // el scope (S7): un teacher inscribe solo en los suyos (los alumnos, org-level — misma
+  // razón que assertRefsInScope).
   const [group, students] = await Promise.all([
-    org.classGroup.findUnique({ where: { id: input.groupId }, select: { id: true } }),
+    org.classGroup.findUnique({
+      where: { id: input.groupId, AND: [groupScopeWhere(scope)] },
+      select: { id: true },
+    }),
     org.student.findMany({
       where: { id: { in: studentIds } },
       select: { id: true, name: true },
@@ -325,7 +359,10 @@ export async function enrollMany(
   });
   if (already.length > 0) {
     const taken = new Set(already.map((enrollment) => enrollment.studentId));
-    const names = students.filter((s) => taken.has(s.id)).map((s) => s.name);
+    // En el ORDEN de la selección (el findMany no garantiza ninguno): el mensaje que
+    // nombra gente tiene que ser determinístico — también para el test que lo pinnea.
+    const nameById = new Map(students.map((s) => [s.id, s.name]));
+    const names = studentIds.filter((id) => taken.has(id)).map((id) => nameById.get(id)!);
     throw new EnrollmentRuleError(
       names.length === 1
         ? `${names[0]} ya está en este grupo. Sacalo de la selección y probá de nuevo.`
@@ -366,13 +403,14 @@ export async function enrollMany(
  */
 export async function endEnrollment(
   orgId: string,
+  scope: DataScope,
   enrollmentId: string,
   endDate: string,
 ): Promise<void> {
   const org = withOrg(orgId);
 
   const enrollment = await org.enrollment.findUnique({
-    where: { id: enrollmentId },
+    where: { id: enrollmentId, AND: [enrollmentScopeWhere(scope)] },
     select: { startDate: true },
   });
   if (!enrollment) throw new Error("La inscripción no pertenece a esta organización.");

@@ -58,6 +58,12 @@ export const groupSchema = z.object({
     // Decimal(12,2): sin tope, un número gigante desborda en Prisma y revienta la action
     // en vez de dar error de campo.
     .max(9_999_999_999, "Esa tarifa es demasiado alta."),
+  /**
+   * Profe a cargo (S7, solo STUDIO): `null` = "sin profe asignado"; ausente = no tocar.
+   * La referencia se verifica contra la org en el SERVICIO (cross-ref, patrón F0.6);
+   * para un teacher el servicio la ignora directamente.
+   */
+  teacherId: z.string().min(1).nullable().optional(),
   franjas: z
     .array(franjaSchema)
     .min(1, "Agregá al menos una franja.")

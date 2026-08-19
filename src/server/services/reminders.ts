@@ -4,6 +4,7 @@ import { formatMoney, formatPeriod } from "@/lib/format";
 import { defaultReminderTemplate, firstNameOf, renderTemplate } from "@/lib/reminders";
 
 import { debtorsForPeriod } from "./charges";
+import { studentScopeWhere, type DataScope } from "./permissions";
 
 /**
  * Recordatorios (HU5.2–5.3): armar el mensaje desde la plantilla de la org y dejar
@@ -31,12 +32,14 @@ export class ReminderRuleError extends Error {
  */
 export async function logReminder(
   orgId: string,
+  scope: DataScope,
   input: { studentId: string; channel: ReminderChannelValue; chargeId?: string },
 ): Promise<{ id: string }> {
   const org = withOrg(orgId);
 
+  // Contra la org Y contra el scope (S7): un teacher recuerda a SUS alumnos.
   const student = await org.student.findUnique({
-    where: { id: input.studentId },
+    where: { id: input.studentId, AND: [studentScopeWhere(scope)] },
     select: { id: true },
   });
   if (!student) throw new ReminderRuleError("El alumno no existe o no es de esta organización.");
@@ -87,11 +90,14 @@ export type ReminderHistoryItem = {
 /** El historial de la ficha (HU2.2): fecha y canal, sin estados de "leído" inventados. */
 export async function listRemindersForStudent(
   orgId: string,
+  scope: DataScope,
   studentId: string,
   timezone: string,
 ): Promise<ReminderHistoryItem[]> {
   const rows = await withOrg(orgId).reminderLog.findMany({
-    where: { studentId },
+    // El scope entra por el alumno (S7): el historial es de la ficha, y la ficha es de
+    // quien tiene al alumno — en un compartido, ambos profes ven los mismos envíos.
+    where: { studentId, student: studentScopeWhere(scope) },
     orderBy: [{ sentAt: "desc" }, { id: "desc" }],
     select: { id: true, sentAt: true, channel: true },
   });
@@ -116,10 +122,12 @@ export type ReminderDraft = {
 /**
  * Arma el recordatorio de UN alumno para UN período: plantilla de la org (o la default
  * de Marca §4.2), deuda = suma de remanentes del período (RN4: lo que FALTA, no lo
- * facturado). El caller decide el canal.
+ * facturado). El caller decide el canal. Con scope de teacher (S7), `{monto}` es la
+ * deuda del período CON ÉL — sus cuotas, agregadas igual que siempre.
  */
 export async function buildReminder(
   orgId: string,
+  scope: DataScope,
   studentId: string,
   period: string,
 ): Promise<ReminderDraft> {
@@ -131,10 +139,10 @@ export async function buildReminder(
       select: { name: true, reminderTemplate: true, paymentAlias: true },
     }),
     org.student.findUnique({
-      where: { id: studentId },
+      where: { id: studentId, AND: [studentScopeWhere(scope)] },
       select: { id: true, name: true, phone: true, email: true },
     }),
-    debtorsForPeriod(orgId, period, { studentId }),
+    debtorsForPeriod(orgId, scope, period, { studentId }),
   ]);
   if (!settings) throw new ReminderRuleError("La organización no existe.");
   if (!student) throw new ReminderRuleError("El alumno no existe o no es de esta organización.");

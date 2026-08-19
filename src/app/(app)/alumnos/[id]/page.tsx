@@ -6,7 +6,7 @@ import { periodOf, todayInTz } from "@/lib/dates";
 import { isEmailConfigured } from "@/lib/email";
 import { isR2Configured } from "@/lib/r2";
 import { waLink } from "@/lib/whatsapp";
-import { requireMember } from "@/server/authz";
+import { requireScopedMember } from "@/server/authz";
 import { getOrgSettings, getShellOrganization } from "@/server/organizations";
 import { listChargesForStudent } from "@/server/services/charges";
 import { listEnrollmentsForStudent } from "@/server/services/enrollments";
@@ -27,7 +27,8 @@ type Params = { params: Promise<{ id: string }> };
 export async function generateMetadata({ params }: Params): Promise<Metadata> {
   const { id } = await params;
   const session = await requireSession();
-  const student = await getStudent(session.activeOrgId!, id);
+  const { scope } = await requireScopedMember(session.activeOrgId!);
+  const student = await getStudent(session.activeOrgId!, scope, id);
 
   return { title: student ? student.name : "Alumno" };
 }
@@ -37,10 +38,13 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
  *
  * Desde S3: datos editables, inscripciones con alta/baja y estado de cuenta. Desde S5:
  * recordatorios (WhatsApp/email sobre la deuda del período en curso) y su historial —
- * lo último que HU2.2 dejaba pendiente.
+ * lo último que HU2.2 dejaba pendiente. Desde S7, todo con el `scope` del actor: la
+ * ficha de un alumno ajeno al scope de un teacher es un 404, igual que la de otra org.
  *
- * `notFound()` y no un redirect: con el id de un alumno de OTRA organización, `getStudent`
- * devuelve null (withOrg lo filtra) y respondemos 404. Un redirect confirmaría que existe.
+ * `notFound()` y no un redirect: con el id de un alumno de OTRA organización (o fuera
+ * del scope), `getStudent` devuelve null y respondemos 404. Un redirect confirmaría que
+ * existe. El alumno se resuelve PRIMERO: las demás lecturas asumen que está en scope
+ * (una de ellas tiraría con un id ajeno, y eso sería un 500 en vez de este 404).
  */
 export default async function StudentPage({ params }: Params) {
   const { id } = await params;
@@ -49,20 +53,19 @@ export default async function StudentPage({ params }: Params) {
 
   // La membresía revalidada trae el ROL: editar montos y exonerar es de owner/admin, y lo
   // que un rol no puede hacer no se le muestra (§4.3) — el server lo valida igual.
-  const [actor, student, enrollments, charges, payments, context, groups, settings, shellOrg] =
-    await Promise.all([
-      requireMember(orgId),
-      getStudent(orgId, id),
-      listEnrollmentsForStudent(orgId, id),
-      listChargesForStudent(orgId, id),
-      listPaymentsForStudent(orgId, id),
-      paymentContext(orgId, id),
-      listGroups(orgId),
-      getOrgSettings(orgId),
-      getShellOrganization(orgId),
-    ]);
-
+  const { actor, scope } = await requireScopedMember(orgId);
+  const student = await getStudent(orgId, scope, id);
   if (!student) notFound();
+
+  const [enrollments, charges, payments, context, groups, settings, shellOrg] = await Promise.all([
+    listEnrollmentsForStudent(orgId, scope, id),
+    listChargesForStudent(orgId, scope, id),
+    listPaymentsForStudent(orgId, scope, id),
+    paymentContext(orgId, scope, id),
+    listGroups(orgId, scope),
+    getOrgSettings(orgId),
+    getShellOrganization(orgId),
+  ]);
 
   const today = todayInTz(settings?.timezone ?? "");
   const timezone = settings?.timezone ?? "";
@@ -71,8 +74,8 @@ export default async function StudentPage({ params }: Params) {
   // visible). buildReminder trae mensaje + deuda; el link wa.me se arma acá, server-side.
   const period = periodOf(today);
   const [reminderDraft, reminderHistory] = await Promise.all([
-    buildReminder(orgId, id, period),
-    listRemindersForStudent(orgId, id, timezone),
+    buildReminder(orgId, scope, id, period),
+    listRemindersForStudent(orgId, scope, id, timezone),
   ]);
   const waUrl =
     reminderDraft.student.phone && reminderDraft.debt > 0

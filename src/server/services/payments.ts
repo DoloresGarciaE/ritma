@@ -12,6 +12,12 @@ import {
   type ChargeStatusValue,
   type Money,
 } from "./billing";
+import {
+  chargeScopeWhere,
+  paymentScopeWhere,
+  studentScopeWhere,
+  type DataScope,
+} from "./permissions";
 
 /**
  * Servicios de pagos (HU4.3–HU4.4, RN4–RN5): la capa que junta datos, le pregunta al
@@ -61,10 +67,21 @@ const OPEN_CHARGE_SELECT = {
   enrollment: { select: { group: { select: { name: true } } } },
 } as const;
 
-/** Cuotas abiertas del alumno, antigua-primero (RN4), con su remanente en Decimal. */
-async function openChargesOf(client: OrgClient, studentId: string) {
+/**
+ * Cuotas abiertas del alumno, antigua-primero (RN4), con su remanente en Decimal.
+ *
+ * El `scope` (S7, decisión de la sesión con Dolores — aclaración de RN4): cuando un
+ * TEACHER registra un pago, la imputación automática Y la manual corren SOLO sobre las
+ * cuotas de SUS grupos — antigua-primero dentro de ese subconjunto. El crédito nocturno
+ * del cron (`applyStudentCredit`) sigue siendo org-completo: es plata del alumno con la
+ * organización, y ahí no hay actor.
+ */
+async function openChargesOf(client: OrgClient, scope: DataScope, studentId: string) {
   const rows = await client.charge.findMany({
-    where: { enrollment: { studentId }, status: { in: OPEN } },
+    where: {
+      status: { in: OPEN },
+      AND: [{ enrollment: { studentId } }, chargeScopeWhere(scope)],
+    },
     orderBy: [{ period: "asc" }, { dueDate: "asc" }, { id: "asc" }],
     select: OPEN_CHARGE_SELECT,
   });
@@ -156,6 +173,7 @@ function draftTotalsByCharge(drafts: readonly { chargeId: string; amount: Money 
  */
 export async function createPayment(
   orgId: string,
+  scope: DataScope,
   input: PaymentInput,
 ): Promise<{ id: string; receiptToken: string }> {
   const org = withOrg(orgId);
@@ -164,8 +182,9 @@ export async function createPayment(
     async (tx) => {
       const scoped = tx as unknown as OrgClient;
 
+      // Contra la org Y contra el scope (S7): un teacher registra pagos de SUS alumnos.
       const student = await scoped.student.findUnique({
-        where: { id: input.studentId },
+        where: { id: input.studentId, AND: [studentScopeWhere(scope)] },
         select: { id: true },
       });
       if (!student) throw new Error("El alumno no pertenece a esta organización.");
@@ -181,7 +200,7 @@ export async function createPayment(
         throw new PaymentRuleError("El pago tiene que ser mayor a cero.");
       }
 
-      const open = await openChargesOf(scoped, input.studentId);
+      const open = await openChargesOf(scoped, scope, input.studentId);
       const openWithRemainder = open.filter((charge) => charge.remaining.greaterThan(ZERO));
 
       let drafts: { chargeId: string; amount: Money }[];
@@ -190,8 +209,9 @@ export async function createPayment(
           chargeId: allocation.chargeId,
           amount: money(allocation.amount),
         }));
-        // El mapa de remanentes sale de las cuotas DEL ALUMNO: una cuota ajena (de otra
-        // org u otro alumno) no está y el motor la rechaza.
+        // El mapa de remanentes sale de las cuotas DEL ALUMNO (y del SCOPE del actor,
+        // S7): una cuota ajena — de otra org, otro alumno u otro profe — no está y el
+        // motor la rechaza.
         const remainingByCharge = new Map(
           openWithRemainder.map((charge) => [charge.id, charge.remaining]),
         );
@@ -268,6 +288,7 @@ export async function createPayment(
  */
 export async function deletePayment(
   orgId: string,
+  scope: DataScope,
   paymentId: string,
 ): Promise<{ attachmentKey: string | null }> {
   const org = withOrg(orgId);
@@ -276,8 +297,10 @@ export async function deletePayment(
     async (tx) => {
       const scoped = tx as unknown as OrgClient;
 
+      // El scope (S7, decisión de la sesión): un teacher elimina pagos de SUS alumnos —
+      // es el deshacer de registrar; la inmutabilidad real llega con el cierre (RN6, S9).
       const payment = await scoped.payment.findUnique({
-        where: { id: paymentId },
+        where: { id: paymentId, AND: [paymentScopeWhere(scope)] },
         select: { id: true, attachmentKey: true, allocations: { select: { chargeId: true } } },
       });
       if (!payment) throw new Error("El pago no pertenece a esta organización.");
@@ -332,10 +355,11 @@ export async function deletePayment(
 /** El adjunto del pago (lectura chica para las actions de R2). `null` si es ajeno. */
 export async function getPaymentAttachment(
   orgId: string,
+  scope: DataScope,
   paymentId: string,
 ): Promise<{ attachmentKey: string | null } | null> {
   return withOrg(orgId).payment.findUnique({
-    where: { id: paymentId },
+    where: { id: paymentId, AND: [paymentScopeWhere(scope)] },
     select: { attachmentKey: true },
   });
 }
@@ -343,10 +367,11 @@ export async function getPaymentAttachment(
 /** El token del link público del pago (para compartir). `null` si el pago es ajeno. */
 export async function getReceiptToken(
   orgId: string,
+  scope: DataScope,
   paymentId: string,
 ): Promise<{ receiptToken: string } | null> {
   return withOrg(orgId).payment.findUnique({
-    where: { id: paymentId },
+    where: { id: paymentId, AND: [paymentScopeWhere(scope)] },
     select: { receiptToken: true },
   });
 }
@@ -359,10 +384,11 @@ export async function getReceiptToken(
  */
 export async function rotateReceiptToken(
   orgId: string,
+  scope: DataScope,
   paymentId: string,
 ): Promise<{ receiptToken: string }> {
   return withOrg(orgId).payment.update({
-    where: { id: paymentId },
+    where: { id: paymentId, AND: [paymentScopeWhere(scope)] },
     data: { receiptToken: generateReceiptToken() },
     select: { receiptToken: true },
   });
@@ -371,11 +397,12 @@ export async function rotateReceiptToken(
 /** Fija (o limpia) el pointer del comprobante. P2025 si el pago es ajeno. */
 export async function setPaymentAttachment(
   orgId: string,
+  scope: DataScope,
   paymentId: string,
   attachmentKey: string | null,
 ): Promise<void> {
   await withOrg(orgId).payment.update({
-    where: { id: paymentId },
+    where: { id: paymentId, AND: [paymentScopeWhere(scope)] },
     data: { attachmentKey },
     select: { id: true },
   });
@@ -401,7 +428,9 @@ export async function applyStudentCredit(
       const remainders = await paymentRemaindersOf(scoped, studentId);
       if (remainders.length === 0) return { applied: 0 };
 
-      const open = await openChargesOf(scoped, studentId);
+      // Scope "all" a propósito: acá no hay actor (cron / alta) y el crédito del alumno
+      // es con la ORGANIZACIÓN — RN4 org-completo, antigua-primero.
+      const open = await openChargesOf(scoped, { kind: "all" }, studentId);
       const openWithRemainder = open.filter((charge) => charge.remaining.greaterThan(ZERO));
       if (openWithRemainder.length === 0) return { applied: 0 };
 
@@ -457,13 +486,21 @@ export type PaymentListItem = {
   allocations: { chargeId: string; period: string; groupName: string; amount: number }[];
 };
 
-/** Los pagos del alumno, más nuevos primero, con sus imputaciones legibles. */
+/**
+ * Los pagos del alumno, más nuevos primero, con sus imputaciones legibles.
+ *
+ * El pago es dato del ALUMNO (plata suya con la org), no de un grupo: si el alumno está
+ * en el scope del actor (S7), se ven TODOS sus pagos — en un alumno compartido, ambos
+ * profes ven el mismo estado de cuenta. Lo que sí queda scoped por profe son las cuotas
+ * (listChargesForStudent) y las imputaciones que cada uno registra.
+ */
 export async function listPaymentsForStudent(
   orgId: string,
+  scope: DataScope,
   studentId: string,
 ): Promise<PaymentListItem[]> {
   const rows = await withOrg(orgId).payment.findMany({
-    where: { studentId },
+    where: { studentId, AND: [paymentScopeWhere(scope)] },
     orderBy: [{ paidAt: "desc" }, { createdAt: "desc" }],
     select: {
       id: true,
@@ -524,12 +561,25 @@ export type PaymentContext = {
 /**
  * Lo que el sheet "Registrar pago" necesita: la deuda (pre-carga el monto, HU4.3), el
  * crédito visible y las cuotas abiertas para la vista de imputación.
+ *
+ * Con scope de teacher (S7): sus cuotas del alumno (la deuda que el sheet pre-carga es
+ * la deuda CON ÉL); el crédito es del alumno con la org (derivado, el mismo para todos).
  */
-export async function paymentContext(orgId: string, studentId: string): Promise<PaymentContext> {
+export async function paymentContext(
+  orgId: string,
+  scope: DataScope,
+  studentId: string,
+): Promise<PaymentContext> {
   const org = withOrg(orgId);
 
+  const inScope = await org.student.findUnique({
+    where: { id: studentId, AND: [studentScopeWhere(scope)] },
+    select: { id: true },
+  });
+  if (!inScope) throw new Error("El alumno no pertenece a esta organización.");
+
   const [open, remainders] = await Promise.all([
-    openChargesOf(org, studentId),
+    openChargesOf(org, scope, studentId),
     paymentRemaindersOf(org, studentId),
   ]);
 

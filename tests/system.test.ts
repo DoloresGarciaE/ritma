@@ -143,12 +143,16 @@ describe("runGenerateCharges", () => {
     await makeEnrollment(org.id, student.id, group.id, { price: 18000, startDate: "2026-06-01" });
 
     // Pagó por adelantado: $20.000 de crédito puro (todavía no existe ninguna cuota).
-    await createPayment(org.id, {
-      studentId: student.id,
-      amount: 20000,
-      method: "TRANSFER",
-      paidAt: "2026-07-28",
-    });
+    await createPayment(
+      org.id,
+      { kind: "all" },
+      {
+        studentId: student.id,
+        amount: 20000,
+        method: "TRANSFER",
+        paidAt: "2026-07-28",
+      },
+    );
 
     const first = await runGenerateCharges("2026-08");
     expect(first).toMatchObject({ created: 1, creditsApplied: 1 });

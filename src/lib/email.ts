@@ -50,6 +50,75 @@ export function buildReminderEmailHtml(input: { message: string; orgName: string
   );
 }
 
+/**
+ * El email de invitación al equipo (S7, HU1.3): mismo esqueleto de Marca §9.3 que el
+ * recordatorio, más EL botón primario (uno solo por email) que lleva al link de
+ * aceptación. Exportada solo para poder testearla pura.
+ */
+export function buildInvitationEmailHtml(input: {
+  orgName: string;
+  roleLabel: string;
+  url: string;
+}): string {
+  const base = (process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000").replace(/\/$/, "");
+
+  return (
+    `<div style="background:#FFFFFF;padding:32px 24px;` +
+    `font-family:Inter,system-ui,-apple-system,sans-serif;color:#23212F;">` +
+    `<div style="max-width:480px;margin:0 auto;">` +
+    `<img src="${base}/brand/ritma-logotipo.png" width="96" height="37" alt="Ritma" ` +
+    `style="display:block;margin-bottom:24px;" />` +
+    `<div style="font-size:16px;line-height:1.5;">` +
+    `<p style="margin:0 0 12px;">${escapeHtml(input.orgName)} te invita a sumarte a su equipo ` +
+    `en Ritma como ${escapeHtml(input.roleLabel)}.</p>` +
+    `<p style="margin:0 0 12px;">Si todavía no tenés cuenta, creala con este mismo link.</p>` +
+    `</div>` +
+    // Violeta 600 (--color-violeta-600, Color §8): los emails no leen tokens CSS.
+    `<a href="${input.url}" style="display:inline-block;background:#5a4bd1;color:#FFFFFF;` +
+    `padding:12px 20px;border-radius:10px;font-size:16px;font-weight:500;` +
+    `text-decoration:none;margin:4px 0 8px;">Aceptar invitación</a>` +
+    `<p style="margin:8px 0 0;font-size:12px;color:#625F55;">La invitación vence a los 7 días ` +
+    `y se puede usar una sola vez.</p>` +
+    `<hr style="border:none;border-top:1px solid #E8E6DE;margin:24px 0;" />` +
+    `<p style="margin:0;font-size:12px;color:#625F55;">${escapeHtml(input.orgName)}</p>` +
+    `</div></div>`
+  );
+}
+
+/** Manda la invitación. Lanza si la guarda está apagada o si Resend no lo aceptó. */
+export async function sendInvitationEmail(input: {
+  to: string;
+  orgName: string;
+  roleLabel: string;
+  url: string;
+}): Promise<void> {
+  if (!isEmailConfigured()) {
+    throw new Error("El email no está configurado (falta RESEND_API_KEY).");
+  }
+
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from: process.env.RESEND_FROM ?? FROM_FALLBACK,
+      to: input.to,
+      subject: `${input.orgName} te invita a su equipo en Ritma`,
+      html: buildInvitationEmailHtml(input),
+      text:
+        `${input.orgName} te invita a sumarte a su equipo en Ritma como ${input.roleLabel}.\n\n` +
+        `Aceptá la invitación acá: ${input.url}\n\n` +
+        `La invitación vence a los 7 días y se puede usar una sola vez.`,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Resend rechazó el envío (HTTP ${response.status}).`);
+  }
+}
+
 /** Manda el recordatorio. Lanza si la guarda está apagada o si Resend no lo aceptó. */
 export async function sendReminderEmail(input: {
   to: string;

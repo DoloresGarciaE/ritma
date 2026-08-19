@@ -62,12 +62,16 @@ async function makeMonth() {
     status: "PENDING",
   });
 
-  await createPayment(org.id, {
-    studentId: sofia.id,
-    amount: 20000,
-    method: "TRANSFER",
-    paidAt: TODAY,
-  });
+  await createPayment(
+    org.id,
+    { kind: "all" },
+    {
+      studentId: sofia.id,
+      amount: 20000,
+      method: "TRANSFER",
+      paidAt: TODAY,
+    },
+  );
 
   return { org, group, wednesday, sofiaAug, carlaAug };
 }
@@ -77,7 +81,7 @@ describe("dashboardMetrics (HU7.1)", () => {
     freezeClock();
     const { org } = await makeMonth();
 
-    const metrics = await dashboardMetrics(org.id);
+    const metrics = await dashboardMetrics(org.id, { kind: "all" });
 
     // El pago fue de $20.000, pero $18.000 saldaron JULIO: agosto cobró $2.000.
     expect(metrics.period).toBe(CUR);
@@ -95,8 +99,8 @@ describe("dashboardMetrics (HU7.1)", () => {
     freezeClock();
     const { org } = await makeMonth();
 
-    const metrics = await dashboardMetrics(org.id);
-    const cobranzas = await debtorsForPeriod(org.id, CUR);
+    const metrics = await dashboardMetrics(org.id, { kind: "all" });
+    const cobranzas = await debtorsForPeriod(org.id, { kind: "all" }, CUR);
 
     // Sofía debe $16.000 de agosto (18.000 − 2.000) y Carla $18.000: $34.000 en 2 cuotas.
     expect(metrics.pending).toBe(34000);
@@ -111,18 +115,18 @@ describe("dashboardMetrics (HU7.1)", () => {
     freezeClock();
     const { org } = await makeMonth();
 
-    const metrics = await dashboardMetrics(org.id);
+    const metrics = await dashboardMetrics(org.id, { kind: "all" });
 
     // El pendiente es solo agosto; julio (pagada) no suma ni acá ni en Cobranzas.
-    expect(metrics.pending).toBe((await debtorsForPeriod(org.id, CUR)).total);
-    expect((await debtorsForPeriod(org.id, "2026-07")).total).toBe(0);
+    expect(metrics.pending).toBe((await debtorsForPeriod(org.id, { kind: "all" }, CUR)).total);
+    expect((await debtorsForPeriod(org.id, { kind: "all" }, "2026-07")).total).toBe(0);
   });
 
   it("clases de hoy = lo que la agenda muestra HOY (weekData filtrado al día)", async () => {
     freezeClock();
     const { org, wednesday } = await makeMonth();
 
-    const metrics = await dashboardMetrics(org.id);
+    const metrics = await dashboardMetrics(org.id, { kind: "all" });
 
     // Hoy es miércoles: la de las 18:00, no la del sábado.
     expect(metrics.today).toBe(TODAY);
@@ -131,7 +135,7 @@ describe("dashboardMetrics (HU7.1)", () => {
     expect(metrics.todayClasses[0].startTime).toBe("18:00");
 
     // Coteja contra la agenda real de la semana.
-    const week = await weekData(org.id, mondayOf(TODAY));
+    const week = await weekData(org.id, { kind: "all" }, mondayOf(TODAY));
     expect(metrics.todayClasses).toEqual(week.occurrences.filter((o) => o.date === TODAY));
   });
 
@@ -140,7 +144,10 @@ describe("dashboardMetrics (HU7.1)", () => {
     const { org } = await makeMonth();
     const otra = await makeOrg("Estudio Compás");
 
-    const [deMalena, deCompas] = [await dashboardMetrics(org.id), await dashboardMetrics(otra.id)];
+    const [deMalena, deCompas] = [
+      await dashboardMetrics(org.id, { kind: "all" }),
+      await dashboardMetrics(otra.id, { kind: "all" }),
+    ];
 
     expect(deMalena.pending).toBe(34000);
     expect(deCompas).toMatchObject({

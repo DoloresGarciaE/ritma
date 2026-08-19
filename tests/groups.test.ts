@@ -73,11 +73,10 @@ describe("listGroups / getGroup", () => {
     await makeGroup(org.id, "Activo");
     await makeGroup(org.id, "Dado de baja", { active: false });
 
-    expect((await listGroups(org.id)).map((g) => g.name)).toEqual(["Activo"]);
-    expect((await listGroups(org.id, { includeInactive: true })).map((g) => g.name)).toEqual([
-      "Activo",
-      "Dado de baja",
-    ]);
+    expect((await listGroups(org.id, { kind: "all" })).map((g) => g.name)).toEqual(["Activo"]);
+    expect(
+      (await listGroups(org.id, { kind: "all" }, { includeInactive: true })).map((g) => g.name),
+    ).toEqual(["Activo", "Dado de baja"]);
   });
 
   it("las franjas salen lunes-primero: el domingo (weekday 0) al final", async () => {
@@ -86,7 +85,7 @@ describe("listGroups / getGroup", () => {
     await makeSlot(org.id, group.id, { weekday: 0, startTime: "10:00" }); // domingo
     await makeSlot(org.id, group.id, { weekday: 1, startTime: "10:00" }); // lunes
 
-    const found = await getGroup(org.id, group.id);
+    const found = await getGroup(org.id, { kind: "all" }, group.id);
     expect(found?.slots.map((slot) => slot.weekday)).toEqual([1, 0]);
   });
 
@@ -95,9 +94,9 @@ describe("listGroups / getGroup", () => {
     const b = await makeOrg("Estudio B");
     const group = await makeGroup(org.id, "Árabe inicial", { defaultPrice: 18000 });
 
-    expect(await getGroup(b.id, group.id)).toBeNull();
+    expect(await getGroup(b.id, { kind: "all" }, group.id)).toBeNull();
 
-    const found = await getGroup(org.id, group.id);
+    const found = await getGroup(org.id, { kind: "all" }, group.id);
     expect(found?.defaultPrice).toBe(18000);
     expect(typeof found?.defaultPrice).toBe("number");
   });
@@ -116,7 +115,7 @@ describe("updateGroup — el diff de franjas protege las excepciones", () => {
   it("cambiar solo el nombre no toca las franjas ni sus excepciones", async () => {
     const { org, discipline, group, slot, session } = await groupWithSlotAndException();
 
-    await updateGroup(org.id, group.id, {
+    await updateGroup(org.id, { kind: "all" }, group.id, {
       name: "Árabe inicial (renombrado)",
       disciplineId: discipline.id,
       defaultPrice: 20000,
@@ -130,7 +129,7 @@ describe("updateGroup — el diff de franjas protege las excepciones", () => {
   it("cambiar la hora de una franja la actualiza in place: sus excepciones SOBREVIVEN", async () => {
     const { org, discipline, group, slot, session } = await groupWithSlotAndException();
 
-    await updateGroup(org.id, group.id, {
+    await updateGroup(org.id, { kind: "all" }, group.id, {
       name: "Árabe inicial",
       disciplineId: discipline.id,
       defaultPrice: 18000,
@@ -146,7 +145,7 @@ describe("updateGroup — el diff de franjas protege las excepciones", () => {
   it("cambiar el weekday es identidad nueva: franja recreada y excepciones viejas afuera", async () => {
     const { org, discipline, group, slot, session } = await groupWithSlotAndException();
 
-    await updateGroup(org.id, group.id, {
+    await updateGroup(org.id, { kind: "all" }, group.id, {
       name: "Árabe inicial",
       disciplineId: discipline.id,
       defaultPrice: 18000,
@@ -165,7 +164,7 @@ describe("updateGroup — el diff de franjas protege las excepciones", () => {
     const { org, discipline, group, slot, session } = await groupWithSlotAndException();
     const kept = await makeSlot(org.id, group.id, { weekday: 4, startTime: "18:00" });
 
-    await updateGroup(org.id, group.id, {
+    await updateGroup(org.id, { kind: "all" }, group.id, {
       name: "Árabe inicial",
       disciplineId: discipline.id,
       defaultPrice: 18000,
@@ -185,7 +184,7 @@ describe("updateGroup — el diff de franjas protege las excepciones", () => {
     const other = await makeGroup(org.id, "Ajeno");
     const otherSlot = await makeSlot(org.id, other.id, { weekday: 5, startTime: "20:00" });
 
-    await updateGroup(org.id, group.id, {
+    await updateGroup(org.id, { kind: "all" }, group.id, {
       name: "Mío",
       disciplineId: discipline.id,
       defaultPrice: 18000,
@@ -202,20 +201,22 @@ describe("updateGroup — el diff de franjas protege las excepciones", () => {
     expect(mine[0].startTime).toBe("09:00");
   });
 
-  it("updateGroup de un grupo ajeno rechaza (P2025) sin tocar nada", async () => {
+  it("updateGroup de un grupo ajeno rechaza sin tocar nada", async () => {
     const { org, discipline } = await makeOrgWithDiscipline();
     const b = await makeOrg("Estudio B");
     const bGroup = await makeGroup(b.id, "De B");
     const bSlot = await makeSlot(b.id, bGroup.id);
 
+    // Desde S7 el pre-chequeo de scope corta ANTES de la transacción, con el mismo
+    // mensaje genérico que toda referencia forjada (antes era el P2025 del update).
     await expect(
-      updateGroup(org.id, bGroup.id, {
+      updateGroup(org.id, { kind: "all" }, bGroup.id, {
         name: "Robado",
         disciplineId: discipline.id,
         defaultPrice: 1,
         slots: [],
       }),
-    ).rejects.toMatchObject({ code: "P2025" });
+    ).rejects.toThrow("El grupo no pertenece a esta organización.");
 
     const after = await db.classGroup.findUniqueOrThrow({ where: { id: bGroup.id } });
     expect(after.name).toBe("De B");

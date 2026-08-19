@@ -19,7 +19,7 @@ import {
   presignAttachmentView,
   validateAttachment,
 } from "@/lib/r2";
-import { requireMember } from "@/server/authz";
+import { requireScopedMember } from "@/server/authz";
 import { ChargeRuleError, updateChargeAmount, waiveCharge } from "@/server/services/charges";
 import {
   createEnrollment,
@@ -38,7 +38,12 @@ import {
   setPaymentAttachment,
   type PaymentContext,
 } from "@/server/services/payments";
-import { assertRole, ForbiddenError, type Actor } from "@/server/services/permissions";
+import {
+  assertRole,
+  ForbiddenError,
+  type Actor,
+  type DataScope,
+} from "@/server/services/permissions";
 
 import {
   bulkEnrollSchema,
@@ -57,16 +62,17 @@ import {
  * Server actions de cobranzas (S3).
  *
  * OJO: el layout de `(app)` NO protege las server actions — se invocan por POST directo,
- * sin pasar por él. Cada una revalida la membresía; el orgId sale SIEMPRE de la sesión.
+ * sin pasar por él. Cada una revalida membresía Y alcance (S7): el `scope` baja a los
+ * servicios, que para un TEACHER solo alcanzan a SUS grupos, alumnos, cuotas y pagos.
  * Editar el monto y exonerar son de owner/admin (Plan §4 "precios" + RN3): `assertRole`
  * acá, y la UI además no se los muestra a un teacher (§4.3) — nunca es la única guardia.
  */
-async function currentActor(): Promise<Actor> {
+async function currentScoped(): Promise<{ actor: Actor; scope: DataScope }> {
   const session = await requireSession();
   // Sin org activa no hay nada que autorizar: el mismo error controlado que "no sos
   // miembro" (un `!` acá dejaría pasar un null a Prisma, que revienta con un 500 crudo).
   if (!session.activeOrgId) throw new ForbiddenError("La sesión no tiene organización activa.");
-  return requireMember(session.activeOrgId);
+  return requireScopedMember(session.activeOrgId);
 }
 
 /** La deuda aparece en la ficha, en Cobranzas y en el detalle de sesión: se purgan las tres. */
@@ -85,7 +91,7 @@ export async function createEnrollmentAction(input: {
   price: number | null;
   startDate: string;
 }): Promise<EnrollFormState> {
-  const actor = await currentActor();
+  const { actor, scope } = await currentScoped();
 
   // Los errores se DEVUELVEN como estado: un throw se lo comería el error boundary y el
   // profe vería un crash en vez del mensaje en su campo (Componentes §4.1).
@@ -93,7 +99,7 @@ export async function createEnrollmentAction(input: {
   if (!parsed.success) return { errors: toEnrollFieldErrors(parsed.error) };
 
   try {
-    await createEnrollment(actor.orgId, parsed.data);
+    await createEnrollment(actor.orgId, scope, parsed.data);
   } catch (error) {
     // Regla de negocio alcanzable desde la UI (ya inscripto): mensaje, no crash. Una
     // referencia FORJADA (alumno/grupo ajeno) sí revienta al error boundary.
@@ -117,14 +123,14 @@ export async function enrollManyAction(input: {
   price: number | null;
   startDate: string;
 }): Promise<EnrollFormState & { count?: number }> {
-  const actor = await currentActor();
+  const { actor, scope } = await currentScoped();
 
   const parsed = bulkEnrollSchema.safeParse(input);
   if (!parsed.success) return { errors: toEnrollFieldErrors(parsed.error) };
 
   let count: number;
   try {
-    ({ count } = await enrollMany(actor.orgId, parsed.data));
+    ({ count } = await enrollMany(actor.orgId, scope, parsed.data));
   } catch (error) {
     // "Ya está en este grupo" es alcanzable desde la UI (dos pestañas, doble tap): vuelve
     // como mensaje. Una referencia FORJADA sigue reventando al error boundary.
@@ -145,13 +151,13 @@ export async function endEnrollmentAction(input: {
   /** Solo para revalidar su ficha; la autorización no lo usa. */
   studentId?: string;
 }): Promise<EnrollFormState> {
-  const actor = await currentActor();
+  const { actor, scope } = await currentScoped();
 
   const parsed = endEnrollmentSchema.safeParse(input);
   if (!parsed.success) return { formError: "Esa fecha no es válida." };
 
   try {
-    await endEnrollment(actor.orgId, parsed.data.enrollmentId, parsed.data.endDate);
+    await endEnrollment(actor.orgId, scope, parsed.data.enrollmentId, parsed.data.endDate);
   } catch (error) {
     if (error instanceof EnrollmentRuleError) return { formError: error.message };
     throw error;
@@ -167,7 +173,7 @@ export async function updateChargeAmountAction(input: {
   amount: number | null;
   studentId?: string;
 }): Promise<ChargeAmountFormState> {
-  const actor = await currentActor();
+  const { actor } = await currentScoped();
   assertRole(actor, ["OWNER", "ADMIN"]);
 
   const parsed = chargeAmountSchema.safeParse(input);
@@ -191,7 +197,7 @@ export async function waiveChargeAction(input: {
   chargeId: string;
   studentId?: string;
 }): Promise<ChargeAmountFormState> {
-  const actor = await currentActor();
+  const { actor } = await currentScoped();
   assertRole(actor, ["OWNER", "ADMIN"]);
 
   try {
@@ -215,8 +221,8 @@ export async function waiveChargeAction(input: {
  * abiertas. Lectura: no revalida caché.
  */
 export async function paymentContextAction(studentId: string): Promise<PaymentContext> {
-  const actor = await currentActor();
-  return paymentContext(actor.orgId, studentId);
+  const { actor, scope } = await currentScoped();
+  return paymentContext(actor.orgId, scope, studentId);
 }
 
 /** Registrar pago (HU4.3): pago + imputaciones + estados, transacción o nada. */
@@ -228,14 +234,14 @@ export async function createPaymentAction(input: {
   paidAt: string;
   allocations?: { chargeId: string; amount: number }[];
 }): Promise<PaymentFormState & { paymentId?: string; receiptShareUrl?: string }> {
-  const actor = await currentActor();
+  const { actor, scope } = await currentScoped();
 
   const parsed = paymentSchema.safeParse(input);
   if (!parsed.success) return { errors: toPaymentFieldErrors(parsed.error) };
 
   let payment: { id: string; receiptToken: string };
   try {
-    payment = await createPayment(actor.orgId, parsed.data);
+    payment = await createPayment(actor.orgId, scope, parsed.data);
   } catch (error) {
     // Invariantes alcanzables desde la UI (imputación editada contra datos que
     // cambiaron): mensaje, no crash. Referencias forjadas siguen reventando.
@@ -254,9 +260,9 @@ export async function deletePaymentAction(input: {
   paymentId: string;
   studentId?: string;
 }): Promise<{ formError?: string }> {
-  const actor = await currentActor();
+  const { actor, scope } = await currentScoped();
 
-  const { attachmentKey } = await deletePayment(actor.orgId, input.paymentId);
+  const { attachmentKey } = await deletePayment(actor.orgId, scope, input.paymentId);
 
   // El objeto de R2 se borra DESPUÉS de que la base confirmó, best-effort.
   if (attachmentKey && isR2Configured()) await deleteAttachment(attachmentKey);
@@ -276,15 +282,15 @@ export async function requestAttachmentUploadAction(input: {
   contentType: string;
   size: number;
 }): Promise<{ url: string } | { error: string }> {
-  const actor = await currentActor();
+  const { actor, scope } = await currentScoped();
 
   if (!isR2Configured()) return { error: "Los comprobantes no están habilitados." };
 
   const invalid = validateAttachment(input.contentType, input.size);
   if (invalid) return { error: invalid };
 
-  // El pago tiene que existir Y ser de esta org (withOrg filtra: uno ajeno da null).
-  const payment = await getPaymentAttachment(actor.orgId, input.paymentId);
+  // El pago tiene que existir Y ser de esta org y de este scope (uno ajeno da null).
+  const payment = await getPaymentAttachment(actor.orgId, scope, input.paymentId);
   if (!payment) return { error: "El pago no existe." };
 
   const key = paymentAttachmentKey(actor.orgId, input.paymentId);
@@ -299,11 +305,11 @@ export async function confirmAttachmentAction(input: {
   paymentId: string;
   studentId?: string;
 }): Promise<{ error?: string }> {
-  const actor = await currentActor();
+  const { actor, scope } = await currentScoped();
 
   if (!isR2Configured()) return { error: "Los comprobantes no están habilitados." };
 
-  const payment = await getPaymentAttachment(actor.orgId, input.paymentId);
+  const payment = await getPaymentAttachment(actor.orgId, scope, input.paymentId);
   if (!payment) return { error: "El pago no existe." };
 
   const key = paymentAttachmentKey(actor.orgId, input.paymentId);
@@ -316,7 +322,7 @@ export async function confirmAttachmentAction(input: {
     return { error: invalid };
   }
 
-  await setPaymentAttachment(actor.orgId, input.paymentId, key);
+  await setPaymentAttachment(actor.orgId, scope, input.paymentId, key);
   revalidateBilling(input.studentId);
   return {};
 }
@@ -330,10 +336,13 @@ export async function confirmAttachmentAction(input: {
 export async function logReminderAction(input: { studentId: string }): Promise<{
   error?: string;
 }> {
-  const actor = await currentActor();
+  const { actor, scope } = await currentScoped();
 
   try {
-    await logReminder(actor.orgId, { studentId: input.studentId, channel: "WHATSAPP_LINK" });
+    await logReminder(actor.orgId, scope, {
+      studentId: input.studentId,
+      channel: "WHATSAPP_LINK",
+    });
   } catch (error) {
     if (error instanceof ReminderRuleError) return { error: error.message };
     throw error;
@@ -349,7 +358,7 @@ export async function logReminderAction(input: { studentId: string }): Promise<{
  * Siempre sobre el período en curso de la org.
  */
 export async function sendEmailReminderAction(studentId: string): Promise<{ error?: string }> {
-  const actor = await currentActor();
+  const { actor, scope } = await currentScoped();
 
   if (!isEmailConfigured()) return { error: "El envío por email no está configurado." };
 
@@ -358,7 +367,7 @@ export async function sendEmailReminderAction(studentId: string): Promise<{ erro
 
   let draft: Awaited<ReturnType<typeof buildReminder>>;
   try {
-    draft = await buildReminder(actor.orgId, studentId, period);
+    draft = await buildReminder(actor.orgId, scope, studentId, period);
   } catch (error) {
     if (error instanceof ReminderRuleError) return { error: error.message };
     throw error;
@@ -379,7 +388,7 @@ export async function sendEmailReminderAction(studentId: string): Promise<{ erro
     return { error: "No se pudo enviar el email. Probá de nuevo." };
   }
 
-  await logReminder(actor.orgId, { studentId, channel: "EMAIL" });
+  await logReminder(actor.orgId, scope, { studentId, channel: "EMAIL" });
   revalidatePath(`/alumnos/${studentId}`);
   return {};
 }
@@ -392,9 +401,9 @@ export async function sendEmailReminderAction(studentId: string): Promise<{ erro
 export async function receiptLinkAction(
   paymentId: string,
 ): Promise<{ url: string } | { error: string }> {
-  const actor = await currentActor();
+  const { actor, scope } = await currentScoped();
 
-  const payment = await getReceiptToken(actor.orgId, paymentId);
+  const payment = await getReceiptToken(actor.orgId, scope, paymentId);
   if (!payment) return { error: "El pago no existe o no es de esta organización." };
 
   return { url: receiptUrl(payment.receiptToken) };
@@ -407,10 +416,10 @@ export async function receiptLinkAction(
 export async function revokeReceiptLinkAction(
   paymentId: string,
 ): Promise<{ url: string } | { error: string }> {
-  const actor = await currentActor();
+  const { actor, scope } = await currentScoped();
 
   try {
-    const { receiptToken } = await rotateReceiptToken(actor.orgId, paymentId);
+    const { receiptToken } = await rotateReceiptToken(actor.orgId, scope, paymentId);
     return { url: receiptUrl(receiptToken) };
   } catch {
     // P2025: el pago no es de esta org (o ya no existe). Mismo mensaje genérico.
@@ -422,11 +431,11 @@ export async function revokeReceiptLinkAction(
 export async function attachmentViewUrlAction(
   paymentId: string,
 ): Promise<{ url: string } | { error: string }> {
-  const actor = await currentActor();
+  const { actor, scope } = await currentScoped();
 
   if (!isR2Configured()) return { error: "Los comprobantes no están habilitados." };
 
-  const payment = await getPaymentAttachment(actor.orgId, paymentId);
+  const payment = await getPaymentAttachment(actor.orgId, scope, paymentId);
   if (!payment?.attachmentKey) return { error: "Este pago no tiene comprobante." };
 
   return { url: await presignAttachmentView(payment.attachmentKey) };

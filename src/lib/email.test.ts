@@ -1,6 +1,13 @@
 import { afterEach, describe, expect, it } from "vitest";
 
-import { buildReminderEmailHtml, escapeHtml, isEmailConfigured, sendReminderEmail } from "./email";
+import {
+  buildInvitationEmailHtml,
+  buildReminderEmailHtml,
+  escapeHtml,
+  isEmailConfigured,
+  sendInvitationEmail,
+  sendReminderEmail,
+} from "./email";
 
 /**
  * La guarda de env del email (patrón r2.test.ts): puras, sin red — el envío real no se
@@ -56,6 +63,36 @@ describe("buildReminderEmailHtml", () => {
     });
     expect(html).toContain("/brand/ritma-logotipo.png");
     expect(html.match(/<p /g)?.length).toBe(3); // 2 del mensaje + 1 del pie
+  });
+});
+
+describe("buildInvitationEmailHtml (S7)", () => {
+  it("nombra org y rol escapados, y lleva UN solo botón al link (Marca §9.3)", () => {
+    const html = buildInvitationEmailHtml({
+      orgName: 'Estudio "A&B"',
+      roleLabel: "Profe",
+      url: "https://ritma.com.ar/invitacion/abc123",
+    });
+    expect(html).toContain("Estudio &quot;A&amp;B&quot;");
+    expect(html).toContain("Profe");
+    expect(html).toContain('href="https://ritma.com.ar/invitacion/abc123"');
+    expect(html.match(/<a /g)?.length).toBe(1);
+    expect(html).toContain("/brand/ritma-logotipo.png");
+    expect(html).toContain("Aceptar invitación");
+  });
+});
+
+describe("sendInvitationEmail — fail-closed", () => {
+  it("sin la env, lanza sin intentar ninguna red", async () => {
+    delete process.env.RESEND_API_KEY;
+    await expect(
+      sendInvitationEmail({
+        to: "caro@example.com",
+        orgName: "Estudio Compás",
+        roleLabel: "Profe",
+        url: "https://ritma.com.ar/invitacion/abc123",
+      }),
+    ).rejects.toThrow(/RESEND_API_KEY/);
   });
 });
 

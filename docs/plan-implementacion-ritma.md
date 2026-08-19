@@ -169,8 +169,11 @@ ritma/
 ## 9. Fase 2 — Estudios (3–4 semanas · ~40–55 h)
 
 ### S7 — Roles e invitaciones
-- [ ] Invitación por link de un solo uso (HU1.3); membresías `admin`/`teacher`; revocación sin pérdida de historial.
-- [ ] Scoping de teacher aplicado a la UI: solo sus grupos, alumnos y pagos (Componentes §4.3) + ampliación de los tests de aislamiento por rol.
+- [x] Invitación por link de un solo uso (HU1.3); membresías `admin`/`teacher`; revocación sin pérdida de historial.
+- [x] Scoping de teacher aplicado a la UI: solo sus grupos, alumnos y pagos (Componentes §4.3) + ampliación de los tests de aislamiento por rol.
+      (Con `TeacherProfile` + `ClassGroup.teacherId` adelantados de S9 — ADR-004 — y la
+      asignación de profe a grupo en el form; el scoping vive en la capa de permisos de
+      F0.6, no en las pantallas: `tests/teacher-scope.test.ts` es la matriz rol×recurso.)
 
 ### S8 — Espacios y calendario del estudio
 - [ ] Modelo `Space`; asignación de salón a grupos; validación de superposición (HU3.1).

@@ -53,24 +53,24 @@ describe("listStudents — búsqueda (HU2.2)", () => {
     await makeStudent(org.id, "Ana Pena");
 
     // Cargado CON tilde, buscado SIN tilde.
-    expect((await listStudents(org.id, { query: "sofia" })).map((s) => s.name)).toEqual([
-      "Sofía Herrera",
-    ]);
+    expect(
+      (await listStudents(org.id, { kind: "all" }, { query: "sofia" })).map((s) => s.name),
+    ).toEqual(["Sofía Herrera"]);
     // Buscado CON tilde y en mayúsculas.
-    expect((await listStudents(org.id, { query: "SOFÍA" })).map((s) => s.name)).toEqual([
-      "Sofía Herrera",
-    ]);
+    expect(
+      (await listStudents(org.id, { kind: "all" }, { query: "SOFÍA" })).map((s) => s.name),
+    ).toEqual(["Sofía Herrera"]);
     // Cargado SIN ñ, buscado CON ñ.
-    expect((await listStudents(org.id, { query: "peña" })).map((s) => s.name)).toEqual([
-      "Ana Pena",
-    ]);
+    expect(
+      (await listStudents(org.id, { kind: "all" }, { query: "peña" })).map((s) => s.name),
+    ).toEqual(["Ana Pena"]);
   });
 
   it("busca también por apellido (substring, no solo prefijo)", async () => {
     const org = await makeOrg("Estudio Compás");
     await makeStudent(org.id, "Sofía Herrera");
 
-    expect(await listStudents(org.id, { query: "herr" })).toHaveLength(1);
+    expect(await listStudents(org.id, { kind: "all" }, { query: "herr" })).toHaveLength(1);
   });
 
   it("sin query, devuelve todo el padrón activo ordenado alfabéticamente", async () => {
@@ -78,7 +78,7 @@ describe("listStudents — búsqueda (HU2.2)", () => {
     await makeStudent(org.id, "Zulema Costa");
     await makeStudent(org.id, "Álvarez Bruno"); // con tilde: no debe irse al final
 
-    expect((await listStudents(org.id)).map((s) => s.name)).toEqual([
+    expect((await listStudents(org.id, { kind: "all" })).map((s) => s.name)).toEqual([
       "Álvarez Bruno",
       "Zulema Costa",
     ]);
@@ -90,13 +90,13 @@ describe("deactivateStudent — baja lógica (HU2.3, RN9)", () => {
     const org = await makeOrg("Estudio Compás");
     const student = await makeStudent(org.id, "Sofía Herrera");
 
-    await deactivateStudent(org.id, student.id);
+    await deactivateStudent(org.id, { kind: "all" }, student.id);
 
     // Ya no está entre los activos...
-    expect(await listStudents(org.id)).toHaveLength(0);
+    expect(await listStudents(org.id, { kind: "all" })).toHaveLength(0);
     // ...pero la fila sigue existiendo y la ficha se puede abrir.
     expect(await db.student.count()).toBe(1);
-    const ficha = await getStudent(org.id, student.id);
+    const ficha = await getStudent(org.id, { kind: "all" }, student.id);
     expect(ficha).toMatchObject({ name: "Sofía Herrera", active: false });
   });
 
@@ -104,11 +104,11 @@ describe("deactivateStudent — baja lógica (HU2.3, RN9)", () => {
     const org = await makeOrg("Estudio Compás");
     const student = await makeStudent(org.id, "Sofía Herrera");
 
-    await deactivateStudent(org.id, student.id);
-    expect(await listStudents(org.id, { includeInactive: true })).toHaveLength(1);
+    await deactivateStudent(org.id, { kind: "all" }, student.id);
+    expect(await listStudents(org.id, { kind: "all" }, { includeInactive: true })).toHaveLength(1);
 
-    await reactivateStudent(org.id, student.id);
-    expect(await listStudents(org.id)).toHaveLength(1);
+    await reactivateStudent(org.id, { kind: "all" }, student.id);
+    expect(await listStudents(org.id, { kind: "all" })).toHaveLength(1);
   });
 });
 
@@ -117,7 +117,7 @@ describe("updateStudent", () => {
     const org = await makeOrg("Estudio Compás");
     const student = await makeStudent(org.id, "Sofía Herrera");
 
-    await updateStudent(org.id, student.id, {
+    await updateStudent(org.id, { kind: "all" }, student.id, {
       name: "Sofía Gómez",
       phone: null,
       email: "sofi@example.com",
@@ -127,7 +127,7 @@ describe("updateStudent", () => {
     const after = await db.student.findUniqueOrThrow({ where: { id: student.id } });
     expect(after.searchName).toBe("sofia gomez");
     // Y por lo tanto se la encuentra por el apellido nuevo.
-    expect(await listStudents(org.id, { query: "gomez" })).toHaveLength(1);
+    expect(await listStudents(org.id, { kind: "all" }, { query: "gomez" })).toHaveLength(1);
   });
 });
 
@@ -137,7 +137,7 @@ describe("los servicios no cruzan organizaciones", () => {
     const b = await makeOrg("Estudio B");
     const bStudent = await makeStudent(b.id, "Malena Ríos");
 
-    expect(await getStudent(a.id, bStudent.id)).toBeNull();
+    expect(await getStudent(a.id, { kind: "all" }, bStudent.id)).toBeNull();
   });
 
   it("deactivateStudent sobre un alumno de otra org falla y no lo toca", async () => {
@@ -145,7 +145,9 @@ describe("los servicios no cruzan organizaciones", () => {
     const b = await makeOrg("Estudio B");
     const bStudent = await makeStudent(b.id, "Malena Ríos");
 
-    await expect(deactivateStudent(a.id, bStudent.id)).rejects.toMatchObject({ code: "P2025" });
+    await expect(deactivateStudent(a.id, { kind: "all" }, bStudent.id)).rejects.toMatchObject({
+      code: "P2025",
+    });
     expect((await db.student.findUniqueOrThrow({ where: { id: bStudent.id } })).active).toBe(true);
   });
 });

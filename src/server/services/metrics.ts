@@ -4,6 +4,7 @@ import { getOrgSettings } from "@/server/organizations";
 
 import { sumMoney, type Money } from "./billing";
 import { debtorsForPeriod } from "./charges";
+import { chargeScopeWhere, type DataScope } from "./permissions";
 import { weekData, type AgendaOccurrence } from "./sessions";
 
 /**
@@ -50,18 +51,25 @@ export type DashboardMetrics = {
   todayClasses: AgendaOccurrence[];
 };
 
-export async function dashboardMetrics(orgId: string): Promise<DashboardMetrics> {
+/**
+ * El `scope` (S7) baja a las TRES varas de una: para un teacher, "cobrado" son las
+ * imputaciones a SUS cuotas del período, pendiente/deudores salen del MISMO
+ * `debtorsForPeriod` scoped que su pantalla de Cobranzas, y "clases de hoy" del MISMO
+ * `weekData` scoped que su agenda — su Inicio cuadra con sus pantallas por construcción,
+ * igual que el de la dueña con las suyas.
+ */
+export async function dashboardMetrics(orgId: string, scope: DataScope): Promise<DashboardMetrics> {
   const settings = await getOrgSettings(orgId);
   const today = todayInTz(settings?.timezone ?? DEFAULT_TIMEZONE);
   const period = periodOf(today);
 
   const [allocations, debt, week] = await Promise.all([
     withOrg(orgId).paymentAllocation.findMany({
-      where: { charge: { period } },
+      where: { charge: { AND: [{ period }, chargeScopeWhere(scope)] } },
       select: { amount: true },
     }),
-    debtorsForPeriod(orgId, period),
-    weekData(orgId, mondayOf(today)),
+    debtorsForPeriod(orgId, scope, period),
+    weekData(orgId, scope, mondayOf(today)),
   ]);
 
   return {

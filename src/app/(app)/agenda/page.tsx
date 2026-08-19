@@ -2,9 +2,16 @@ import type { Metadata } from "next";
 
 import { requireSession } from "@/lib/auth";
 import { DEFAULT_TIMEZONE, isCivilDate, mondayOf, todayInTz } from "@/lib/dates";
-import { getDisciplines, getOrgSettings } from "@/server/organizations";
+import { requireScopedMember } from "@/server/authz";
+import {
+  getDisciplines,
+  getOrgSettings,
+  getShellOrganization,
+  listTeacherOptions,
+} from "@/server/organizations";
 import { activeRosterByGroup } from "@/server/services/enrollments";
 import { listGroups } from "@/server/services/groups";
+import { can } from "@/server/services/permissions";
 import { weekData } from "@/server/services/sessions";
 import { listStudents } from "@/server/services/students";
 
@@ -33,8 +40,17 @@ export default async function AgendaPage({
 
   const first = (value: string | string[] | undefined) => (Array.isArray(value) ? value[0] : value);
 
-  const settings = await getOrgSettings(orgId);
+  const [{ actor, scope }, org, settings] = await Promise.all([
+    requireScopedMember(orgId),
+    getShellOrganization(orgId),
+    getOrgSettings(orgId),
+  ]);
   const today = todayInTz(settings?.timezone ?? DEFAULT_TIMEZONE);
+
+  // §4.3: lo que el rol no puede hacer no se muestra. `manage` gobierna crear grupos,
+  // el switch de activo, el precio y el selector de profe; el server valida igual.
+  const manage = can(actor, "org:viewAll");
+  const isStudio = org?.type === "STUDIO";
 
   const diaParam = first(params.dia);
   const semanaParam = first(params.semana);
@@ -49,12 +65,13 @@ export default async function AgendaPage({
     ? (day ?? (mondayOf(today) === weekStart ? today : weekStart))
     : null;
 
-  const [{ occurrences }, groups, disciplines, students, roster] = await Promise.all([
-    weekData(orgId, weekStart),
-    listGroups(orgId, { includeInactive: true }),
+  const [{ occurrences }, groups, disciplines, students, roster, teachers] = await Promise.all([
+    weekData(orgId, scope, weekStart),
+    listGroups(orgId, scope, { includeInactive: true }),
     getDisciplines(orgId),
-    listStudents(orgId),
-    activeRosterByGroup(orgId, today),
+    listStudents(orgId, scope),
+    activeRosterByGroup(orgId, scope, today),
+    manage && isStudio ? listTeacherOptions(orgId) : Promise.resolve([]),
   ]);
 
   // La app bar la compone la screen (client): su acción "Grupos" abre un sheet.
@@ -68,7 +85,10 @@ export default async function AgendaPage({
       disciplines={disciplines}
       students={students.map((s) => ({ id: s.id, name: s.name }))}
       roster={roster}
-      autoOpenCreate={first(params.nuevo) === "grupo"}
+      autoOpenCreate={manage && first(params.nuevo) === "grupo"}
+      manage={manage}
+      isStudio={isStudio}
+      teachers={teachers}
     />
   );
 }

@@ -63,6 +63,11 @@ const SCOPE: Record<Prisma.ModelName, Scope> = {
   // Membership tiene orgId y es dato del tenant. La lee la capa de permisos
   // (requireMember) a través de withOrg; el arranque de sesión la lee cruda en auth.ts.
   Membership: "orgId",
+  // S7: el equipo también es dato del tenant. La ÚNICA lectura de Invitation fuera de
+  // withOrg es la puerta pública por token (server/public/invitations.ts), como el
+  // comprobante.
+  TeacherProfile: "orgId",
+  Invitation: "orgId",
   User: "global",
   Session: "global",
   Account: "global",
@@ -203,7 +208,13 @@ export function forPublic() {
 }
 
 /**
- * Crea una organización con su dueño y sus disciplinas en UNA transacción.
+ * Crea una organización con su dueño, sus disciplinas y el PERFIL DOCENTE del dueño en
+ * UNA transacción.
+ *
+ * El perfil (S7): en una INDEPENDENT el owner ES el único profe (sus grupos se le
+ * auto-asignan al crearlos); en un STUDIO la dueña suele dictar también — sin perfil no
+ * habría a quién asignarle grupos hasta que llegue la primera invitación. Kind
+ * OWNER_TEACHER en ambos casos; si no dicta, el perfil queda sin grupos y no molesta.
  *
  * No puede pasar por `withOrg`: todavía no hay `orgId` (se está creando el tenant). Vive
  * acá, con el `db` crudo, por la misma razón que el seed. Una escritura anidada es un
@@ -212,6 +223,8 @@ export function forPublic() {
  */
 export function createOrganizationWithOwner(input: {
   ownerId: string;
+  /** Para el `displayName` del perfil docente del owner (S7). */
+  ownerName: string;
   name: string;
   type: OrgType;
   disciplines: string[];
@@ -221,6 +234,13 @@ export function createOrganizationWithOwner(input: {
       name: input.name,
       type: input.type,
       memberships: { create: { userId: input.ownerId, role: "OWNER" } },
+      teachers: {
+        create: {
+          membershipUserId: input.ownerId,
+          displayName: input.ownerName,
+          kind: "OWNER_TEACHER",
+        },
+      },
       disciplines: {
         createMany: {
           data: input.disciplines.map((name) => ({ name })),

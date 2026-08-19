@@ -19,12 +19,18 @@ export function GroupsSheet({
   onOpenChange,
   groups,
   onEdit,
+  manage,
+  isStudio,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   groups: GroupListItem[];
   onEdit: (group: GroupListItem) => void;
+  /** Owner/admin (S7): solo ellos ven el indicador "Sin profe asignado". */
+  manage: boolean;
+  isStudio: boolean;
 }) {
+  const showTeacher = manage && isStudio;
   return (
     <ActionSheet
       open={open}
@@ -65,6 +71,13 @@ export function GroupsSheet({
                           .join(" · ")}`
                       : ""}
                   </span>
+                  {/* Quién lo dicta (S7, solo estudio): el "sin profe asignado" es un
+                      pendiente de gestión y solo lo ven quienes pueden resolverlo. */}
+                  {showTeacher ? (
+                    <span className="truncate text-xs text-text-secondary">
+                      {group.teacher ? group.teacher.displayName : "Sin profe asignado"}
+                    </span>
+                  ) : null}
                 </span>
                 <ChevronRight aria-hidden className="size-5 shrink-0 text-text-muted" />
               </button>

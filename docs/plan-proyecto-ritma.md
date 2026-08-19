@@ -420,6 +420,13 @@ Toda tabla lleva además `createdAt` (`@default(now())`) y `updatedAt` (`@update
 4. **`sentAt` es un instante**, no fecha civil (`@db.Date`): es un evento, no un dato de negocio con "día de la org" — la ficha lo convierte a fecha civil de la org al mostrar (RN10). `chargeId` queda null en el MVP (el recordatorio es por la deuda del período, no por cuota).
 5. **`ReminderLog` entra al aislamiento** con la convención de §7 (orgId + índices `[orgId, studentId, sentAt]`) y su bloque en la suite org×org, como todo modelo de negocio.
 
+**Nota S7 (al construir roles e invitaciones).** Cuatro decisiones sobre el borrador, ya reflejadas arriba:
+
+1. **`TeacherProfile` y `ClassGroup.teacherId` se adelantaron de S9 a S7** (ADR-004): sin la FK, el scoping de teacher que S7 promete no tiene contra qué filtrar. `membershipUserId` es **nullable** con unique `[orgId, membershipUserId]`: revocar acceso (HU1.3) borra la `Membership` y desvincula el perfil — sus grupos y su historial quedan intactos, re-vinculables. `Agreement`, `Settlement` y los campos del pago siguen en S9.
+2. **Modelo `Invitation`** (nuevo; propuesto en el reporte de S7 y aceptado con el merge): `orgId`, `email` opcional (canal de envío, NO restringe quién acepta: el link es la llave), `role` (solo ADMIN/TEACHER — OWNER nace con la org), `token` opaco `@unique` (24 bytes, el patrón del comprobante S5), `expiresAt` (7 días), `usedAt` (un solo uso). **Revocar = borrar la fila** (un token que no está en la base no autoriza nada; no hay estado "revocada"); regenerar = rotar el token. Aceptar crea `Membership` + `TeacherProfile` (kind STAFF) en una transacción.
+3. **El backfill de la migración** dio a toda org existente el perfil de su OWNER (`OWNER_TEACHER`) y asignó los grupos SOLO en las INDEPENDENT; en un STUDIO quedaron "sin profe asignado" hasta que un admin los asigne. `createOrganizationWithOwner` crea el perfil del owner desde entonces.
+4. **El scope de teacher quedó cableado a datos** (la regla transversal de §4): grupos por `teacherId`, alumnos por inscripción en ellos (abiertas o cerradas: el historial de una ex-alumna sigue siendo del profe), cuotas por sus inscripciones, pagos por sus alumnos (el pago es plata del alumno con la org: en un compartido lo ven ambos profes). Matriz rol×recurso en `tests/teacher-scope.test.ts`.
+
 ## 8. Reglas de negocio
 
 **RN1 — Generación de cuotas.** El día 1 de cada mes, un cron crea una cuota `pendiente` por cada inscripción mensual activa, con `amount = enrollment.price` y `dueDate = día de vencimiento de la org`. La cuota es única por (inscripción, período).
@@ -429,6 +436,8 @@ Toda tabla lleva además `createdAt` (`@default(now())`) y `updatedAt` (`@update
 **RN3 — Estados de cuota.** `pendiente` → (`parcial` si tiene imputaciones menores al total) → `pagada` cuando la suma de imputaciones iguala el monto. `pendiente`/`parcial` pasan a `vencida` cuando `hoy > dueDate` (cron diario); una cuota vencida que se paga pasa directo a `pagada`. `exonerada` es un cierre manual sin pago (beca, canje) y requiere rol admin.
 
 **RN4 — Imputación de pagos.** Un pago se imputa automáticamente a las cuotas impagas del alumno, de la más antigua a la más nueva. La imputación es editable antes de cerrar la liquidación del período. El excedente queda como saldo a favor y se imputa automáticamente a la próxima cuota generada.
+
+> **Aclaración S7 (decisión de sesión, ago 2026).** En un estudio, cuando el pago lo registra un **teacher**, la imputación —automática y manual— corre solo sobre las cuotas de **sus** inscripciones (antigua-primero dentro de ese subconjunto): un alumno compartido entre dos profes jamás ve el pago de uno aterrizar en la cuota del otro que el teacher ni puede ver. El excedente queda como saldo a favor del alumno **con la organización**, y su aplicación nocturna (el cron de generación) sigue siendo org-completa: ahí no hay actor.
 
 **RN5 — Quién recibió la plata.** Todo pago en un estudio registra `receivedBy`: `estudio` o `profe`. Esto no cambia el estado de cuenta del alumno (su cuota queda pagada igual), pero sí el resultado de la liquidación.
 

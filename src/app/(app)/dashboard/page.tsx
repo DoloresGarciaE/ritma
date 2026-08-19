@@ -4,9 +4,11 @@ import { CalendarPlus } from "lucide-react";
 import { MetricCard } from "@/components/ui/card";
 import { requireSession } from "@/lib/auth";
 import { formatFullDayDate, formatMoney, formatPeriod } from "@/lib/format";
+import { requireScopedMember } from "@/server/authz";
 import { getShellOrganization } from "@/server/organizations";
 import { listGroups } from "@/server/services/groups";
 import { dashboardMetrics } from "@/server/services/metrics";
+import { can } from "@/server/services/permissions";
 
 import { AppBar } from "../_components/app-bar";
 import { EmptyState } from "../_components/empty-state";
@@ -27,29 +29,37 @@ export default async function DashboardPage() {
   const session = await requireSession();
   const orgId = session.activeOrgId!;
 
-  const [org, groups] = await Promise.all([
+  const [org, { actor, scope }] = await Promise.all([
     getShellOrganization(orgId),
-    // Vacío = org recién creada, SIN grupos (ni inactivos): la guía de arranque.
-    listGroups(orgId, { includeInactive: true }),
+    requireScopedMember(orgId),
   ]);
 
+  // Vacío = sin grupos EN EL SCOPE (ni inactivos). Para la dueña es la org recién
+  // creada (guía de arranque); para un teacher (S7) es "todavía no te asignaron nada".
+  const groups = await listGroups(orgId, scope, { includeInactive: true });
+
   if (groups.length === 0) {
+    const manage = can(actor, "org:viewAll");
     return (
       <>
         <AppBar title={org?.name ?? "Inicio"} />
 
         <EmptyState
           icon={CalendarPlus}
-          title="Empecemos por tu primer grupo"
-          description="Un grupo es una clase con su horario y su disciplina. Después sumás alumnos y los inscribís: la agenda, las cuotas y este tablero se llenan solos."
+          title={manage ? "Empecemos por tu primer grupo" : "Tu tablero está en camino"}
+          description={
+            manage
+              ? "Un grupo es una clase con su horario y su disciplina. Después sumás alumnos y los inscribís: la agenda, las cuotas y este tablero se llenan solos."
+              : "Cuando te asignen un grupo vas a ver acá tus clases, tus alumnos y tus cobranzas."
+          }
           // `?nuevo=grupo` abre el alta directo (S2): un tap menos que aterrizar en la agenda.
-          cta={{ label: "Creá tu primer grupo", href: "/agenda?nuevo=grupo" }}
+          cta={manage ? { label: "Creá tu primer grupo", href: "/agenda?nuevo=grupo" } : undefined}
         />
       </>
     );
   }
 
-  const metrics = await dashboardMetrics(orgId);
+  const metrics = await dashboardMetrics(orgId, scope);
   const periodLabel = formatPeriod(metrics.period).toLowerCase();
 
   return (

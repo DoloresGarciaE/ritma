@@ -246,6 +246,37 @@ async function main() {
       }
     }
 
+    // Perfiles docentes y asignación (S7). Las owners dictan (OWNER_TEACHER) y Sofía es
+    // el STAFF del estudio: en la independiente TODOS los grupos son de Malena (el auto
+    // del alcance 4); en el estudio, Sofía tiene "Contemporáneo juvenil", Carla "Árabe
+    // avanzado" y "Canto grupal", y "Funcional mañanas" queda SIN profe a propósito —
+    // el indicador "sin profe asignado" (owner/admin) necesita datos para probarse.
+    const TEACHER_ASSIGNMENTS: [
+      orgId: string,
+      email: string,
+      kind: "OWNER_TEACHER" | "STAFF",
+      groups: string[] | "all",
+    ][] = [
+      [ORG_INDEPENDIENTE, "malena@example.com", "OWNER_TEACHER", "all"],
+      [ORG_ESTUDIO, "carla@example.com", "OWNER_TEACHER", ["Árabe avanzado", "Canto grupal"]],
+      [ORG_ESTUDIO, "sofia@example.com", "STAFF", ["Contemporáneo juvenil"]],
+    ];
+
+    for (const [orgId, email, kind, groupNames] of TEACHER_ASSIGNMENTS) {
+      const user = await db.user.findUniqueOrThrow({ where: { email } });
+
+      const profile = await db.teacherProfile.upsert({
+        where: { orgId_membershipUserId: { orgId, membershipUserId: user.id } },
+        update: { displayName: user.name, kind },
+        create: { orgId, membershipUserId: user.id, displayName: user.name, kind },
+      });
+
+      await db.classGroup.updateMany({
+        where: { orgId, ...(groupNames === "all" ? {} : { name: { in: groupNames } }) },
+        data: { teacherId: profile.id },
+      });
+    }
+
     // Excepciones de ESTA semana, con los helpers reales del dominio: el DoD de S2 es
     // "la semana del profe se ve correcta, feriado cancelado incluido". El upsert por
     // [slotId, date] las hace idempotentes; corridas en semanas distintas van dejando
@@ -497,14 +528,18 @@ async function main() {
         allocations = [{ chargeId: dropInCharge.id, amount: input.amount }];
       }
 
-      await createPayment(orgId, {
-        studentId: student.id,
-        amount: input.amount,
-        method: input.method,
-        receivedBy: input.receivedBy,
-        paidAt: addDays(todayAr, -input.daysAgo),
-        allocations,
-      });
+      await createPayment(
+        orgId,
+        { kind: "all" },
+        {
+          studentId: student.id,
+          amount: input.amount,
+          method: input.method,
+          receivedBy: input.receivedBy,
+          paidAt: addDays(todayAr, -input.daysAgo),
+          allocations,
+        },
+      );
     }
 
     await seedPayment(ORG_INDEPENDIENTE, "Sofía Herrera", {
