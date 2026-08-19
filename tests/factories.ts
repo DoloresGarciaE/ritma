@@ -61,11 +61,7 @@ export async function makeGroup(
 }
 
 /** Un salón del estudio, por el camino crudo (S8). */
-export async function makeSpace(
-  orgId: string,
-  name: string,
-  extra: { active?: boolean } = {},
-) {
+export async function makeSpace(orgId: string, name: string, extra: { active?: boolean } = {}) {
   return db.space.create({
     data: { orgId, name, active: extra.active ?? true },
   });

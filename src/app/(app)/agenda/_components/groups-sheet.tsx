@@ -71,11 +71,15 @@ export function GroupsSheet({
                           .join(" · ")}`
                       : ""}
                   </span>
-                  {/* Quién lo dicta (S7, solo estudio): el "sin profe asignado" es un
-                      pendiente de gestión y solo lo ven quienes pueden resolverlo. */}
+                  {/* Quién lo dicta y dónde (S7/S8, solo estudio): el "sin profe
+                      asignado" es un pendiente de gestión y solo lo ven quienes pueden
+                      resolverlo; el salón, si tiene. */}
                   {showTeacher ? (
                     <span className="truncate text-xs text-text-secondary">
-                      {group.teacher ? group.teacher.displayName : "Sin profe asignado"}
+                      {[
+                        group.teacher ? group.teacher.displayName : "Sin profe asignado",
+                        ...(group.space ? [group.space.name] : []),
+                      ].join(" · ")}
                     </span>
                   ) : null}
                 </span>

@@ -12,6 +12,7 @@ import {
   setGroupActive,
   updateGroup,
 } from "@/server/services/groups";
+import { detectGroupOverlaps, overlapMessage } from "@/server/services/overlaps";
 import { cancelSession, rescheduleSession, restoreSession } from "@/server/services/sessions";
 
 import {
@@ -60,12 +61,19 @@ export type GroupActionInput = {
   defaultPrice: number | null;
   /** Profe a cargo (S7, solo STUDIO): `null` = sin asignar; ausente = no tocar. */
   teacherId?: string | null;
+  /** Salón (S8, solo STUDIO): mismas convenciones que teacherId. */
+  spaceId?: string | null;
   /** Franjas multi-día de UI: la action las EXPANDE a un slot por día (lib/franjas). */
   franjas: {
     days: { weekday: number; slotId?: string }[];
     startTime: string;
     durationMin: number | null;
   }[];
+  /**
+   * S8: el profe YA VIO los solapamientos y decidió seguir. Sin esto, un conflicto
+   * detectado devuelve `overlaps` y NO guarda — advertencia/confirmación, nunca bloqueo.
+   */
+  confirmOverlaps?: boolean;
 };
 
 /**
@@ -82,7 +90,28 @@ export async function createGroupAction(input: GroupActionInput): Promise<GroupF
   if (!parsed.success) return { errors: toGroupFieldErrors(parsed.error) };
 
   const { franjas, ...groupData } = parsed.data;
-  await createGroup(orgId, { ...groupData, slots: expandFranjas(franjas) });
+  const slots = expandFranjas(franjas);
+
+  // Solapamientos (S8): salón/profe/sin-salón, antes de escribir. En una INDEPENDENT
+  // el detector devuelve vacío (regla dura: ni un pixel nuevo ahí).
+  if (!input.confirmOverlaps) {
+    const found = await detectGroupOverlaps(
+      orgId,
+      { kind: "all" },
+      {
+        slots,
+        spaceId: groupData.spaceId ?? null,
+        teacherId: groupData.teacherId ?? null,
+      },
+    );
+    if (found.length > 0) {
+      return {
+        overlaps: found.map((o) => ({ severity: o.severity, message: overlapMessage(o) })),
+      };
+    }
+  }
+
+  await createGroup(orgId, { ...groupData, slots });
 
   revalidateAgenda();
   return {};
@@ -107,7 +136,26 @@ export async function updateGroupAction(
   if (!parsed.success) return { errors: toGroupFieldErrors(parsed.error) };
 
   const { franjas, ...groupData } = parsed.data;
-  await updateGroup(orgId, scope, groupId, { ...groupData, slots: expandFranjas(franjas) });
+  const slots = expandFranjas(franjas);
+
+  // Solapamientos (S8): `undefined` hereda el salón/profe actuales del grupo — cubre la
+  // edición sin selector Y al teacher, cuyos valores el servicio fuerza igual. Para un
+  // teacher, el vecino ajeno participa de la física pero llega SIN nombre (S7).
+  if (!input.confirmOverlaps) {
+    const found = await detectGroupOverlaps(orgId, scope, {
+      groupId,
+      slots,
+      spaceId: groupData.spaceId,
+      teacherId: groupData.teacherId,
+    });
+    if (found.length > 0) {
+      return {
+        overlaps: found.map((o) => ({ severity: o.severity, message: overlapMessage(o) })),
+      };
+    }
+  }
+
+  await updateGroup(orgId, scope, groupId, { ...groupData, slots });
 
   revalidateAgenda();
   return {};

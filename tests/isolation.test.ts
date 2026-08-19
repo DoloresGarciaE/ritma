@@ -1158,9 +1158,9 @@ describe("aislamiento org × org — Space", () => {
     const b = await makeOrg("Estudio B");
     const bSpace = await makeSpace(b.id, "Salón ajeno");
 
-    await expect(
-      withOrg(a.id).space.delete({ where: { id: bSpace.id } }),
-    ).rejects.toMatchObject({ code: "P2025" });
+    await expect(withOrg(a.id).space.delete({ where: { id: bSpace.id } })).rejects.toMatchObject({
+      code: "P2025",
+    });
 
     await withOrg(a.id).space.deleteMany({});
     expect(await db.space.count({ where: { orgId: b.id } })).toBe(1);

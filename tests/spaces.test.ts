@@ -143,11 +143,15 @@ describe("detectGroupOverlaps — el ensamblado con datos reales", () => {
     const inactive = await makeGroup(org.id, "Viejo", { spaceId: space.id, active: false });
     await makeSlot(org.id, inactive.id, { weekday: 2, startTime: "18:00", durationMin: 60 });
 
-    const overlaps = await detectGroupOverlaps(org.id, { kind: "all" }, {
-      slots: [{ weekday: 2, startTime: "18:30", durationMin: 60 }],
-      spaceId: space.id,
-      teacherId: null,
-    });
+    const overlaps = await detectGroupOverlaps(
+      org.id,
+      { kind: "all" },
+      {
+        slots: [{ weekday: 2, startTime: "18:30", durationMin: 60 }],
+        spaceId: space.id,
+        teacherId: null,
+      },
+    );
 
     expect(overlaps).toEqual([
       expect.objectContaining({
@@ -170,10 +174,14 @@ describe("detectGroupOverlaps — el ensamblado con datos reales", () => {
     await makeSlot(org.id, other.id, { weekday: 2, startTime: "19:00", durationMin: 60 });
 
     // Estirar mi clase hasta 19:30 pisa al vecino EN MI MISMO salón (heredado).
-    const overlaps = await detectGroupOverlaps(org.id, { kind: "all" }, {
-      groupId: mine.id,
-      slots: [{ weekday: 2, startTime: "18:00", durationMin: 90 }],
-    });
+    const overlaps = await detectGroupOverlaps(
+      org.id,
+      { kind: "all" },
+      {
+        groupId: mine.id,
+        slots: [{ weekday: 2, startTime: "18:00", durationMin: 90 }],
+      },
+    );
 
     expect(overlaps).toEqual([
       expect.objectContaining({ kind: "space", groupName: "Vecino", from: "19:00", to: "19:30" }),
@@ -218,11 +226,15 @@ describe("detectGroupOverlaps — el ensamblado con datos reales", () => {
     await makeSlot(org.id, g1.id, { weekday: 2, startTime: "18:00", durationMin: 60 });
 
     // Mismo profe, mismo horario: en un estudio sería fuerte; acá ni un pixel.
-    const overlaps = await detectGroupOverlaps(org.id, { kind: "all" }, {
-      slots: [{ weekday: 2, startTime: "18:00", durationMin: 60 }],
-      spaceId: null,
-      teacherId: profile.id,
-    });
+    const overlaps = await detectGroupOverlaps(
+      org.id,
+      { kind: "all" },
+      {
+        slots: [{ weekday: 2, startTime: "18:00", durationMin: 60 }],
+        spaceId: null,
+        teacherId: profile.id,
+      },
+    );
     expect(overlaps).toEqual([]);
   });
 });

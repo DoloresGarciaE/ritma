@@ -7,6 +7,7 @@ import {
   getDisciplines,
   getOrgSettings,
   getShellOrganization,
+  listActiveSpaces,
   listTeacherOptions,
 } from "@/server/organizations";
 import { activeRosterByGroup } from "@/server/services/enrollments";
@@ -54,25 +55,41 @@ export default async function AgendaPage({
 
   const diaParam = first(params.dia);
   const semanaParam = first(params.semana);
-  const isDayView = first(params.vista) === "dia";
+  const vistaParam = first(params.vista);
+  // "salones" (S8) existe solo en un ESTUDIO: en una INDEPENDENT el param se ignora y
+  // cae a la semana — ni un pixel nuevo ahí (regla dura del ticket).
+  const view: "week" | "day" | "salones" =
+    vistaParam === "dia" ? "day" : vistaParam === "salones" && isStudio ? "salones" : "week";
 
-  // `?dia` manda sobre `?semana`: la vista día define su propia semana.
+  // `?dia` manda sobre `?semana`: las vistas de día definen su propia semana.
   const day = diaParam && isCivilDate(diaParam) ? diaParam : undefined;
   const weekAnchor = day ?? (semanaParam && isCivilDate(semanaParam) ? semanaParam : today);
   const weekStart = mondayOf(weekAnchor);
 
-  const selectedDay = isDayView
-    ? (day ?? (mondayOf(today) === weekStart ? today : weekStart))
-    : null;
+  const selectedDay =
+    view !== "week" ? (day ?? (mondayOf(today) === weekStart ? today : weekStart)) : null;
 
-  const [{ occurrences }, groups, disciplines, students, roster, teachers] = await Promise.all([
-    weekData(orgId, scope, weekStart),
-    listGroups(orgId, scope, { includeInactive: true }),
-    getDisciplines(orgId),
-    listStudents(orgId, scope),
-    activeRosterByGroup(orgId, scope, today),
-    manage && isStudio ? listTeacherOptions(orgId) : Promise.resolve([]),
-  ]);
+  const [{ occurrences }, groups, disciplines, students, roster, teachers, spaces] =
+    await Promise.all([
+      weekData(orgId, scope, weekStart),
+      listGroups(orgId, scope, { includeInactive: true }),
+      getDisciplines(orgId),
+      listStudents(orgId, scope),
+      activeRosterByGroup(orgId, scope, today),
+      manage && isStudio ? listTeacherOptions(orgId) : Promise.resolve([]),
+      // Los salones los ve cualquier miembro del ESTUDIO (columnas del calendario);
+      // el selector del form los usa solo con `manage`.
+      isStudio ? listActiveSpaces(orgId) : Promise.resolve([]),
+    ]);
+
+  // El filtro por profe del calendario (S8): solo owner/admin, y solo un id REAL de la
+  // org — un param forjado o ajeno cae en silencio a "todos" (patrón del ?grupo de
+  // Cobranzas). Para un teacher no existe: su scope ya filtra.
+  const profeParam = first(params.profe);
+  const profe =
+    view === "salones" && manage && teachers.some((teacher) => teacher.id === profeParam)
+      ? (profeParam ?? null)
+      : null;
 
   // La app bar la compone la screen (client): su acción "Grupos" abre un sheet.
   return (
@@ -80,6 +97,8 @@ export default async function AgendaPage({
       weekStart={weekStart}
       today={today}
       selectedDay={selectedDay}
+      view={view}
+      profe={profe}
       occurrences={occurrences}
       groups={groups}
       disciplines={disciplines}
@@ -89,6 +108,7 @@ export default async function AgendaPage({
       manage={manage}
       isStudio={isStudio}
       teachers={teachers}
+      spaces={spaces}
     />
   );
 }

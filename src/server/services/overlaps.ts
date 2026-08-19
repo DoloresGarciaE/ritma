@@ -1,7 +1,7 @@
 import { withOrg } from "@/lib/db";
 import { fullWeekday } from "@/lib/format";
 
-import { groupScopeWhere, type DataScope } from "./permissions";
+import type { DataScope } from "./permissions";
 
 /**
  * Solapamientos de horarios (S8, HU3.1). El ticket original de S2 los dejó pasar a

@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  findScheduleOverlaps,
-  overlapMessage,
-  type OverlapNeighbor,
-} from "./overlaps";
+import { findScheduleOverlaps, overlapMessage, type OverlapNeighbor } from "./overlaps";
 
 /**
  * El núcleo puro de solapamientos (S8): la matriz salón/profe/sin-salón del ticket,

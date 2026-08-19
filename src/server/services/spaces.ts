@@ -33,9 +33,7 @@ export class SpaceRuleError extends Error {
 /** P2002 sin importar la clase de error (mismo duck-typing que usan los tests). */
 function isUniqueViolation(error: unknown): boolean {
   return (
-    typeof error === "object" &&
-    error !== null &&
-    (error as { code?: string }).code === "P2002"
+    typeof error === "object" && error !== null && (error as { code?: string }).code === "P2002"
   );
 }
 
