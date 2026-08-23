@@ -1,5 +1,6 @@
 import { withOrg, type OrgClient } from "@/lib/db";
 import { civilToDb, dbToCivil, todayInTz } from "@/lib/dates";
+import { formatPeriod } from "@/lib/format";
 import { generateReceiptToken } from "@/lib/receipts";
 
 import {
@@ -337,8 +338,9 @@ export async function deletePayment(
       });
       if (!payment) throw new Error("El pago no pertenece a esta organización.");
       if (payment.settlement) {
+        // §4.2: el período siempre con nombre ("Julio 2026"), nunca el crudo "2026-07".
         throw new PaymentRuleError(
-          `Este pago está en la liquidación cerrada de ${payment.settlement.period}: no se puede eliminar.`,
+          `Este pago está en la liquidación cerrada de ${formatPeriod(payment.settlement.period)}: no se puede eliminar.`,
         );
       }
 

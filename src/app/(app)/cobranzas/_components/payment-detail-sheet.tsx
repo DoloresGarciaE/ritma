@@ -165,8 +165,9 @@ export function PaymentDetailSheet({
       }
       close();
       if (result.formError) {
-        // RN12 (S9): un pago congelado en una liquidación cerrada se niega CON el período.
-        toast.error(result.formError);
+        // RN12 (S9): un pago congelado en una liquidación cerrada se niega CON el
+        // período. El motivo completo va en la descripción: el título trunca (§3.9).
+        toast.error("No se pudo eliminar el pago", { description: result.formError });
         return;
       }
       toast.notify("Pago eliminado. Las cuotas volvieron a su estado.");

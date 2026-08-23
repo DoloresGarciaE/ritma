@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { addMonths, periodOf, todayInTz, DEFAULT_TIMEZONE } from "@/lib/dates";
 import { db } from "@/lib/db";
+import { formatPeriod } from "@/lib/format";
 import { AgreementRuleError, listAgreements, setAgreement } from "@/server/services/agreements";
 import {
   applyStudentCredit,
@@ -248,7 +249,8 @@ describe("cerrar → congelar → PAID (RN6 + RN12 completa)", () => {
     await closeSettlement(admin, profile.id, PREV);
 
     await expect(deletePayment(org.id, ALL, paymentId)).rejects.toThrow(PaymentRuleError);
-    await expect(deletePayment(org.id, ALL, paymentId)).rejects.toThrow(PREV);
+    // §4.2: el mensaje nombra el período con nombre ("Julio 2026"), no el crudo.
+    await expect(deletePayment(org.id, ALL, paymentId)).rejects.toThrow(formatPeriod(PREV));
     expect(await db.payment.count({ where: { id: paymentId } })).toBe(1);
   });
 

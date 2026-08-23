@@ -181,11 +181,8 @@ export function LiquidacionesAdmin({
       {/* Decisión 4: los huecos se cantan, no se tragan. */}
       {overview.unassigned.count > 0 ? (
         <div className="rounded-card bg-warning-bg px-3 py-2.5 text-sm text-warning-text">
-          {formatMoney(overview.unassigned.total)} del período en{" "}
-          {overview.unassigned.count === 1
-            ? "1 cuota de un grupo sin profe"
-            : `${overview.unassigned.count} cuotas de grupos sin profe`}
-          : no entran a ninguna liquidación.{" "}
+          {formatMoney(overview.unassigned.total)} cobrados este período en grupos sin profe: no
+          entran a ninguna liquidación.{" "}
           <Link href="/agenda" className="font-medium underline">
             Asignar profes
           </Link>
@@ -195,7 +192,7 @@ export function LiquidacionesAdmin({
         <div className="rounded-card bg-warning-bg px-3 py-2.5 text-sm text-warning-text">
           {formatMoney(overview.unattributed.total)} cobrados en mano sin decir qué profe (
           {overview.unattributed.count === 1 ? "1 pago" : `${overview.unattributed.count} pagos`}
-          ): no entran a ningún C.
+          ): no se descuentan de ninguna liquidación.
         </div>
       ) : null}
 
@@ -329,11 +326,12 @@ function SettlementDetailSheet({
         toast.error(result.error);
         return;
       }
-      toast.notify(
-        `Liquidación de ${formatPeriod(detail.period)} cerrada: ${signedMoney(
+      // El detalle en la descripción: el título del toast trunca a una línea (§3.9).
+      toast.notify("Liquidación cerrada", {
+        description: `${formatPeriod(detail.period)}: neto ${signedMoney(
           result.numbers?.netToTeacher ?? 0,
         )} ${result.numbers && result.numbers.netToTeacher < 0 ? "a favor del estudio" : `a favor de ${detail.teacher.displayName}`}.`,
-      );
+      });
       onClose();
       router.refresh();
     });
@@ -478,7 +476,9 @@ function MarkPaidButton({ detail, onDone }: { detail: SettlementDetail; onDone: 
             toast.error(result.error);
             return;
           }
-          toast.notify(`Liquidación de ${formatPeriod(detail.period)} marcada como pagada.`);
+          toast.notify("Marcada como pagada", {
+            description: `La liquidación de ${formatPeriod(detail.period)} quedó saldada.`,
+          });
           onDone();
           router.refresh();
         })
