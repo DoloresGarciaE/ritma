@@ -155,14 +155,20 @@ export function PaymentDetailSheet({
 
   const handleDelete = () => {
     startDelete(async () => {
+      let result: { formError?: string };
       try {
-        await deletePaymentAction({ paymentId: payment.id, studentId: student.id });
+        result = await deletePaymentAction({ paymentId: payment.id, studentId: student.id });
       } catch {
         close();
         toast.error("No se pudo eliminar el pago. Actualizá y probá de nuevo.");
         return;
       }
       close();
+      if (result.formError) {
+        // RN12 (S9): un pago congelado en una liquidación cerrada se niega CON el período.
+        toast.error(result.formError);
+        return;
+      }
       toast.notify("Pago eliminado. Las cuotas volvieron a su estado.");
     });
   };
