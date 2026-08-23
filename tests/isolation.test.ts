@@ -4,6 +4,7 @@ import { listMembershipsForUser, resolveActiveOrg } from "@/lib/active-org";
 import { db, withOrg } from "@/lib/db";
 
 import {
+  makeAgreement,
   makeAllocation,
   makeCharge,
   makeDiscipline,
@@ -15,6 +16,7 @@ import {
   makePayment,
   makeReminderLog,
   makeSession,
+  makeSettlement,
   makeSlot,
   makeSpace,
   makeStudent,
@@ -1176,5 +1178,90 @@ describe("aislamiento org × org — Space", () => {
 
     expect(created.orgId).toBe(a.id);
     expect(await db.space.count({ where: { orgId: b.id } })).toBe(0);
+  });
+});
+
+/** S9: el corazón contable entra al aislamiento con el mismo bloque que Student. */
+describe("aislamiento org × org — Agreement", () => {
+  it("A no ve, no edita ni borra acuerdos de B; deleteMany no los alcanza", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+    const bTeacher = await makeTeacherProfile(b.id, "Profe de B");
+    const bAgreement = await makeAgreement(b.id, bTeacher.id, { studioPercent: 30 });
+
+    expect(await withOrg(a.id).agreement.findMany()).toEqual([]);
+    expect(await withOrg(a.id).agreement.findUnique({ where: { id: bAgreement.id } })).toBeNull();
+    await expect(
+      withOrg(a.id).agreement.update({
+        where: { id: bAgreement.id },
+        data: { studioPercent: 99 },
+      }),
+    ).rejects.toMatchObject({ code: "P2025" });
+    await withOrg(a.id).agreement.deleteMany({});
+    const after = await db.agreement.findUniqueOrThrow({ where: { id: bAgreement.id } });
+    expect(after.studioPercent?.toNumber()).toBe(30);
+  });
+
+  it("un acuerdo creado vía withOrg(A) no puede aterrizar en B: el orgId se fuerza", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+    const aTeacher = await makeTeacherProfile(a.id, "Profe de A");
+
+    const created = await withOrg(a.id).agreement.create({
+      data: {
+        teacherId: aTeacher.id,
+        type: "REVENUE_SHARE",
+        studioPercent: 30,
+        validFrom: new Date("2026-01-01T00:00:00.000Z"),
+        orgId: b.id,
+      },
+    });
+
+    expect(created.orgId).toBe(a.id);
+    expect(await db.agreement.count({ where: { orgId: b.id } })).toBe(0);
+  });
+});
+
+describe("aislamiento org × org — Settlement", () => {
+  it("A no ve, no marca PAID ni borra liquidaciones de B; deleteMany no las alcanza", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+    const bTeacher = await makeTeacherProfile(b.id, "Profe de B");
+    const bSettlement = await makeSettlement(b.id, bTeacher.id);
+
+    expect(await withOrg(a.id).settlement.findMany()).toEqual([]);
+    expect(await withOrg(a.id).settlement.findUnique({ where: { id: bSettlement.id } })).toBeNull();
+    await expect(
+      withOrg(a.id).settlement.update({
+        where: { id: bSettlement.id },
+        data: { status: "PAID" },
+      }),
+    ).rejects.toMatchObject({ code: "P2025" });
+    await withOrg(a.id).settlement.deleteMany({});
+    const after = await db.settlement.findUniqueOrThrow({ where: { id: bSettlement.id } });
+    expect(after.status).toBe("CLOSED");
+  });
+
+  it("una liquidación creada vía withOrg(A) no puede aterrizar en B: el orgId se fuerza", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+    const aTeacher = await makeTeacherProfile(a.id, "Profe de A");
+
+    const created = await withOrg(a.id).settlement.create({
+      data: {
+        teacherId: aTeacher.id,
+        period: "2026-07",
+        gross: 1000,
+        studioShare: 300,
+        collectedByTeacher: 0,
+        netToTeacher: 700,
+        status: "CLOSED",
+        closedAt: new Date(),
+        orgId: b.id,
+      },
+    });
+
+    expect(created.orgId).toBe(a.id);
+    expect(await db.settlement.count({ where: { orgId: b.id } })).toBe(0);
   });
 });

@@ -205,6 +205,8 @@ Los tres hex de cada modo viven como tokens `--google-btn-*` en `globals.css` �
 
 La **página de aceptación** (`/invitacion/[token]`) vive fuera del shell: logotipo, "{Org} te invita a su equipo", el rol, y — según haya sesión o no — "Aceptar invitación" o los CTAs de entrar/crear cuenta (que vuelven con `?next=`). Usada/vencida/revocada muestran SOLO su estado, con voz de marca y **sin nombrar la organización**: un link viejo reenviado no cuenta para quién era.
 
+*(S9)* La fila de un profe **staff** suma una línea con su acuerdo — "Acuerdo: 30% el estudio · desde el {fecha}", o **"Sin acuerdo: su liquidación no se puede calcular"** (la falta se canta, jamás un default silencioso) — y el botón secundario `sm` "Acuerdo", que abre un sheet (§3.8) con el **historial de vigencias** (solo lectura, el más nuevo primero) y el alta de una nueva: porcentaje del estudio (coma tolerada) + "Rige desde" (default hoy). Cambiar el % nunca edita el vigente: crea un registro nuevo (RN6-bis). La titular y los externos no llevan acuerdo — sus filas no muestran nada de esto (§4.3).
+
 ### 3.19 Calendario por salón (S8)
 
 La tercera vista de la Agenda (`Semana | Día | Salones`), **solo estudios** (en una independiente la pestaña no existe y el param cae a la semana). Un DÍA por vez: columnas de espacio sobre un eje horario vertical, bloques §3.7 con grupo y profe adentro, y los **huecos explícitos** — "Libre · HH:mm–HH:mm" en `text-muted` sobre borde punteado, solo huecos de 30 minutos o más (menos que eso es aire sin cartel). HU3.4: los huecos se leen sin interpretar la grilla, listos para ofrecer.
@@ -212,6 +214,16 @@ La tercera vista de la Agenda (`Semana | Día | Salones`), **solo estudios** (en
 Decisiones fijadas (sesión S8): eje **fijo 8:00–22:00**, estirado a la hora en punto si una clase cae afuera (marco estable: los huecos se comparan día a día y un día vacío muestra el rango entero libre); columna **"Sin salón" última y solo si ese día hay clases sin salón para quien mira**; un **teacher ve todas las columnas con solo sus clases** (los salones son estructura física del estudio; sus huecos no le dicen qué hay de otros). Dos clases cruzadas en el MISMO salón se ven **lado a lado** (carriles con leve corrimiento): el choque que la validación avisa también se ve.
 
 Mobile-first: un panel con scroll propio en ambos ejes — encabezados de columna fijos arriba y la regla horaria fija a la izquierda mientras las columnas se deslizan (columnas de 192 px, targets intactos). Navegación de días con ‹ › y "Hoy" (la posición vive en la URL, como toda la agenda); el **filtro por profe** (chips "Todos los profes" + cada perfil vinculado) es de owner/admin — un teacher no lo ve: su scope ya filtra. Canceladas: tachadas en su lugar (§3.7) y **siguen ocupando su hueco** — el calendario cuenta lo programado; recuperar ese espacio es restablecer o mover la sesión. El tap abre el mismo detalle de sesión de siempre.
+
+### 3.20 Liquidaciones (S9)
+
+`/estudio/liquidaciones`, solo STUDIO. **Dos vistas de la misma fuente** (el servicio que prueban los tests; la pantalla no suma nada): owner/admin ven el período completo por profe; una profe staff ve LA SUYA ("Mis liquidaciones": el borrador del mes en curso + su historial). La entrada del profe es su única puerta a `/estudio` (§4.3: se muestra exactamente lo que puede).
+
+**Vista admin.** Navegación de período con ‹ › (default: el período ANTERIOR — el cerrable; el en curso lleva la nota "borrador vivo"). Una **card por profe staff** (§3.12 mobile): nombre + chip de estado (Borrador / Sin acuerdo / Cerrada / Pagada — etiqueta de texto, jamás solo color) y la grilla de números — Bruto cobrado, Retención del estudio, Cobrado en mano, y el **Neto destacado con leyenda direccional** ("a favor del profe" / "a favor del estudio") y **signo explícito** en negativos (§4.2). Una desvinculada liquida igual, con chip "Desvinculada". Debajo, los **baldes que se cantan** (tokens warning): plata del período en grupos **sin profe** (con link "Asignar profes") y cobros en mano **sin atribuir** — ninguno entra a una liquidación, y se dice.
+
+**Drill-down** (sheet §3.8): los números, los **tramos de vigencia** si el acuerdo cambió en el período (cada tramo con su %, su fecha y su parte — suman exacto el total), y la lista de pagos que componen el bruto: alumno, fecha, monto imputado, "en mano (${monto del pago})" cuando lo cobró el profe, y la marca "imputación de un mes ya cerrado" para las tardías (RN6-bis). El excedente sin imputar se anticipa ("quedaron como saldo a favor: se liquidan cuando se imputen").
+
+**Cerrar** (solo owner/admin, solo períodos terminados): botón primario en el footer del sheet → confirmación (§3.8) que resume lo que congela — cuántos pagos, el neto fijado, y "**No hay reapertura**". Cerrada, el footer ofrece "Marcar pagada" (registra cuándo se saldó la diferencia). Los toasts largos van con **título corto + descripción** (§3.9: el título trunca a una línea; el detalle —período, neto— viaja en la descripción, que envuelve).
 
 ## 4. Patrones
 

@@ -70,6 +70,9 @@ const SCOPE: Record<Prisma.ModelName, Scope> = {
   Invitation: "orgId",
   // S8: los salones del estudio.
   Space: "orgId",
+  // S9: el corazón contable — acuerdos y liquidaciones.
+  Agreement: "orgId",
+  Settlement: "orgId",
   User: "global",
   Session: "global",
   Account: "global",

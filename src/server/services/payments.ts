@@ -1,5 +1,6 @@
 import { withOrg, type OrgClient } from "@/lib/db";
 import { civilToDb, dbToCivil, todayInTz } from "@/lib/dates";
+import { formatPeriod } from "@/lib/format";
 import { generateReceiptToken } from "@/lib/receipts";
 
 import {
@@ -40,6 +41,13 @@ export type PaymentInput = {
   amount: number;
   method: PayMethodValue;
   receivedBy?: ReceivedByValue;
+  /**
+   * QUÉ profe lo cobró en mano (S9, RN5/RN6): el C de su liquidación toma el pago
+   * completo. Solo tiene sentido con receivedBy=TEACHER; para un actor TEACHER se
+   * fuerza su propio perfil (auto-atribución); null = "sin atribuir", que Liquidaciones
+   * CANTA en su balde (decisión S9 — sin magia).
+   */
+  receivedById?: string | null;
   /** Fecha civil del pago ("yyyy-MM-dd"), default hoy en la UI. */
   paidAt: string;
   /** Ausente → imputación automática (RN4). Presente → edición manual (HU4.3). */
@@ -200,6 +208,23 @@ export async function createPayment(
         throw new PaymentRuleError("El pago tiene que ser mayor a cero.");
       }
 
+      // receivedById (S9): solo con "lo recibió un profe". Un actor TEACHER se atribuye
+      // a SÍ MISMO (lo que diga el cliente no cuenta); owner/admin eligen el perfil, que
+      // se verifica contra la org (cross-ref, patrón F0.6). Null = sin atribuir, cantado.
+      const receivedBy = input.receivedBy ?? "STUDIO";
+      let receivedById: string | null = null;
+      if (receivedBy === "TEACHER") {
+        receivedById =
+          scope.kind === "teacher" ? scope.teacherProfileId : (input.receivedById ?? null);
+        if (receivedById) {
+          const profile = await scoped.teacherProfile.findUnique({
+            where: { id: receivedById },
+            select: { id: true },
+          });
+          if (!profile) throw new Error("El perfil de profe no pertenece a esta organización.");
+        }
+      }
+
       const open = await openChargesOf(scoped, scope, input.studentId);
       const openWithRemainder = open.filter((charge) => charge.remaining.greaterThan(ZERO));
 
@@ -235,7 +260,8 @@ export async function createPayment(
           amount,
           currency: settings.currency,
           method: input.method,
-          receivedBy: input.receivedBy ?? "STUDIO",
+          receivedBy,
+          receivedById,
           paidAt: civilToDb(input.paidAt),
           receiptToken: generateReceiptToken(),
           ...(drafts.length > 0
@@ -298,12 +324,25 @@ export async function deletePayment(
       const scoped = tx as unknown as OrgClient;
 
       // El scope (S7, decisión de la sesión): un teacher elimina pagos de SUS alumnos —
-      // es el deshacer de registrar; la inmutabilidad real llega con el cierre (RN6, S9).
+      // es el deshacer de registrar. La inmutabilidad REAL llegó con S9 (RN12 completa):
+      // un pago vinculado a una liquidación cerrada no se toca — borrar sus imputaciones
+      // reescribiría números ya congelados.
       const payment = await scoped.payment.findUnique({
         where: { id: paymentId, AND: [paymentScopeWhere(scope)] },
-        select: { id: true, attachmentKey: true, allocations: { select: { chargeId: true } } },
+        select: {
+          id: true,
+          attachmentKey: true,
+          settlement: { select: { period: true } },
+          allocations: { select: { chargeId: true } },
+        },
       });
       if (!payment) throw new Error("El pago no pertenece a esta organización.");
+      if (payment.settlement) {
+        // §4.2: el período siempre con nombre ("Julio 2026"), nunca el crudo "2026-07".
+        throw new PaymentRuleError(
+          `Este pago está en la liquidación cerrada de ${formatPeriod(payment.settlement.period)}: no se puede eliminar.`,
+        );
+      }
 
       const settings = await scoped.organization.findUniqueOrThrow({
         where: { id: orgId },

@@ -247,12 +247,14 @@ model TeacherProfile {
 
 model Agreement {
   id            String @id @default(cuid())
+  orgId         String          // S9: la convención de §7, como todo modelo de negocio
   teacherId     String
-  type          AgreementType   // REVENUE_SHARE | RENTAL
+  type          AgreementType   // REVENUE_SHARE | RENTAL (RENTAL declarado; usable en S10)
   studioPercent Decimal?        // ej. 30.0 si REVENUE_SHARE
-  rentalAmount  Decimal?        // si RENTAL
-  rentalPeriod  RentalPeriod?   // PER_HOUR | PER_SESSION | MONTHLY
-  validFrom     DateTime
+  rentalAmount  Decimal?        // si RENTAL — llega en S10
+  rentalPeriod  RentalPeriod?   // PER_HOUR | PER_SESSION | MONTHLY — llega en S10
+  validFrom     DateTime        // @db.Date: cambiar el % crea un registro nuevo (RN6-bis)
+  @@unique([teacherId, validFrom]) // dos acuerdos del mismo día serían ambiguos — nota S9
 }
 
 model Space      { id String @id @default(cuid()); orgId String; name String; active Boolean @default(true) } // S8: baja lógica; unique [orgId, name] — ver nota S8
@@ -340,11 +342,11 @@ model Payment {
   currency      String       // S4: RN10, el mismo criterio que Charge (nota S3)
   method        PayMethod    // CASH | TRANSFER | OTHER
   receivedBy    ReceivedBy   // STUDIO | TEACHER, default STUDIO (RN5)
-  // receivedById llega con TeacherProfile en S9 — ver nota S4
+  receivedById  String?      // S9: QUÉ profe cobró en mano (el C de RN6) — ver nota S9
   paidAt        DateTime     // @db.Date: fecha civil del pago (RN10)
   attachmentKey String?      // S4: la KEY de R2, no una URL — ver nota S4
   receiptToken  String  @unique  // link público del comprobante (lo consume S5)
-  // settlementId llega con Settlement en S9 (RN6)
+  settlementId  String?      // S9: la liquidación cerrada que lo congela (RN6/RN12)
 }
 
 model PaymentAllocation {
@@ -364,7 +366,10 @@ model Settlement {
   studioShare        Decimal  // retención
   collectedByTeacher Decimal  // ya cobrado en mano por el profe
   netToTeacher       Decimal  // puede ser negativo
-  status             SettlementStatus // OPEN | CLOSED | PAID
+  status             SettlementStatus // OPEN | CLOSED | PAID — OPEN jamás persiste (nota S9)
+  closedAt           DateTime  // S9: el instante del cierre (clasifica imputaciones tardías)
+  paidAt             DateTime? // S9: cuándo se saldó la diferencia (F3 paso 4)
+  @@unique([teacherId, period])  // S9: una liquidación por profe y período
 }
 
 model RentalCharge {
@@ -434,6 +439,14 @@ Toda tabla lleva además `createdAt` (`@default(now())`) y `updatedAt` (`@update
 3. **La "validación de superposición" de HU3.1 es advertencia con confirmación, NUNCA bloqueo** (decisión sostenida del ticket original de S2, que nunca se implementó — nació completa acá): mismo salón cruzado = conflicto fuerte que nombra salón, grupo y rango; **mismo profe cruzado = fuerte también** (una persona no está en dos aulas — eje que S7 habilitó); salones distintos = silencio; alguno sin salón = aviso suave. Espalda-con-espalda no es cruce. La detección es org-completa pero respeta el scope de S7: el grupo ajeno participa de la física sin nombrarse.
 4. **El calendario por salón (HU3.4) no materializa nada**: columnas de espacio sobre las ocurrencias calculadas del día (`occurrencesForRange`, cero motor nuevo), eje fijo 8:00–22:00 estirable, huecos explícitos ("Libre · HH:mm–HH:mm", ≥30 min), canceladas tachadas ocupando su lugar, y filtro por profe (owner/admin). Un teacher ve todas las columnas con solo sus clases.
 
+**Nota S9 (al construir acuerdos y liquidaciones).** Cinco decisiones sobre el borrador, ya reflejadas arriba:
+
+1. **La vigencia del acuerdo es un HISTORIAL** (`validFrom` civil, unique `[teacherId, validFrom]`): cambiar el porcentaje crea un registro nuevo, jamás edita el viejo — cada pago liquida con el acuerdo vigente a su `paidAt` (inclusive: el día del cambio ya rige el nuevo) y el drill-down muestra los tramos. **Sin acuerdo vigente a la fecha de un pago no hay liquidación** (estado "sin acuerdo" cantado): un default silencioso de 0% inventaría plata. Es la propuesta **RN6-bis** (§8, pendiente de aprobar). Solo `REVENUE_SHARE` es usable en S9; `RENTAL` queda declarado para S10.
+2. **`receivedById` dice QUÉ profe cobró en mano** (el C de RN6): un actor teacher se atribuye a SÍ MISMO (lo que diga el cliente no cuenta — patrón F0.6); owner/admin eligen el perfil, verificado contra la org. Los pagos `TEACHER` viejos (S4–S8) sin perfil quedan como balde **"sin atribuir"** en el overview: no se descuentan de ningún C, y se canta.
+3. **El borrador NO persiste** (`OPEN` declarado por el ciclo del plan, jamás escrito): la liquidación abierta se calcula al entrar, con los datos vivos. **Solo se cierran períodos TERMINADOS** (el en curso es borrador vivo) — esa restricción es la que vuelve exacta a la regla de imputación tardía (punto 4). Cerrar es transaccional: persiste los números y vincula `settlementId` en cada pago incluido; esos pagos quedan INMUTABLES (la eliminación de RN12 se rechaza nombrando el período). `PAID` registra cuándo se saldó la diferencia. **Reabrir no existe en el MVP.**
+4. **La imputación tardía liquida donde OCURRE**: si el crédito a favor de un alumno se aplica (cron nocturno) sobre un pago que YA quedó en una liquidación cerrada, esa plata entra a la liquidación del período en que la imputación sucede — cada peso se liquida UNA vez, ninguno se pierde. Como solo se cierran períodos terminados, una imputación nueva jamás clasifica a un período cerrado. El drill-down la marca ("imputación de un mes ya cerrado"). También parte de RN6-bis.
+5. **Solo los STAFF se liquidan**: la titular (`OWNER_TEACHER`) no se liquida a sí misma y sus grupos no entran a ninguna liquidación; los `EXTERNAL` son alquiler (RN7, S10). Un perfil STAFF desvinculado (revocado) SIGUE liquidando — la revocación no borra plata. Los pagos a grupos **sin profe** no entran a ninguna liquidación: bloque "sin asignar" con monto y acceso directo a asignar, visible antes de cerrar.
+
 ## 8. Reglas de negocio
 
 **RN1 — Generación de cuotas.** El día 1 de cada mes, un cron crea una cuota `pendiente` por cada inscripción mensual activa, con `amount = enrollment.price` y `dueDate = día de vencimiento de la org`. La cuota es única por (inscripción, período).
@@ -458,6 +471,10 @@ neto al profe N = (B − R) − C
 ```
 
 Si `N > 0`, el estudio le debe al profe; si `N < 0`, el profe le debe al estudio (cobró en mano más de lo que le corresponde). Ejemplo: B = $500.000, r = 30% → R = $150.000; el profe cobró en mano C = $200.000 → N = $350.000 − $200.000 = **$150.000 a favor del profe**. Al cerrar la liquidación, los pagos incluidos quedan vinculados a ella y dejan de ser editables.
+
+> **Aclaración S9 (decisión de sesión, ago 2026).** `C` es el monto **COMPLETO** de cada pago cobrado en mano por el profe, no solo lo imputado: la fórmula cuadra la CAJA (la plata que físicamente tiene cada uno), y el excedente que quedó como saldo a favor del alumno ya está en manos del profe. Ejemplo: pago de $20.000 en mano, imputados $17.000 → B suma $17.000 pero C suma $20.000.
+>
+> **Propuesta RN6-bis (S9, pendiente de aprobar).** Dos reglas que RN6 no cubría: **(a) vigencia** — el acuerdo es un historial por `validFrom`; cada pago liquida con el acuerdo vigente a su fecha de pago, y un período con cambio de % se muestra por tramos que suman exacto el total; sin acuerdo vigente a la fecha de un pago, la liquidación no se calcula (jamás un 0% silencioso). **(b) imputación tardía** — una imputación aplicada después del cierre del período del pago (crédito del cron sobre un pago ya liquidado) entra a la liquidación del período en que OCURRE: cada peso se liquida una sola vez y ninguno se pierde. Exacto por construcción: solo se cierran períodos terminados.
 
 **RN7 — Alquileres de externos.** Acuerdo `mensual`: un cargo fijo por período. Acuerdo `por hora/turno`: el cargo del período se calcula sobre las sesiones no canceladas de sus grupos en espacios del estudio. El estado del cargo (`pendiente`/`pagada`/`vencida`) sigue las mismas reglas que las cuotas.
 

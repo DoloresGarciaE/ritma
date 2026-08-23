@@ -5,7 +5,7 @@ import { Building2, ChevronRight, Settings } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { listMembershipsForUser } from "@/lib/active-org";
 import { requireSession } from "@/lib/auth";
-import { requireMember } from "@/server/authz";
+import { requireScopedMember } from "@/server/authz";
 import { getShellOrganization } from "@/server/organizations";
 import { can } from "@/server/services/permissions";
 
@@ -19,29 +19,31 @@ export const metadata: Metadata = {
 
 /**
  * "Más" agrupa estudio y ajustes (Plan §11). En una organización independiente no hay nada
- * de estudio: ni el link, ni la palabra; y para un TEACHER tampoco hay Estudio ni Ajustes —
- * las dos son configuración de la org (Plan §4, Componentes §4.3 — lo que un rol no puede
- * hacer, no se muestra). Con más de una membresía, arriba va el selector de organización;
- * con una sola, no aparece.
+ * de estudio: ni el link, ni la palabra. Ajustes es configuración de la org (Plan §4,
+ * Componentes §4.3 — lo que un rol no puede hacer, no se muestra); Estudio, desde S9,
+ * también lo ve una profe STAFF — su puerta a "Mis liquidaciones" (HU6.4), con el hint
+ * ajustado a lo que hay del otro lado. Con más de una membresía, arriba va el selector
+ * de organización; con una sola, no aparece.
  */
 export default async function MasPage() {
   const session = await requireSession();
-  const [org, memberships, actor] = await Promise.all([
+  const [org, memberships, { actor, scope }] = await Promise.all([
     getShellOrganization(session.activeOrgId!),
     listMembershipsForUser(session.userId),
-    requireMember(session.activeOrgId!),
+    requireScopedMember(session.activeOrgId!),
   ]);
 
   const manages = can(actor, "org:configure");
+  const isTeacherWithProfile = scope.kind === "teacher" && scope.teacherProfileId !== null;
 
   const links = [
-    ...(manages && org?.type === "STUDIO"
+    ...(org?.type === "STUDIO" && (manages || isTeacherWithProfile)
       ? [
           {
             href: "/estudio",
             icon: Building2,
             label: "Estudio",
-            hint: "Equipo, salones y liquidaciones",
+            hint: manages ? "Equipo, salones y liquidaciones" : "Tus liquidaciones",
           },
         ]
       : []),

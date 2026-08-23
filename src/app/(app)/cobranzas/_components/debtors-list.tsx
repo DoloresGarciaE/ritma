@@ -34,6 +34,7 @@ export function DebtorsList({
   isStudio,
   attachmentsEnabled,
   today,
+  teachers = [],
 }: {
   debtors: DebtorRow[];
   /** Por alumno: el link wa.me con la plantilla renderizada, o null si no hay teléfono. */
@@ -41,6 +42,8 @@ export function DebtorsList({
   isStudio: boolean;
   attachmentsEnabled: boolean;
   today: string;
+  /** S9: opciones "¿qué profe cobró?" del sheet (solo owner/admin de un STUDIO). */
+  teachers?: { id: string; displayName: string }[];
 }) {
   const toast = useToast();
   const [paying, setPaying] = useState<{ id: string; name: string } | null>(null);
@@ -126,6 +129,7 @@ export function DebtorsList({
           isStudio={isStudio}
           attachmentsEnabled={attachmentsEnabled}
           today={today}
+          teachers={teachers}
         />
       ) : null}
     </>

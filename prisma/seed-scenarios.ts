@@ -20,7 +20,8 @@ import { isProductionTarget, productionDbUrls } from "./seed-guard";
  *   la migración S8 convirtió los nombres viejos y acá los grupos nacen limpios.
  * - DATOS LEGÍTIMOS O NADA: cuotas por `runGenerateCharges`/`runMarkOverdue` (los jobs
  *   reales), pagos por `createPayment` (imputación + recompute reales), exoneración por
- *   `waiveCharge`, recordatorios por `logReminder`. Nunca inserts crudos de plata.
+ *   `waiveCharge`, recordatorios por `logReminder`, liquidación por `closeSettlement`
+ *   (S9: la fórmula RN6 vive en UN lugar). Nunca inserts crudos de plata.
  * - Idempotente: correrlo dos veces no duplica nada.
  * - Cinturón: imprime host y base de `DATABASE_URL` y pide confirmación. `--yes` la
  *   saltea (para scripts), pero NO saltea el cinturón anti-producción: si el host es el
@@ -75,13 +76,14 @@ async function main() {
   const { db, createOrganizationWithOwner } = await import("../src/lib/db");
   const { auth } = await import("../src/lib/auth");
   const { normalizeForSearch } = await import("../src/lib/students");
-  const { addMonths, periodOf, todayInTz, addDays, DEFAULT_TIMEZONE } =
+  const { addMonths, periodOf, todayInTz, addDays, civilToDb, DEFAULT_TIMEZONE } =
     await import("../src/lib/dates");
   const { runGenerateCharges } = await import("../src/server/system/generate-charges");
   const { runMarkOverdue } = await import("../src/server/system/mark-overdue");
   const { createEnrollment } = await import("../src/server/services/enrollments");
   const { waiveCharge } = await import("../src/server/services/charges");
-  const { createPayment } = await import("../src/server/services/payments");
+  const { createPayment, deletePayment } = await import("../src/server/services/payments");
+  const { closeSettlement } = await import("../src/server/services/settlements");
   const { logReminder } = await import("../src/server/services/reminders");
 
   try {
@@ -558,13 +560,23 @@ async function main() {
         amount: number;
         method: "CASH" | "TRANSFER" | "OTHER";
         receivedBy?: "STUDIO" | "TEACHER";
-        daysAgo: number;
+        receivedById?: string; // S9: QUÉ profe (el C de RN6)
+        daysAgo?: number;
+        paidAt?: string; // fecha civil FIJA (no deriva con "hoy": clave para liquidaciones)
         toPeriod?: string; // imputación manual a la cuota de ESTE período
       },
     ) {
       const student = students.get(studentName)!;
+      const paidAt = input.paidAt ?? addDays(today, -(input.daysAgo ?? 0));
+      // Con fecha fija el chequeo es exacto (amount + paidAt); con daysAgo, solo por
+      // monto — la fecha derivada de "hoy" cambia entre corridas y duplicaría.
       const existing = await db.payment.findFirst({
-        where: { orgId, studentId: student.id, amount: input.amount },
+        where: {
+          orgId,
+          studentId: student.id,
+          amount: input.amount,
+          ...(input.paidAt ? { paidAt: civilToDb(input.paidAt) } : {}),
+        },
       });
       if (existing) return;
 
@@ -584,14 +596,16 @@ async function main() {
           amount: input.amount,
           method: input.method,
           ...(input.receivedBy ? { receivedBy: input.receivedBy } : {}),
-          paidAt: addDays(today, -input.daysAgo),
+          ...(input.receivedById ? { receivedById: input.receivedById } : {}),
+          paidAt,
           ...(allocations ? { allocations } : {}),
         },
       );
     }
 
     // Meraki: el mes de un estudio de verdad — pagas totales, una parcial, crédito,
-    // una cobrada por la profe, y deuda vieja que quedó vencida.
+    // una EN MANO de la profe (RN5 con nombre, S9), un adelanto que ya quedó liquidado,
+    // y deuda vieja que quedó vencida.
     await ensurePayment(meraki.id, merakiStudents, "Lola Márquez", {
       amount: 28000, // PREV + CUR de yoga: las dos quedan PAID
       method: "TRANSFER",
@@ -613,11 +627,39 @@ async function main() {
       daysAgo: 1,
       toPeriod: CUR,
     });
+    // LEGADO pre-S9: Emilia pagaba $34.000 en un solo pago del mes en curso (siembras
+    // viejas), y a Josefina la puso al día un pago de $34.000 del recorrido de S7 —
+    // las dos cosas dejarían a la liquidación sin plata en períodos pasados. Se sacan
+    // por el servicio real (revierte imputaciones y recalcula estados) y los pagos del
+    // guion S9, con fecha fija, toman su lugar. Idempotente: si no están, no hace nada.
+    for (const legacyName of ["Emilia Vega", "Josefina Ponce"]) {
+      const legacy = await db.payment.findFirst({
+        where: {
+          orgId: meraki.id,
+          studentId: merakiStudents.get(legacyName)!.id,
+          amount: 34000,
+          settlementId: null, // un pago congelado no se toca ni acá
+        },
+      });
+      if (legacy) await deletePayment(meraki.id, { kind: "all" }, legacy.id);
+    }
     await ensurePayment(meraki.id, merakiStudents, "Emilia Vega", {
-      amount: 34000, // PREV + CUR del grupo a cargo: cobrada POR LA PROFE (RN5)
+      amount: 17000, // su cuota de PREV, pagada el 5: alimenta el BORRADOR de PREV
       method: "TRANSFER",
-      receivedBy: "TEACHER",
-      daysAgo: 2,
+      paidAt: `${PREV}-05`,
+    });
+    await ensurePayment(meraki.id, merakiStudents, "Emilia Vega", {
+      amount: 20000, // CUR, EN MANO de la profe (RN5 con nombre): cubre la cuota de
+      method: "CASH", // $17.000 y deja $3.000 a favor — pero el C de RN6 es el pago
+      receivedBy: "TEACHER", // COMPLETO (decisión S9): el neto de la profe da NEGATIVO
+      receivedById: dualProfile.id,
+      daysAgo: 1,
+    });
+    await ensurePayment(meraki.id, merakiStudents, "Josefina Ponce", {
+      amount: 17000, // adelantó su cuota de PREV a fin del mes anterior: es LA plata
+      method: "TRANSFER", // de la liquidación de TWO_AGO (RN6 corta por fecha de pago)
+      paidAt: `${TWO_AGO}-28`,
+      toPeriod: PREV,
     });
     // Catalina: beca — la cuota de PREV se exonera por el servicio real (sin pagos).
     const catalina = merakiStudents.get("Catalina Ríos")!;
@@ -631,6 +673,41 @@ async function main() {
       },
     });
     if (catalinaPrev) await waiveCharge(meraki.id, catalinaPrev.id);
+
+    // ── Acuerdos y liquidaciones (S9) ────────────────────────────────────────
+    // El acuerdo de la docente dual: 30% el estudio, vigente desde antes de todos los
+    // pagos del guion. La dueña no lleva acuerdo (OWNER_TEACHER no se liquida).
+    await db.agreement.upsert({
+      where: {
+        teacherId_validFrom: { teacherId: dualProfile.id, validFrom: civilToDb("2026-01-01") },
+      },
+      update: { studioPercent: 30 },
+      create: {
+        orgId: meraki.id,
+        teacherId: dualProfile.id,
+        type: "REVENUE_SHARE",
+        studioPercent: 30,
+        validFrom: civilToDb("2026-01-01"),
+      },
+    });
+
+    // La liquidación de HACE DOS MESES queda CERRADA por el servicio real — la fórmula
+    // RN6 no se reimplementa acá: si los números cambian, cambian allá y sus tests lo
+    // cantan. Congela el pago adelantado de Josefina (probar borrarlo → rechazado) y
+    // deja historial para la vista de la profe. PREV queda como BORRADOR a propósito:
+    // es el que la dueña cierra EN VIVO en el recorrido del teléfono, con confirmación.
+    const alreadyClosed = await db.settlement.findFirst({
+      where: { orgId: meraki.id, teacherId: dualProfile.id, period: TWO_AGO },
+    });
+    if (!alreadyClosed) {
+      const ownerActor = { userId: owner.id, orgId: meraki.id, role: "OWNER" as const };
+      const closed = await closeSettlement(ownerActor, dualProfile.id, TWO_AGO);
+      console.log(
+        `Liquidación ${TWO_AGO} de ${teacher.name} cerrada: ` +
+          `bruto ${closed.numbers.gross} · retención ${closed.numbers.studioShare} · ` +
+          `neto ${closed.numbers.netToTeacher}`,
+      );
+    }
 
     // Independiente: el mundo chico con estados mezclados.
     await ensurePayment(folklore.id, folkStudents, "Rocío Almada", {
@@ -688,6 +765,13 @@ async function main() {
           `recordatorios: ${await db.reminderLog.count({ where: { orgId: org.id } })}`,
       );
     }
+    console.log(
+      `S9 (Meraki) — acuerdos: ${await db.agreement.count({ where: { orgId: meraki.id } })} · ` +
+        `liquidaciones cerradas: ${await db.settlement.count({ where: { orgId: meraki.id } })} · ` +
+        `pagos congelados: ${await db.payment.count({
+          where: { orgId: meraki.id, settlementId: { not: null } },
+        })}`,
+    );
     console.log(
       `\nPersonas del recorrido (guion en docs/observaciones-demo.md):\n` +
         `  1. ${STUDIO_OWNER_EMAIL} → Estudio Meraki (dueña)\n` +

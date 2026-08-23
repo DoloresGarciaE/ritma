@@ -1,12 +1,20 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 
 import { requireSession } from "@/lib/auth";
+import { isCivilDate } from "@/lib/dates";
 import { isEmailConfigured, sendInvitationEmail } from "@/lib/email";
 import { invitationUrl } from "@/lib/invitations";
 import { requireRole } from "@/server/authz";
 import { getShellOrganization } from "@/server/organizations";
+import {
+  AgreementRuleError,
+  listAgreements,
+  setAgreement,
+  type AgreementListItem,
+} from "@/server/services/agreements";
 import { ForbiddenError, type Actor } from "@/server/services/permissions";
 import {
   createInvitation,
@@ -138,5 +146,50 @@ export async function revokeMemberAction(targetUserId: string): Promise<{ error?
     throw error;
   }
   revalidatePath("/estudio/equipo");
+  return {};
+}
+
+// ─── Acuerdos económicos (S9, HU6.1) — owner/admin, patrón de arriba. ─────────
+
+const agreementSchema = z.object({
+  teacherId: z.string().min(1),
+  studioPercent: z
+    .number({ error: "Poné el porcentaje del estudio." })
+    .min(0, "Entre 0 y 100.")
+    .max(100, "Entre 0 y 100."),
+  validFrom: z.string().refine(isCivilDate, "Esa fecha no es válida."),
+});
+
+export async function listAgreementsAction(
+  teacherId: string,
+): Promise<AgreementListItem[] | { error: string }> {
+  const actor = await currentAdmin();
+  return listAgreements(actor, teacherId);
+}
+
+export async function setAgreementAction(input: {
+  teacherId: string;
+  studioPercent: number | null;
+  validFrom: string;
+}): Promise<{ error?: string; field?: "studioPercent" | "validFrom" }> {
+  const actor = await currentAdmin();
+
+  const parsed = agreementSchema.safeParse(input);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    return {
+      error: issue?.message ?? "Revisá el acuerdo.",
+      field: issue?.path[0] === "validFrom" ? "validFrom" : "studioPercent",
+    };
+  }
+
+  try {
+    await setAgreement(actor, parsed.data);
+  } catch (error) {
+    if (error instanceof AgreementRuleError) return { error: error.message };
+    throw error;
+  }
+  revalidatePath("/estudio/equipo");
+  revalidatePath("/estudio/liquidaciones");
   return {};
 }

@@ -576,3 +576,33 @@ del diagnóstico. Se pueden borrar con Prisma Studio apuntando al branch de prod
 - **Próximo:** verificación de Dolores en el teléfono (guion en el reporte) y su PR; la
   rama SIN mergear. S9 (acuerdos y liquidaciones) NO se arranca. Ojo: el recorrido movió
   "Canto grupal" a Salón A en dev — la próxima corrida del seed lo devuelve a Salón B.
+
+## Semana 19 (agosto 2026) — S9: acuerdos económicos y liquidaciones
+
+- **Hecho:** S9 completo en `feat/s9-agreements-settlements` (S8 mergeado como PR #36).
+  Migración `Agreement` (historial por `validFrom`, unique `[teacherId, validFrom]`) +
+  `Settlement` (unique `[teacherId, period]`, filas nacen CLOSED — el borrador no
+  persiste) + `receivedById`/`settlementId` en `Payment`. `computeSettlement` pura sobre
+  Decimal, TESTS FIRST: 11 casos puros (el ejemplo del plan literal, C mayor/menor al
+  neto, cambio de % a mitad de mes por tramos que suman exacto, redondeo 33,33% sin
+  pérdida) + 17 con base (cierre que congela, RN12 rechaza nombrando "Julio 2026",
+  tardía del cron permitida y cayendo al período donde ocurre, baldes sin-profe y
+  sin-atribuir, la titular excluida, la desvinculada que liquida igual, HU6.4). UI:
+  acuerdos en el equipo (historial + alta, "sin acuerdo" cantado), Liquidaciones
+  admin/profe (§3.20 nueva), cierre con confirmación y PAID. Seed: acuerdo 30%, dos
+  pagos de Emilia (el de $20.000 en mano imputando $17.000 = el caso C-completo, neto
+  −$8.100 a la vista), adelanto de Josefina y JUNIO cerrado por `closeSettlement` real.
+  Suite 516 verde, build, 3 E2E, recorrido real 19/19 con capturas.
+- **Trabado:** nada bloqueante. Tres decisiones de sesión con caso numérico (registradas
+  en Plan §7/§8 como nota S9 + propuesta RN6-bis): C = pago COMPLETO en mano (cuadra la
+  caja); en-mano viejo sin perfil = balde "sin atribuir"; imputación tardía permitida y
+  liquidando donde OCURRE — exacta porque solo se cierran períodos TERMINADOS. Dos
+  hallazgos de recorrido: los toasts truncan el título a una línea (§3.9) — los avisos
+  con período/neto pasaron a título corto + descripción — y la cuenta dueña arrastra
+  "Estudio Grande" como PRIMERA membresía (un browser sin cookie aterriza ahí; en el
+  teléfono la cookie ya apunta a Meraki).
+- **Próximo:** verificación de Dolores en el teléfono (guion en el reporte: definir/ver
+  el acuerdo, cerrar JULIO en vivo —quedó como borrador a propósito; el recorrido lo
+  cerró y lo RESETEÓ borrando la fila, limpieza de demo, no una reapertura—, intentar
+  borrar el pago congelado, marcar pagada, y cambiar a la docente para ver la suya) y su
+  PR; la rama SIN mergear. S10 (alquileres y reportes) NO se arranca.

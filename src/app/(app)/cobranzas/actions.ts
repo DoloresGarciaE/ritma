@@ -231,6 +231,8 @@ export async function createPaymentAction(input: {
   amount: number | null;
   method: "CASH" | "TRANSFER" | "OTHER";
   receivedBy?: "STUDIO" | "TEACHER";
+  /** S9: qué profe lo cobró en mano. El server auto-atribuye al actor TEACHER. */
+  receivedById?: string | null;
   paidAt: string;
   allocations?: { chargeId: string; amount: number }[];
 }): Promise<PaymentFormState & { paymentId?: string; receiptShareUrl?: string }> {
@@ -262,7 +264,15 @@ export async function deletePaymentAction(input: {
 }): Promise<{ formError?: string }> {
   const { actor, scope } = await currentScoped();
 
-  const { attachmentKey } = await deletePayment(actor.orgId, scope, input.paymentId);
+  let attachmentKey: string | null;
+  try {
+    ({ attachmentKey } = await deletePayment(actor.orgId, scope, input.paymentId));
+  } catch (error) {
+    // "Está en una liquidación cerrada" (RN12, S9) es alcanzable desde la UI: vuelve
+    // como mensaje que nombra el período. Referencias forjadas siguen reventando.
+    if (error instanceof PaymentRuleError) return { formError: error.message };
+    throw error;
+  }
 
   // El objeto de R2 se borra DESPUÉS de que la base confirmó, best-effort.
   if (attachmentKey && isR2Configured()) await deleteAttachment(attachmentKey);

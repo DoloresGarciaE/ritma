@@ -24,8 +24,13 @@ export type TeamMember = {
   name: string;
   email: string;
   role: "OWNER" | "ADMIN" | "TEACHER";
-  /** Perfil docente vinculado, si dicta clases. */
-  teacher: { id: string; displayName: string; groupCount: number } | null;
+  /** Perfil docente vinculado, si dicta clases. `kind` decide si lleva acuerdo (S9). */
+  teacher: {
+    id: string;
+    displayName: string;
+    groupCount: number;
+    kind: "OWNER_TEACHER" | "STAFF" | "EXTERNAL";
+  } | null;
 };
 
 export type PendingInvitation = {
@@ -81,6 +86,7 @@ export async function listTeam(actor: Actor): Promise<TeamMember[]> {
         id: true,
         displayName: true,
         membershipUserId: true,
+        kind: true,
         _count: { select: { groups: { where: { active: true } } } },
       },
     }),
@@ -96,7 +102,12 @@ export async function listTeam(actor: Actor): Promise<TeamMember[]> {
       email: membership.user.email,
       role: membership.role,
       teacher: profile
-        ? { id: profile.id, displayName: profile.displayName, groupCount: profile._count.groups }
+        ? {
+            id: profile.id,
+            displayName: profile.displayName,
+            groupCount: profile._count.groups,
+            kind: profile.kind,
+          }
         : null,
     };
   });

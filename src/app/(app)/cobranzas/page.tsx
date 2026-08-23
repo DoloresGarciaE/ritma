@@ -11,9 +11,10 @@ import { defaultReminderTemplate, firstNameOf, renderTemplate } from "@/lib/remi
 import { cn } from "@/lib/utils";
 import { waLink } from "@/lib/whatsapp";
 import { requireScopedMember } from "@/server/authz";
-import { getOrgSettings, getShellOrganization } from "@/server/organizations";
+import { getOrgSettings, getShellOrganization, listTeacherOptions } from "@/server/organizations";
 import { debtorsForPeriod } from "@/server/services/charges";
 import { listGroups } from "@/server/services/groups";
+import { can } from "@/server/services/permissions";
 
 import { AppBar } from "../_components/app-bar";
 import { EmptyState } from "../_components/empty-state";
@@ -41,12 +42,16 @@ export default async function CobranzasPage({
 
   const first = (value: string | string[] | undefined) => (Array.isArray(value) ? value[0] : value);
 
-  const [{ scope }, settings, shellOrg] = await Promise.all([
+  const [{ actor, scope }, settings, shellOrg] = await Promise.all([
     requireScopedMember(orgId),
     getOrgSettings(orgId),
     getShellOrganization(orgId),
   ]);
   const groups = await listGroups(orgId, scope);
+  // S9: el sheet de pago pregunta "¿qué profe cobró?" solo a owner/admin de un estudio
+  // (un teacher se auto-atribuye en el server).
+  const teachers =
+    shellOrg?.type === "STUDIO" && can(actor, "org:viewAll") ? await listTeacherOptions(orgId) : [];
   const today = todayInTz(settings?.timezone ?? DEFAULT_TIMEZONE);
   const currentPeriod = periodOf(today);
 
@@ -195,6 +200,7 @@ export default async function CobranzasPage({
               isStudio={shellOrg?.type === "STUDIO"}
               attachmentsEnabled={isR2Configured()}
               today={today}
+              teachers={teachers}
             />
           </>
         )}

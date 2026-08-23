@@ -2,11 +2,12 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { requireSession } from "@/lib/auth";
-import { civilDateOf, DEFAULT_TIMEZONE } from "@/lib/dates";
+import { civilDateOf, DEFAULT_TIMEZONE, todayInTz } from "@/lib/dates";
 import { isEmailConfigured } from "@/lib/email";
 import { formatListDate } from "@/lib/format";
 import { requireScopedMember } from "@/server/authz";
 import { getOrgSettings, getShellOrganization } from "@/server/organizations";
+import { currentAgreements } from "@/server/services/agreements";
 import { can } from "@/server/services/permissions";
 import { listPendingInvitations, listTeam } from "@/server/services/team";
 
@@ -34,10 +35,11 @@ export default async function EquipoPage() {
   const { actor } = await requireScopedMember(session.activeOrgId!);
   if (!can(actor, "members:manage")) notFound();
 
-  const [team, pending, settings] = await Promise.all([
+  const [team, pending, settings, agreements] = await Promise.all([
     listTeam(actor),
     listPendingInvitations(actor),
     getOrgSettings(actor.orgId),
+    currentAgreements(actor),
   ]);
 
   const timezone = settings?.timezone ?? DEFAULT_TIMEZONE;
@@ -59,7 +61,12 @@ export default async function EquipoPage() {
       />
 
       <div className="flex flex-col gap-6 px-4 py-6 md:px-6">
-        <TeamSection members={team} selfUserId={actor.userId} />
+        <TeamSection
+          members={team}
+          selfUserId={actor.userId}
+          agreements={agreements}
+          today={todayInTz(timezone)}
+        />
         <InvitationsSection invitations={invitations} />
       </div>
     </>

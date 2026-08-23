@@ -72,6 +72,7 @@ export function PaymentSheet({
   isStudio,
   attachmentsEnabled,
   today,
+  teachers = [],
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -80,6 +81,11 @@ export function PaymentSheet({
   attachmentsEnabled: boolean;
   /** Hoy en la zona de la org. */
   today: string;
+  /**
+   * S9: con "lo recibió un profe", owner/admin eligen CUÁL (el C de su liquidación).
+   * Vacío para un teacher: el server lo auto-atribuye — no hay nada que elegir.
+   */
+  teachers?: { id: string; displayName: string }[];
 }) {
   const toast = useToast();
   const [pending, startSubmit] = useTransition();
@@ -89,6 +95,7 @@ export function PaymentSheet({
   const [amount, setAmount] = useState<number | null>(null);
   const [method, setMethod] = useState<MethodValue>("CASH");
   const [receivedBy, setReceivedBy] = useState<"STUDIO" | "TEACHER">("STUDIO");
+  const [receivedById, setReceivedById] = useState<string | null>(null);
   const [paidAt, setPaidAt] = useState(today);
   const [file, setFile] = useState<File | null>(null);
   const [manualOpen, setManualOpen] = useState(false);
@@ -145,6 +152,7 @@ export function PaymentSheet({
           amount,
           method,
           ...(isStudio ? { receivedBy } : {}),
+          ...(isStudio && receivedBy === "TEACHER" ? { receivedById } : {}),
           paidAt,
           allocations,
         });
@@ -288,6 +296,30 @@ export function PaymentSheet({
                     El profe
                   </button>
                 </div>
+
+                {/* S9: cuál profe (el C de su liquidación). Sin elegir = sin atribuir,
+                    y Liquidaciones lo canta — no se asume nada. */}
+                {receivedBy === "TEACHER" && teachers.length > 0 ? (
+                  <div className="mt-1 flex flex-col gap-1.5">
+                    <span className="text-sm font-medium text-text">¿Qué profe?</span>
+                    <div className="flex flex-wrap gap-2">
+                      {teachers.map((teacher) => {
+                        const selected = receivedById === teacher.id;
+                        return (
+                          <button
+                            key={teacher.id}
+                            type="button"
+                            aria-pressed={selected}
+                            onClick={() => setReceivedById(selected ? null : teacher.id)}
+                            className={chipStyles(selected)}
+                          >
+                            {teacher.displayName}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : null}
               </div>
             ) : null}
 

@@ -54,6 +54,7 @@ export function AccountStatementCard({
   isStudio,
   attachmentsEnabled,
   today,
+  teachers = [],
 }: {
   studentId: string;
   studentName: string;
@@ -67,6 +68,8 @@ export function AccountStatementCard({
   attachmentsEnabled: boolean;
   /** Hoy en la zona de la org. */
   today: string;
+  /** S9: opciones "¿qué profe cobró?" del sheet (solo owner/admin de un STUDIO). */
+  teachers?: { id: string; displayName: string }[];
 }) {
   const toast = useToast();
   const [saving, startSave] = useTransition();
@@ -270,6 +273,7 @@ export function AccountStatementCard({
         isStudio={isStudio}
         attachmentsEnabled={attachmentsEnabled}
         today={today}
+        teachers={teachers}
       />
 
       <PaymentDetailSheet
