@@ -51,9 +51,7 @@ export default async function CobranzasPage({
   // S9: el sheet de pago pregunta "¿qué profe cobró?" solo a owner/admin de un estudio
   // (un teacher se auto-atribuye en el server).
   const teachers =
-    shellOrg?.type === "STUDIO" && can(actor, "org:viewAll")
-      ? await listTeacherOptions(orgId)
-      : [];
+    shellOrg?.type === "STUDIO" && can(actor, "org:viewAll") ? await listTeacherOptions(orgId) : [];
   const today = todayInTz(settings?.timezone ?? DEFAULT_TIMEZONE);
   const currentPeriod = periodOf(today);
 

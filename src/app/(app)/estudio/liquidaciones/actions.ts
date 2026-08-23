@@ -65,9 +65,7 @@ export async function closeSettlementAction(
   }
 }
 
-export async function markSettlementPaidAction(
-  settlementId: string,
-): Promise<{ error?: string }> {
+export async function markSettlementPaidAction(settlementId: string): Promise<{ error?: string }> {
   const actor = await currentAdmin();
 
   try {

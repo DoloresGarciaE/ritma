@@ -72,9 +72,7 @@ export default async function StudentPage({ params }: Params) {
 
   // S9: el sheet de pago pregunta "¿qué profe cobró?" solo a owner/admin de un estudio.
   const teachers =
-    shellOrg?.type === "STUDIO" && can(actor, "org:viewAll")
-      ? await listTeacherOptions(orgId)
-      : [];
+    shellOrg?.type === "STUDIO" && can(actor, "org:viewAll") ? await listTeacherOptions(orgId) : [];
 
   // El recordatorio de la ficha habla del período EN CURSO (el de Deudores, del período
   // visible). buildReminder trae mensaje + deuda; el link wa.me se arma acá, server-side.

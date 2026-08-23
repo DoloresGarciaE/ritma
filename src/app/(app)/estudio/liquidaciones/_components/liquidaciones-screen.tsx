@@ -81,7 +81,11 @@ function NumbersGrid({ numbers }: { numbers: SettlementNumbers }) {
 function TeacherCard({ row, onOpen }: { row: SettlementTeacherRow; onOpen: () => void }) {
   return (
     <Card className="flex flex-col gap-3 p-4">
-      <button type="button" onClick={onOpen} className="flex cursor-pointer flex-col gap-3 text-left">
+      <button
+        type="button"
+        onClick={onOpen}
+        className="flex cursor-pointer flex-col gap-3 text-left"
+      >
         <div className="flex items-center gap-2">
           <span className="truncate font-medium text-text">{row.displayName}</span>
           {!row.linked ? (
@@ -180,9 +184,7 @@ export function LiquidacionesAdmin({
       {overview.unattributed.count > 0 ? (
         <div className="rounded-card bg-warning-bg px-3 py-2.5 text-sm text-warning-text">
           {formatMoney(overview.unattributed.total)} cobrados en mano sin decir qué profe (
-          {overview.unattributed.count === 1
-            ? "1 pago"
-            : `${overview.unattributed.count} pagos`}
+          {overview.unattributed.count === 1 ? "1 pago" : `${overview.unattributed.count} pagos`}
           ): no entran a ningún C.
         </div>
       ) : null}
@@ -332,7 +334,9 @@ function SettlementDetailSheet({
       open={teacherId !== null}
       onOpenChange={(next) => !next && onClose()}
       title={detail ? detail.teacher.displayName : "Liquidación"}
-      description={detail ? `${formatPeriod(detail.period)} · ${STATE_LABEL[detail.state]}` : "Cargando…"}
+      description={
+        detail ? `${formatPeriod(detail.period)} · ${STATE_LABEL[detail.state]}` : "Cargando…"
+      }
     >
       <ActionSheetBody className="flex flex-col gap-4 py-4">
         {!detail ? (
@@ -372,7 +376,10 @@ function SettlementDetailSheet({
               </span>
               <ul className="flex flex-col divide-y divide-border rounded-card border border-border">
                 {detail.payments.map((payment, index) => (
-                  <li key={`${payment.paymentId}-${index}`} className="flex flex-col gap-0.5 px-3 py-2">
+                  <li
+                    key={`${payment.paymentId}-${index}`}
+                    className="flex flex-col gap-0.5 px-3 py-2"
+                  >
                     <div className="flex items-baseline justify-between gap-2">
                       <span className="truncate text-sm text-text">{payment.studentName}</span>
                       <span className="shrink-0 font-display text-sm tabular-nums text-text">

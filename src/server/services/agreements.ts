@@ -34,9 +34,7 @@ function assertCanManage(actor: Actor): void {
 }
 
 /** El acuerdo MÁS NUEVO de cada profe (para las filas del equipo): teacherId → acuerdo. */
-export async function currentAgreements(
-  actor: Actor,
-): Promise<Record<string, AgreementListItem>> {
+export async function currentAgreements(actor: Actor): Promise<Record<string, AgreementListItem>> {
   assertCanManage(actor);
 
   const rows = await withOrg(actor.orgId).agreement.findMany({
