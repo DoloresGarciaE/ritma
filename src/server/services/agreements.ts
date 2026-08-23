@@ -33,6 +33,30 @@ function assertCanManage(actor: Actor): void {
   if (!can(actor, "settlements:manage")) assertRole(actor, ["OWNER", "ADMIN"]);
 }
 
+/** El acuerdo MÁS NUEVO de cada profe (para las filas del equipo): teacherId → acuerdo. */
+export async function currentAgreements(
+  actor: Actor,
+): Promise<Record<string, AgreementListItem>> {
+  assertCanManage(actor);
+
+  const rows = await withOrg(actor.orgId).agreement.findMany({
+    where: { type: "REVENUE_SHARE" },
+    orderBy: { validFrom: "asc" },
+    select: { id: true, teacherId: true, studioPercent: true, validFrom: true },
+  });
+
+  // Orden ascendente: el último que pisa cada teacherId es el más nuevo.
+  const byTeacher: Record<string, AgreementListItem> = {};
+  for (const row of rows) {
+    byTeacher[row.teacherId] = {
+      id: row.id,
+      studioPercent: (row.studioPercent as Money).toNumber(),
+      validFrom: dbToCivil(row.validFrom),
+    };
+  }
+  return byTeacher;
+}
+
 /** El historial de acuerdos del profe, vigente primero. */
 export async function listAgreements(
   actor: Actor,

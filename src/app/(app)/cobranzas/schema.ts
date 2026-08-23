@@ -76,6 +76,8 @@ export const paymentSchema = z.object({
   amount: paymentAmountField,
   method: z.enum(["CASH", "TRANSFER", "OTHER"]),
   receivedBy: z.enum(["STUDIO", "TEACHER"]).optional(),
+  /** QUÉ profe lo cobró (S9, RN5/RN6). Null = sin atribuir; Liquidaciones lo canta. */
+  receivedById: z.string().min(1).nullable().optional(),
   paidAt: civilDateField,
   /** Ausente → imputación automática (RN4); presente → edición manual (HU4.4). */
   allocations: z

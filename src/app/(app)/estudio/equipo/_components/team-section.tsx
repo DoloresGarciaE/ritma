@@ -14,9 +14,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/toast";
+import { formatListDate } from "@/lib/format";
+import type { AgreementListItem } from "@/server/services/agreements";
 import type { TeamMember } from "@/server/services/team";
 
 import { revokeMemberAction } from "../../actions";
+import { AgreementSheet } from "./agreement-sheet";
 
 const ROLE_LABEL = { OWNER: "Titular", ADMIN: "Admin", TEACHER: "Profe" } as const;
 
@@ -29,14 +32,23 @@ const ROLE_LABEL = { OWNER: "Titular", ADMIN: "Admin", TEACHER: "Profe" } as con
 export function TeamSection({
   members,
   selfUserId,
+  agreements,
+  today,
 }: {
   members: TeamMember[];
   selfUserId: string;
+  /** S9: el acuerdo más nuevo por perfil (teacherId → acuerdo), para la fila. */
+  agreements: Record<string, AgreementListItem>;
+  /** Hoy en la zona de la org (default de la vigencia del acuerdo). */
+  today: string;
 }) {
   const router = useRouter();
   const toast = useToast();
   const [target, setTarget] = useState<TeamMember | null>(null);
   const [revoking, startRevoke] = useTransition();
+  const [agreementFor, setAgreementFor] = useState<{ id: string; displayName: string } | null>(
+    null,
+  );
 
   const handleRevoke = () => {
     if (!target) return;
@@ -80,7 +92,24 @@ export function TeamSection({
                   {" · "}
                   {member.email}
                 </span>
+                {/* S9: el acuerdo, visible en la fila — y su falta, cantada. */}
+                {member.teacher?.kind === "STAFF" ? (
+                  <span className="truncate text-xs text-text-secondary">
+                    {agreements[member.teacher.id]
+                      ? `Acuerdo: ${agreements[member.teacher.id].studioPercent}% el estudio · desde el ${formatListDate(agreements[member.teacher.id].validFrom)}`
+                      : "Sin acuerdo: su liquidación no se puede calcular"}
+                  </span>
+                ) : null}
               </div>
+              {member.teacher?.kind === "STAFF" ? (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setAgreementFor(member.teacher)}
+                >
+                  Acuerdo
+                </Button>
+              ) : null}
               {member.role !== "OWNER" && member.userId !== selfUserId ? (
                 <Button variant="ghost" size="sm" onClick={() => setTarget(member)}>
                   Revocar
@@ -90,6 +119,13 @@ export function TeamSection({
           ))}
         </ul>
       </Card>
+
+      <AgreementSheet
+        open={agreementFor !== null}
+        onOpenChange={(open) => !open && setAgreementFor(null)}
+        teacher={agreementFor}
+        today={today}
+      />
 
       <Dialog open={target !== null} onOpenChange={(open) => !open && setTarget(null)}>
         <DialogContent className="gap-4 p-4">

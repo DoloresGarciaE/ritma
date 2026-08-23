@@ -164,6 +164,7 @@ export type SettlementNumbers = {
 export type SettlementTeacherRow = {
   teacherId: string;
   displayName: string;
+  period: string;
   /** false = perfil desvinculado (docente revocada): su plata igual se liquida. */
   linked: boolean;
   state: "draft" | "needs-agreement" | "closed" | "paid";
@@ -204,6 +205,8 @@ export type SettlementDetail = {
   period: string;
   teacher: { id: string; displayName: string };
   state: SettlementTeacherRow["state"];
+  /** Presente cuando está cerrada: el objetivo de "Marcar pagada". */
+  settlementId?: string;
   numbers: SettlementNumbers;
   tranches: { validFrom: string; studioPercent: number; gross: number; share: number }[];
   payments: SettlementDetailPayment[];
@@ -452,6 +455,7 @@ export async function settlementOverview(
       teachers.push({
         teacherId: profile.id,
         displayName: profile.displayName,
+        period,
         linked: profile.membershipUserId !== null,
         state: existing.status === "PAID" ? "paid" : "closed",
         numbers: {
@@ -476,6 +480,7 @@ export async function settlementOverview(
       teachers.push({
         teacherId: profile.id,
         displayName: profile.displayName,
+        period,
         linked: profile.membershipUserId !== null,
         state: "draft",
         numbers: toNumbers(result),
@@ -485,6 +490,7 @@ export async function settlementOverview(
       teachers.push({
         teacherId: profile.id,
         displayName: profile.displayName,
+        period,
         linked: profile.membershipUserId !== null,
         state: "needs-agreement",
         numbers: null,
@@ -566,6 +572,7 @@ export async function settlementDetail(
     period,
     teacher,
     state: existing ? (existing.status === "PAID" ? "paid" : "closed") : "draft",
+    settlementId: existing?.id,
     numbers,
     tranches: result.tranches.map((tranche) => ({
       validFrom: tranche.validFrom,
@@ -709,6 +716,7 @@ export async function teacherSettlements(
     current = {
       teacherId,
       displayName: profile.displayName,
+      period,
       linked: true,
       state: "draft",
       numbers: toNumbers(computeSettlement(inputs.engine, slices)),
@@ -718,6 +726,7 @@ export async function teacherSettlements(
     current = {
       teacherId,
       displayName: profile.displayName,
+      period,
       linked: true,
       state: "needs-agreement",
       numbers: null,
@@ -730,6 +739,7 @@ export async function teacherSettlements(
     history: closed.map((settlement) => ({
       teacherId,
       displayName: profile.displayName,
+      period: settlement.period,
       linked: true,
       state: settlement.status === "PAID" ? "paid" : "closed",
       numbers: {

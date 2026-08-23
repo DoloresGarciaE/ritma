@@ -231,6 +231,8 @@ export async function createPaymentAction(input: {
   amount: number | null;
   method: "CASH" | "TRANSFER" | "OTHER";
   receivedBy?: "STUDIO" | "TEACHER";
+  /** S9: qué profe lo cobró en mano. El server auto-atribuye al actor TEACHER. */
+  receivedById?: string | null;
   paidAt: string;
   allocations?: { chargeId: string; amount: number }[];
 }): Promise<PaymentFormState & { paymentId?: string; receiptShareUrl?: string }> {

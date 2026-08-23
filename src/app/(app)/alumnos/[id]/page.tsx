@@ -7,7 +7,7 @@ import { isEmailConfigured } from "@/lib/email";
 import { isR2Configured } from "@/lib/r2";
 import { waLink } from "@/lib/whatsapp";
 import { requireScopedMember } from "@/server/authz";
-import { getOrgSettings, getShellOrganization } from "@/server/organizations";
+import { getOrgSettings, getShellOrganization, listTeacherOptions } from "@/server/organizations";
 import { listChargesForStudent } from "@/server/services/charges";
 import { listEnrollmentsForStudent } from "@/server/services/enrollments";
 import { listGroups } from "@/server/services/groups";
@@ -70,6 +70,12 @@ export default async function StudentPage({ params }: Params) {
   const today = todayInTz(settings?.timezone ?? "");
   const timezone = settings?.timezone ?? "";
 
+  // S9: el sheet de pago pregunta "¿qué profe cobró?" solo a owner/admin de un estudio.
+  const teachers =
+    shellOrg?.type === "STUDIO" && can(actor, "org:viewAll")
+      ? await listTeacherOptions(orgId)
+      : [];
+
   // El recordatorio de la ficha habla del período EN CURSO (el de Deudores, del período
   // visible). buildReminder trae mensaje + deuda; el link wa.me se arma acá, server-side.
   const period = periodOf(today);
@@ -109,6 +115,7 @@ export default async function StudentPage({ params }: Params) {
               isStudio={shellOrg?.type === "STUDIO"}
               attachmentsEnabled={isR2Configured()}
               today={today}
+              teachers={teachers}
             />
             <RemindersCard
               studentId={student.id}
