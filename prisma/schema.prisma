@@ -47,6 +47,80 @@ enum TeacherKind {
   EXTERNAL
 }
 
+/// Tipo de acuerdo económico (Plan §7). RENTAL queda DECLARADO para S10 (decisión S9):
+/// sus columnas (rentalAmount, rentalPeriod) llegan con la lógica de alquileres — un
+/// valor usable sin código detrás sería un estado imposible de manejar.
+enum AgreementType {
+  REVENUE_SHARE
+  RENTAL
+}
+
+/// Acuerdo económico de un perfil docente (HU6.1, RN6). CAMBIAR el porcentaje CREA un
+/// registro nuevo con su `validFrom`: el historial queda intacto y cada pago liquida
+/// con el acuerdo vigente a su `paidAt` (propuesta RN6-bis, S9) — un cambio a mitad de
+/// mes parte el cálculo en dos tramos.
+model Agreement {
+  id       String        @id @default(cuid())
+  orgId    String
+  teacherId String
+  type     AgreementType
+  /// Porcentaje de retención del ESTUDIO (30 = 30%). Decimal: la plata no toca floats.
+  studioPercent Decimal? @db.Decimal(5, 2)
+  /// Fecha civil desde la que rige (@db.Date, RN10).
+  validFrom DateTime @db.Date
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  org     Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  teacher TeacherProfile @relation(fields: [teacherId], references: [id], onDelete: Restrict)
+
+  /// Dos acuerdos del mismo profe desde el mismo día serían ambiguos.
+  @@unique([teacherId, validFrom])
+  @@index([orgId, teacherId, validFrom])
+}
+
+enum SettlementStatus {
+  /// Declarado por §7; en el MVP el borrador NO persiste (se calcula al abrir): las
+  /// filas nacen CLOSED. El valor existe para que el ciclo del plan quede representable.
+  OPEN
+  CLOSED
+  PAID
+}
+
+/// Liquidación mensual de un profe STAFF (HU6.2/HU6.4, RN6): los números CONGELADOS al
+/// cerrar. `netToTeacher` puede ser negativo (el profe cobró en mano más de lo que le
+/// corresponde) y se muestra con signo explícito (Componentes §4.2). Cerrar vincula
+/// `settlementId` en cada pago incluido: esos pagos quedan inmutables (RN12 se completa
+/// acá). Reabrir no existe en el MVP.
+model Settlement {
+  id       String @id @default(cuid())
+  orgId    String
+  teacherId String
+  /// "YYYY-MM", calculado en la zona de la org (RN10).
+  period   String
+  gross              Decimal @db.Decimal(12, 2)
+  studioShare        Decimal @db.Decimal(12, 2)
+  collectedByTeacher Decimal @db.Decimal(12, 2)
+  netToTeacher       Decimal @db.Decimal(12, 2)
+  status   SettlementStatus
+  /// Instantes de los dos eventos del ciclo; la UI los muestra como fecha civil (RN10).
+  closedAt DateTime
+  paidAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  org     Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  teacher TeacherProfile @relation(fields: [teacherId], references: [id], onDelete: Restrict)
+
+  payments Payment[]
+
+  /// Un cierre por profe y período: la garantía dura contra el doble cierre.
+  @@unique([teacherId, period])
+  @@index([orgId, period])
+}
+
 /// El tenant: unidad de aislamiento de datos (Plan §3).
 model Organization {
   id               String   @id @default(cuid())
@@ -77,6 +151,8 @@ model Organization {
   teachers    TeacherProfile[]
   invitations Invitation[]
   spaces      Space[]
+  agreements  Agreement[]
+  settlements Settlement[]
 }
 
 /// Salón del estudio (Plan §3/§7, HU3.1/HU3.4 — S8). Solo una org STUDIO lo usa; en
@@ -124,7 +200,10 @@ model TeacherProfile {
   org  Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   user User?        @relation(fields: [membershipUserId], references: [id], onDelete: SetNull)
 
-  groups ClassGroup[]
+  groups           ClassGroup[]
+  agreements       Agreement[]
+  settlements      Settlement[]
+  receivedPayments Payment[]
 
   /// Un usuario tiene a lo sumo UN perfil por org; varios `null` conviven (perfiles
   /// desvinculados conservando historial).
@@ -445,8 +524,14 @@ model Payment {
   /// RN10: cada monto lleva su moneda, copiada de la org al registrar (patrón Charge, S3).
   currency  String
   method    PayMethod
-  /// RN5. `receivedById` (QUÉ profe) llega con TeacherProfile en S9 — ver nota S4 en §7.
-  receivedBy ReceivedBy @default(STUDIO)
+  /// RN5. `receivedById` dice QUÉ profe (S9): imprescindible para el C de RN6. Null en
+  /// un pago TEACHER = "en mano sin atribuir" — se CANTA en Liquidaciones, no se asume
+  /// (decisión S9). Un teacher que registra su cobro se auto-atribuye.
+  receivedBy   ReceivedBy @default(STUDIO)
+  receivedById String?
+  /// La liquidación que lo CONGELÓ (S9, RN6/RN12): con esto puesto, el pago es
+  /// inmutable — no se elimina ni se reimputa (el crédito del cron lo saltea).
+  settlementId String?
   /// Fecha civil del pago (@db.Date, RN10), default hoy en la UI. El orden fino de
   /// imputación lo desempata `createdAt`.
   paidAt    DateTime   @db.Date
@@ -462,6 +547,10 @@ model Payment {
 
   org     Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   student Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  // Restrict en ambos (S9): ni perfiles ni liquidaciones se borran, y si algún día se
+  // borrara uno, no puede desatribuir/descongelar pagos en silencio.
+  receivedByTeacher TeacherProfile? @relation(fields: [receivedById], references: [id], onDelete: Restrict)
+  settlement        Settlement?     @relation(fields: [settlementId], references: [id], onDelete: Restrict)
 
   allocations PaymentAllocation[]
 
@@ -469,6 +558,9 @@ model Payment {
   @@index([orgId, studentId])
   @@index([orgId, paidAt])
   @@index([studentId])
+  // S9: el drill-down de una liquidación cerrada lee por su membresía congelada.
+  @@index([settlementId])
+  @@index([receivedById])
 }
 
 /// Imputación de un pago a una cuota (RN4): cuánta plata de ESTE pago cubre ESA cuota.

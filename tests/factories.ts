@@ -172,6 +172,7 @@ export async function makePayment(
     currency?: string;
     method?: "CASH" | "TRANSFER" | "OTHER";
     receivedBy?: "STUDIO" | "TEACHER";
+    receivedById?: string | null;
     paidAt?: string;
     attachmentKey?: string | null;
   } = {},
@@ -184,9 +185,48 @@ export async function makePayment(
       currency: extra.currency ?? "ARS",
       method: extra.method ?? "CASH",
       receivedBy: extra.receivedBy ?? "STUDIO",
+      receivedById: extra.receivedById ?? null,
       paidAt: new Date(`${extra.paidAt ?? "2026-07-05"}T00:00:00.000Z`),
       attachmentKey: extra.attachmentKey ?? null,
       receiptToken: randomUUID(),
+    },
+  });
+}
+
+/** Un acuerdo de porcentaje, por el camino crudo (S9). */
+export async function makeAgreement(
+  orgId: string,
+  teacherId: string,
+  extra: { studioPercent?: number; validFrom?: string } = {},
+) {
+  return db.agreement.create({
+    data: {
+      orgId,
+      teacherId,
+      type: "REVENUE_SHARE",
+      studioPercent: extra.studioPercent ?? 30,
+      validFrom: new Date(`${extra.validFrom ?? "2026-01-01"}T00:00:00.000Z`),
+    },
+  });
+}
+
+/** Una liquidación cerrada, por el camino crudo (S9) — solo para aislamiento. */
+export async function makeSettlement(
+  orgId: string,
+  teacherId: string,
+  extra: { period?: string; status?: "CLOSED" | "PAID" } = {},
+) {
+  return db.settlement.create({
+    data: {
+      orgId,
+      teacherId,
+      period: extra.period ?? "2026-07",
+      gross: 100000,
+      studioShare: 30000,
+      collectedByTeacher: 0,
+      netToTeacher: 70000,
+      status: extra.status ?? "CLOSED",
+      closedAt: new Date("2026-08-01T12:00:00.000Z"),
     },
   });
 }
