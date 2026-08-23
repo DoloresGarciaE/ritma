@@ -240,6 +240,51 @@ ritma/
   las reglas del "Profe a cargo": solo owner/admin de STUDIO, forzado como está para un
   teacher (`updateGroup`), verificado contra la org al escribir.
 
+## Acuerdos y liquidaciones (desde S9)
+
+- **La fórmula RN6 vive en UN lugar**: `computeSettlement`
+  ([`services/settlements.ts`](src/server/services/settlements.ts)), pura sobre Decimal —
+  no se reimplementa ni en pantallas ni en el seed (el seed CIERRA con el servicio real).
+  `B` = imputado a cuotas de grupos del profe, cortado por FECHA DE PAGO; `R` = B×r por
+  tramo de vigencia (redondeo HALF_UP a 2 por tramo: la suma de partes ES el total, el
+  drill-down cuadra al centavo); **`C` = el monto COMPLETO de cada pago cobrado en mano**
+  (decisión de sesión: la fórmula cuadra la CAJA — pago $20.000 imputados $17.000 → C
+  20.000); `N = (B−R)−C`, negativo posible con signo explícito (§4.2). Suite insignia:
+  la mitad pura en `services/settlements.test.ts`, la mitad con base en
+  [`tests/settlements.test.ts`](tests/settlements.test.ts).
+- **`Agreement` es un HISTORIAL, no un campo** (RN6-bis, propuesta en Plan §8): unique
+  `[teacherId, validFrom]`; cambiar el % crea fila nueva; cada pago liquida con el
+  acuerdo vigente a su `paidAt` (inclusive). **Sin acuerdo vigente NO se calcula** (estado
+  "sin acuerdo" cantado — jamás un 0% silencioso). Solo REVENUE_SHARE en S9; RENTAL
+  declarado para S10. Solo los STAFF se liquidan: la titular (OWNER_TEACHER) no lleva
+  acuerdo y sus grupos no entran a ninguna liquidación; una STAFF DESVINCULADA liquida
+  igual (revocar no borra plata).
+- **El borrador NO persiste** (`OPEN` declarado, jamás escrito): se calcula al abrir con
+  datos vivos. **Solo se cierran períodos TERMINADOS** (`period >= current` rebota) — esa
+  guarda es la que hace EXACTA a la imputación tardía: el crédito del cron sobre un pago
+  ya liquidado se PERMITE y liquida en el período donde OCURRE (clasificador:
+  `alloc.createdAt > settlement.closedAt`; el drill-down la marca "imputación de un mes
+  ya cerrado"). Cerrar es transaccional: persiste números + vincula `settlementId` en
+  cada pago primario → **RN12 completa: eliminar un pago congelado se rechaza nombrando
+  el período** (formateado "Julio 2026", testeado). PAID solo desde CLOSED. **Reabrir no
+  existe**; el walkthrough resetea borrando la fila vía db crudo, que es limpieza de
+  datos de demo, no una feature.
+- **`receivedById` dice QUÉ profe** (el C): un actor teacher se atribuye a SÍ MISMO
+  (spoof-proof, lo que mande el cliente no cuenta); owner/admin eligen del selector
+  "¿Qué profe?" (solo STUDIO + "El profe"), verificado contra la org. Los TEACHER viejos
+  sin perfil son el balde **"sin atribuir"**; los pagos a grupos **sin profe** son el
+  balde "sin asignar" con link a asignar — los dos se CANTAN en el overview y no entran
+  a ninguna liquidación.
+- **Pantalla §3.20**: overview admin por período (default el ANTERIOR, el cerrable) +
+  "Mis liquidaciones" del profe (HU6.4, misma fuente — la pantalla NO suma nada, regla
+  S4). Desde S9 una profe STAFF SÍ entra a `/estudio` (su única puerta: liquidaciones);
+  `/mas` se lo ofrece con hint "Tus liquidaciones". ⚠️ El título del toast TRUNCA a una
+  línea (§3.9): todo aviso cuyo final importa (período, neto) va con título corto +
+  `description`, que envuelve.
+- ⚠️ Edge documentado: un pago RETRO-fechado a un período ya cerrado aparece en el
+  drill-down recalculado pero no en los totales congelados — v2 podría cantarlo; hoy se
+  evita no fechando pagos hacia atrás de un cierre.
+
 ## El patrón para un modelo de negocio nuevo (desde S1)
 
 `Student` (S1) es la plantilla. Todo modelo de negocio que llegue después se construye **en este

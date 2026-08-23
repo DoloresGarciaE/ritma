@@ -183,9 +183,17 @@ ritma/
       calendario es la vista "Salones" de la Agenda, con huecos explícitos "Libre · …".)
 
 ### S9 — Acuerdos y liquidaciones
-- [ ] Modelos `TeacherProfile` (kind), `Agreement` (con vigencia) y `Settlement`; campo `receivedBy` en el pago (RN5).
-- [ ] `computeSettlement` como función pura con la suite de tests más exhaustiva del proyecto (RN6): casos con cobro en mano mayor y menor al neto, período sin pagos, cambio de porcentaje a mitad de vigencia.
-- [ ] UI de liquidaciones con drill-down a pagos, cierre (`CLOSED` congela pagos) y marca de pagada (HU6.2, HU6.4).
+- [x] Modelos `TeacherProfile` (kind), `Agreement` (con vigencia) y `Settlement`; campo `receivedBy` en el pago (RN5).
+      (`receivedById` dice QUÉ profe: un teacher se auto-atribuye, owner/admin eligen; los
+      "en mano" viejos sin perfil quedan como balde "sin atribuir", cantado.)
+- [x] `computeSettlement` como función pura con la suite de tests más exhaustiva del proyecto (RN6): casos con cobro en mano mayor y menor al neto, período sin pagos, cambio de porcentaje a mitad de vigencia.
+      (Vigencia por `validFrom` = propuesta RN6-bis, nota S9 del Plan §8; C = el pago
+      COMPLETO cobrado en mano; la imputación tardía liquida donde OCURRE — exacto porque
+      solo se cierran períodos terminados.)
+- [x] UI de liquidaciones con drill-down a pagos, cierre (`CLOSED` congela pagos) y marca de pagada (HU6.2, HU6.4).
+      (El borrador NO persiste: se calcula al abrir; reabrir no existe. Los huecos se
+      cantan: grupos sin profe con monto y link a asignar. RN12 completa: eliminar un
+      pago congelado se rechaza nombrando el período.)
 
 ### S10 — Alquileres y reportes
 - [ ] `RentalCharge`: acuerdos mensual y por hora/turno (RN7, calculado sobre sesiones no canceladas); marcar pagado.
