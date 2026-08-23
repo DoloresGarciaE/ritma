@@ -51,6 +51,16 @@ function signedMoney(value: number): string {
   return value < 0 ? `−${formatMoney(Math.abs(value))}` : formatMoney(value);
 }
 
+/** §3.8: la confirmación del cierre resume lo que congela y lo que fija. */
+function closeSummary(detail: SettlementDetail): string {
+  const frozen = detail.payments.filter((p) => !p.late).length;
+  const pagos =
+    frozen === 1
+      ? "1 pago queda congelado (no se podrá eliminar)"
+      : `${frozen} pagos quedan congelados (no se podrán eliminar)`;
+  return `${pagos} y el neto queda fijado en ${signedMoney(detail.numbers.netToTeacher)}. No hay reapertura.`;
+}
+
 function NumbersGrid({ numbers }: { numbers: SettlementNumbers }) {
   return (
     <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
@@ -432,11 +442,7 @@ function SettlementDetailSheet({
           <DialogTitle>
             ¿Cerrar {formatPeriod(detail?.period ?? "")} de {detail?.teacher.displayName}?
           </DialogTitle>
-          <DialogDescription>
-            {detail
-              ? `${detail.payments.filter((p) => !p.late).length} pagos quedan congelados (no se podrán eliminar) y el neto queda fijado en ${signedMoney(detail.numbers.netToTeacher)}. No hay reapertura.`
-              : ""}
-          </DialogDescription>
+          <DialogDescription>{detail ? closeSummary(detail) : ""}</DialogDescription>
           <div className="flex flex-col gap-2">
             <Button size="lg" className="w-full" loading={working} onClick={handleClose}>
               Cerrar liquidación
