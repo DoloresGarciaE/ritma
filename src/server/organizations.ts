@@ -61,3 +61,19 @@ export const listTeacherOptions = cache(async (orgId: string) =>
     select: { id: true, displayName: true },
   }),
 );
+
+/**
+ * Los salones ACTIVOS de la org (S8): las columnas del calendario y las opciones del
+ * selector "Salón" del form de grupo. Lo lee cualquier miembro — los salones son la
+ * estructura física del estudio (decisión de sesión S8: un teacher ve el marco completo
+ * con SUS clases adentro); gestionarlos sigue siendo de owner/admin (services/spaces.ts).
+ */
+export const listActiveSpaces = cache(async (orgId: string) =>
+  withOrg(orgId).space.findMany({
+    where: { active: true },
+    // Orden de creación; el desempate es por NOMBRE — los salones heredados por la
+    // migración S8 comparten el timestamp y el id (uuid) los barajaría.
+    orderBy: [{ createdAt: "asc" }, { name: "asc" }],
+    select: { id: true, name: true },
+  }),
+);

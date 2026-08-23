@@ -25,7 +25,12 @@ import {
   setGroupActiveAction,
   updateGroupAction,
 } from "../actions";
-import { groupSchema, toGroupFieldErrors, type GroupFormState } from "../schema";
+import {
+  groupSchema,
+  toGroupFieldErrors,
+  type GroupFormState,
+  type OverlapWarning,
+} from "../schema";
 import { newFranjaDraft, SlotEditor, type FranjaDraft } from "./slot-editor";
 
 /**
@@ -55,6 +60,7 @@ export function GroupSheet({
   manage,
   isStudio,
   teachers,
+  spaces,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -66,6 +72,8 @@ export function GroupSheet({
   isStudio: boolean;
   /** Opciones del selector "Profe a cargo": vacío salvo owner/admin de un STUDIO. */
   teachers: { id: string; displayName: string }[];
+  /** Salones ACTIVOS (S8): opciones del selector "Salón" — vacío salvo owner/admin STUDIO. */
+  spaces: { id: string; name: string }[];
 }) {
   const toast = useToast();
   const [pending, startSubmit] = useTransition();
@@ -85,6 +93,14 @@ export function GroupSheet({
     group?.teacher && !teachers.some((teacher) => teacher.id === group.teacher!.id)
       ? [group.teacher, ...teachers]
       : teachers;
+
+  // Salón (S8): mismas reglas que el profe a cargo — recurso del estudio, owner/admin.
+  const [spaceId, setSpaceId] = useState<string | null>(group?.space?.id ?? null);
+  const showSpacePicker = manage && isStudio;
+  const spaceOptions =
+    group?.space && !spaces.some((space) => space.id === group.space!.id)
+      ? [group.space, ...spaces]
+      : spaces;
   // Los slots del server se RE-AGRUPAN en franjas visuales por (hora, duración): mar+jue
   // 18:00/60 llega como UNA fila con dos chips. `originalDays` guarda los ids para que
   // destildar y arrepentirse no cueste las excepciones de ese día.
@@ -123,6 +139,7 @@ export function GroupSheet({
     // Solo cuando el selector existe: ausente = "no tocar" (el server además ignora
     // cualquier teacherId de un teacher — la pantalla nunca es la única guardia).
     ...(showTeacherPicker ? { teacherId } : {}),
+    ...(showSpacePicker ? { spaceId } : {}),
     franjas: franjas.map(({ days, startTime, durationMin }) => ({
       days,
       startTime,
@@ -149,9 +166,13 @@ export function GroupSheet({
   const actionFailedToast = () =>
     toast.error("No se pudo guardar. Revisá la conexión y probá de nuevo.");
 
+  // Solapamientos (S8): la action detectó cruces y NO guardó — el diálogo los lista y
+  // "Guardar igual" reenvía con confirmOverlaps. Advertencia, jamás bloqueo.
+  const [overlaps, setOverlaps] = useState<OverlapWarning[] | null>(null);
+
   // El CTA nunca se deshabilita por errores (Componentes §4.1): al tocarlo valida y
   // lleva el foco (o la vista) al primer problema.
-  const handleSubmit = () => {
+  const handleSubmit = (confirmOverlaps = false) => {
     const result = groupSchema.safeParse(buildInput());
 
     if (!result.success) {
@@ -165,13 +186,17 @@ export function GroupSheet({
 
     startSubmit(async () => {
       const savedName = result.data.name;
+      const input = { ...buildInput(), ...(confirmOverlaps ? { confirmOverlaps } : {}) };
       let state;
       try {
-        state = group
-          ? await updateGroupAction(group.id, buildInput())
-          : await createGroupAction(buildInput());
+        state = group ? await updateGroupAction(group.id, input) : await createGroupAction(input);
       } catch {
         actionFailedToast();
+        return;
+      }
+
+      if (state.overlaps?.length) {
+        setOverlaps(state.overlaps);
         return;
       }
 
@@ -182,6 +207,7 @@ export function GroupSheet({
       }
 
       // Directo al padre (no handleOpenChange): lo guardado ya no es "cambio sin guardar".
+      setOverlaps(null);
       onOpenChange(false);
       toast.notify(group ? `Guardaste ${savedName}` : `Creaste ${savedName}`);
     });
@@ -405,6 +431,41 @@ export function GroupSheet({
             </div>
           ) : null}
 
+          {/* Salón (S8): opcional siempre — un grupo sin salón es ciudadano pleno. */}
+          {showSpacePicker && spaceOptions.length > 0 ? (
+            <div className="flex flex-col gap-1.5">
+              <span className="text-sm font-medium text-text">Salón</span>
+              <div role="group" aria-label="Salón" className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  aria-pressed={spaceId === null}
+                  onClick={() => setSpaceId(null)}
+                  className={chipStyles(spaceId === null)}
+                >
+                  Sin salón
+                </button>
+                {spaceOptions.map((space) => {
+                  const selected = spaceId === space.id;
+                  return (
+                    <button
+                      key={space.id}
+                      type="button"
+                      aria-pressed={selected}
+                      onClick={() => setSpaceId(space.id)}
+                      className={chipStyles(selected)}
+                    >
+                      {selected ? <Check aria-hidden className="size-4" /> : null}
+                      {space.name}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-xs text-text-secondary">
+                Con salón, los cruces en el mismo espacio se avisan antes de guardar.
+              </p>
+            </div>
+          ) : null}
+
           <SlotEditor
             franjas={franjas}
             onChange={(next) => {
@@ -440,6 +501,55 @@ export function GroupSheet({
           </Button>
         </ActionSheetFooter>
       </form>
+
+      {/* Solapamientos (S8, §3.8): la confirmación nombra salón, grupo y horario.
+          Fuerte = imposibilidad física; suave = no podemos saberlo. Nunca bloquea. */}
+      <Dialog open={overlaps !== null} onOpenChange={(next) => !next && setOverlaps(null)}>
+        <DialogContent className="gap-4 p-4">
+          <DialogTitle>
+            {overlaps?.some((o) => o.severity === "strong")
+              ? "Este horario choca con otra clase"
+              : "Puede haber un cruce"}
+          </DialogTitle>
+          <DialogDescription>
+            {overlaps?.some((o) => o.severity === "strong")
+              ? "Así queda programado algo físicamente imposible. Podés guardarlo igual y acomodarlo después."
+              : "Revisá si comparten espacio antes de seguir."}
+          </DialogDescription>
+
+          <ul className="flex flex-col gap-2">
+            {overlaps?.map((overlap, index) => (
+              <li
+                key={index}
+                className="rounded-card bg-warning-bg px-3 py-2 text-sm text-warning-text"
+              >
+                {overlap.message}
+              </li>
+            ))}
+          </ul>
+
+          <div className="flex flex-col gap-2">
+            <Button
+              size="lg"
+              className="w-full"
+              loading={pending}
+              onClick={() => {
+                setOverlaps(null);
+                handleSubmit(true);
+              }}
+            >
+              Guardar igual
+            </Button>
+            <DialogClose
+              render={
+                <Button variant="ghost" size="lg" className="w-full">
+                  Volver a revisar
+                </Button>
+              }
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* §3.8: cerrar con cambios sin guardar pide confirmación. */}
       <Dialog open={discardOpen} onOpenChange={setDiscardOpen}>

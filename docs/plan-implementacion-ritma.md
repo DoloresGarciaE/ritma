@@ -176,8 +176,11 @@ ritma/
       F0.6, no en las pantallas: `tests/teacher-scope.test.ts` es la matriz rol×recurso.)
 
 ### S8 — Espacios y calendario del estudio
-- [ ] Modelo `Space`; asignación de salón a grupos; validación de superposición (HU3.1).
-- [ ] Calendario del estudio con filtro por salón y por profe (HU3.4); huecos libres visibles.
+- [x] Modelo `Space`; asignación de salón a grupos; validación de superposición (HU3.1).
+- [x] Calendario del estudio con filtro por salón y por profe (HU3.4); huecos libres visibles.
+      (Migración con herencia de la convención "· Salón X"; solapamientos por salón Y por
+      profe como advertencia/confirmación, nunca bloqueo — nota S8 del Plan §7; el
+      calendario es la vista "Salones" de la Agenda, con huecos explícitos "Libre · …".)
 
 ### S9 — Acuerdos y liquidaciones
 - [ ] Modelos `TeacherProfile` (kind), `Agreement` (con vigencia) y `Settlement`; campo `receivedBy` en el pago (RN5).

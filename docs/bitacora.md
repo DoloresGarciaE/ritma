@@ -550,3 +550,29 @@ del diagnóstico. Se pueden borrar con Prisma Studio apuntando al branch de prod
   SIN mergear. S8 (espacios y calendario del estudio) NO se arranca. El recorrido dejó un
   pago más de Josefina Ponce en Meraki (dato verosímil, quedó); los perfiles/invitaciones de
   prueba se limpiaron de la base dev.
+
+## Semana 18 (agosto 2026) — S8: salones y calendario del estudio
+
+- **Hecho:** S8 completo en `feat/s8-spaces-calendar` (S7 quedó mergeado como PR #35).
+  `Space` real con baja lógica que DESASIGNA sus grupos en transacción; migración con
+  HERENCIA de la convención "· Salón X" (en dev convirtió los 7 grupos de Meraki en 3
+  salones con nombres limpios); `findScheduleOverlaps` nació completo — el ticket de
+  solapamientos de S2 nunca existió (relevado en Paso 0) — con la matriz salón (fuerte) /
+  profe (fuerte, habilitado por S7) / sin-salón (suave) / salones-distintos (silencio),
+  siempre advertencia y jamás bloqueo, respetando el scope de S7 (el grupo ajeno no se
+  nombra). Calendario "Salones" en la Agenda: columnas por espacio + "Sin salón", eje fijo
+  8–22 estirable, huecos explícitos "Libre · HH:mm–HH:mm" (≥30 min), canceladas ocupando su
+  lugar, cruces del mismo salón lado a lado por carriles, filtro por profe (owner/admin) y
+  gestión en `/estudio/salones`. 484 Vitest (11 del núcleo puro + 10 de servicio/ensamblado
+  + 8 del armado de columnas + aislamiento de Space) y recorrido real 11/11 con el guion
+  del cierre completo, capturas revisadas (columnas, huecos, el diálogo ámbar del cruce).
+- **Trabado:** nada bloqueante, pero el motor nuevo atrapó un error del PROPIO seed: los
+  "cruces legítimos" de Meraki compartían dueña, y el eje por profe los marcaba (con razón)
+  imposibles — "Contemporáneo juvenil" quedó sin profe asignado (verosímil: espera al
+  próximo invitado). Otras dos para recordar: los Space heredados comparten `createdAt`
+  (el orden de columnas desempata por NOMBRE, no por id), y un sticky vertical no funciona
+  contra el scroll del body dentro de un overflow-x — el calendario es un panel con scroll
+  propio en ambos ejes.
+- **Próximo:** verificación de Dolores en el teléfono (guion en el reporte) y su PR; la
+  rama SIN mergear. S9 (acuerdos y liquidaciones) NO se arranca. Ojo: el recorrido movió
+  "Canto grupal" a Salón A en dev — la próxima corrida del seed lo devuelve a Salón B.

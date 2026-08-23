@@ -7,16 +7,20 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Fab } from "@/components/ui/fab";
 import { useToast } from "@/components/ui/toast";
+import { cn } from "@/lib/utils";
 import type { GroupEnrollmentItem } from "@/server/services/enrollments";
 import type { GroupListItem } from "@/server/services/groups";
 import type { AgendaOccurrence } from "@/server/services/sessions";
 
+import Link from "next/link";
+
 import { AppBar } from "../../_components/app-bar";
 import { EmptyState } from "../../_components/empty-state";
 import { EnrollSheet, type EnrollStudentOption } from "../../cobranzas/_components/enroll-sheet";
-import { AgendaNav } from "./agenda-nav";
+import { AgendaNav, type AgendaView } from "./agenda-nav";
 import { GroupSheet } from "./group-sheet";
 import { GroupsSheet } from "./groups-sheet";
+import { SalonDayView } from "./salon-day-view";
 import { SessionDetailSheet } from "./session-detail-sheet";
 import { WeekView, weekDays } from "./week-view";
 
@@ -32,6 +36,8 @@ export function AgendaScreen({
   weekStart,
   today,
   selectedDay,
+  view,
+  profe,
   occurrences,
   groups,
   disciplines,
@@ -41,11 +47,15 @@ export function AgendaScreen({
   manage,
   isStudio,
   teachers,
+  spaces,
 }: {
   weekStart: string;
   today: string;
-  /** `null` = vista semana. */
+  /** `null` = vista semana; con las vistas día/salones trae el día visible. */
   selectedDay: string | null;
+  view: AgendaView;
+  /** Filtro por profe del calendario (S8), ya VALIDADO por el server; null = todos. */
+  profe: string | null;
   occurrences: AgendaOccurrence[];
   groups: GroupListItem[];
   disciplines: { id: string; name: string }[];
@@ -59,6 +69,8 @@ export function AgendaScreen({
   isStudio: boolean;
   /** Opciones del selector "Profe a cargo": vacío salvo owner/admin de un STUDIO. */
   teachers: { id: string; displayName: string }[];
+  /** Salones ACTIVOS (S8): columnas del calendario y selector del form (STUDIO). */
+  spaces: { id: string; name: string }[];
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -125,6 +137,14 @@ export function AgendaScreen({
     ? occurrences.filter((occurrence) => occurrence.date === selectedDay)
     : occurrences;
 
+  // El calendario por salón (S8): el día visible, con el filtro por profe aplicado.
+  const salonDay = selectedDay ?? today;
+  const salonOccurrences = occurrences.filter(
+    (occurrence) =>
+      occurrence.date === salonDay && (profe === null || occurrence.teacherId === profe),
+  );
+  const showProfeFilter = view === "salones" && manage && teachers.length > 0;
+
   return (
     <>
       <AppBar
@@ -151,14 +171,55 @@ export function AgendaScreen({
         />
       ) : (
         <>
-          <AgendaNav weekStart={weekStart} selectedDay={selectedDay} today={today} />
-          <WeekView
-            days={days}
+          <AgendaNav
+            weekStart={weekStart}
+            selectedDay={selectedDay}
             today={today}
-            occurrences={shownOccurrences}
-            onSelect={openDetail}
-            showTeacher={isStudio}
+            view={view}
+            showSalones={isStudio}
+            profe={profe}
           />
+
+          {showProfeFilter ? (
+            <div
+              role="group"
+              aria-label="Filtrar por profe"
+              className="flex gap-2 overflow-x-auto px-4 pt-3 md:px-6"
+            >
+              <ProfeChip href={profeHref(salonDay, today, null)} selected={profe === null}>
+                Todos los profes
+              </ProfeChip>
+              {teachers.map((teacher) => (
+                <ProfeChip
+                  key={teacher.id}
+                  href={profeHref(salonDay, today, teacher.id)}
+                  selected={profe === teacher.id}
+                >
+                  {teacher.displayName}
+                </ProfeChip>
+              ))}
+            </div>
+          ) : null}
+
+          {view === "salones" ? (
+            <div className="pt-3">
+              <SalonDayView
+                day={salonDay}
+                occurrences={salonOccurrences}
+                spaces={spaces}
+                showTeacher
+                onSelect={openDetail}
+              />
+            </div>
+          ) : (
+            <WeekView
+              days={days}
+              today={today}
+              occurrences={shownOccurrences}
+              onSelect={openDetail}
+              showTeacher={isStudio}
+            />
+          )}
         </>
       )}
 
@@ -175,6 +236,7 @@ export function AgendaScreen({
         manage={manage}
         isStudio={isStudio}
         teachers={teachers}
+        spaces={spaces}
       />
 
       <GroupsSheet
@@ -217,5 +279,38 @@ export function AgendaScreen({
         />
       ) : null}
     </>
+  );
+}
+
+/** El href del filtro por profe (S8): conserva vista y día, cambia solo `?profe`. */
+function profeHref(day: string, today: string, profe: string | null): string {
+  const query = new URLSearchParams({ vista: "salones" });
+  if (day !== today) query.set("dia", day);
+  if (profe) query.set("profe", profe);
+  return `/agenda?${query.toString()}`;
+}
+
+function ProfeChip({
+  href,
+  selected,
+  children,
+}: {
+  href: string;
+  selected: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <Link
+      href={href}
+      aria-current={selected ? "page" : undefined}
+      className={cn(
+        "inline-flex min-h-11 shrink-0 cursor-pointer items-center rounded-full border px-3.5 text-sm font-medium transition-[background-color,border-color]",
+        selected
+          ? "border-primary bg-nav-active-bg text-nav-active-text"
+          : "border-border-strong bg-surface text-text hover:bg-muted",
+      )}
+    >
+      {children}
+    </Link>
   );
 }

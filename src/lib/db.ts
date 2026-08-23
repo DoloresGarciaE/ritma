@@ -68,6 +68,8 @@ const SCOPE: Record<Prisma.ModelName, Scope> = {
   // comprobante.
   TeacherProfile: "orgId",
   Invitation: "orgId",
+  // S8: los salones del estudio.
+  Space: "orgId",
   User: "global",
   Session: "global",
   Account: "global",

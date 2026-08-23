@@ -170,8 +170,9 @@ export function SessionDetailSheet({
         formatFullDayDate(occurrence.date),
         formatTimeRange(occurrence.startTime, occurrence.durationMin),
         occurrence.disciplineName,
-        // S7: el profe a cargo, solo en la agenda del estudio.
+        // S7/S8: profe a cargo y salón, solo en la agenda del estudio.
         ...(showTeacher ? [occurrence.teacherName ?? "Sin profe asignado"] : []),
+        ...(showTeacher && occurrence.spaceName ? [occurrence.spaceName] : []),
       ].join(" · ")}
     >
       <ActionSheetBody className="flex flex-col gap-4 pb-4">

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronRight, Users } from "lucide-react";
+import { ChevronRight, DoorOpen, Users } from "lucide-react";
 
 import { Card } from "@/components/ui/card";
 import { requireSession } from "@/lib/auth";
@@ -52,11 +52,26 @@ export default async function EstudioPage() {
                 <ChevronRight aria-hidden className="size-5 text-text-muted" />
               </Link>
             </li>
+            <li>
+              <Link
+                href="/estudio/salones"
+                className="flex min-h-16 items-center gap-3 border-t border-border px-4 transition-colors hover:bg-muted"
+              >
+                <DoorOpen aria-hidden className="size-5 text-text-secondary" />
+                <span className="flex flex-1 flex-col">
+                  <span className="font-medium text-text">Salones</span>
+                  <span className="text-xs text-text-secondary">
+                    Los espacios del estudio y su calendario
+                  </span>
+                </span>
+                <ChevronRight aria-hidden className="size-5 text-text-muted" />
+              </Link>
+            </li>
           </ul>
         </Card>
 
         <p className="px-1 text-xs text-text-secondary">
-          Los salones y las liquidaciones de fin de mes llegan en los próximos bloques.
+          Las liquidaciones de fin de mes llegan en el próximo bloque.
         </p>
       </div>
     </>

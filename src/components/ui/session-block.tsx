@@ -23,6 +23,8 @@ export type SessionBlockData = {
   colorIndex: number;
   /** Profe a cargo (S7): se muestra solo con `showTeacher` (agenda del ESTUDIO). */
   teacherName?: string | null;
+  /** Salón (S8, §3.7: "salón en text-secondary, solo estudios"): con `showSpace`. */
+  spaceName?: string | null;
 };
 
 type SessionBlockProps = Omit<React.ComponentProps<"button">, "children"> & {
@@ -34,12 +36,18 @@ type SessionBlockProps = Omit<React.ComponentProps<"button">, "children"> & {
    * en una independiente el único profe es obvio y sería ruido (§4.3).
    */
   showTeacher?: boolean;
+  /**
+   * Mostrar el salón (S8): en la semana del estudio va junto al profe; en el calendario
+   * por salón NO (la columna ya lo dice). Un grupo sin salón no muestra nada extra.
+   */
+  showSpace?: boolean;
 };
 
 export function SessionBlock({
   session,
   dateLabel,
   showTeacher = false,
+  showSpace = false,
   className,
   ...props
 }: SessionBlockProps) {
@@ -103,7 +111,10 @@ export function SessionBlock({
         ) : null}
         {showTeacher && !cancelled ? (
           <span className="block truncate text-xs text-text-secondary">
-            {session.teacherName ?? "Sin profe asignado"}
+            {[
+              session.teacherName ?? "Sin profe asignado",
+              ...(showSpace && session.spaceName ? [session.spaceName] : []),
+            ].join(" · ")}
           </span>
         ) : null}
       </span>

@@ -16,6 +16,7 @@ import {
   makeReminderLog,
   makeSession,
   makeSlot,
+  makeSpace,
   makeStudent,
   makeTeacherProfile,
 } from "./factories";
@@ -1112,5 +1113,68 @@ describe("aislamiento org × org — Invitation", () => {
 
     expect(created.orgId).toBe(a.id);
     expect(await db.invitation.count({ where: { orgId: b.id } })).toBe(0);
+  });
+});
+
+/** S8: los salones entran al aislamiento con el mismo bloque que Student. */
+describe("aislamiento org × org — Space", () => {
+  it("A no ve los salones de B; solo los propios", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+    await makeSpace(a.id, "Salón propio");
+    await makeSpace(b.id, "Salón ajeno");
+
+    const seenByA = await withOrg(a.id).space.findMany();
+    expect(seenByA.map((s) => s.name)).toEqual(["Salón propio"]);
+  });
+
+  it("findUnique por el id de un salón de B, desde A, devuelve null", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+    const bSpace = await makeSpace(b.id, "Salón ajeno");
+
+    expect(await withOrg(a.id).space.findUnique({ where: { id: bSpace.id } })).toBeNull();
+  });
+
+  it("A no puede renombrar ni desactivar un salón de B (P2025)", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+    const bSpace = await makeSpace(b.id, "Salón ajeno");
+
+    await expect(
+      withOrg(a.id).space.update({ where: { id: bSpace.id }, data: { name: "Hackeado" } }),
+    ).rejects.toMatchObject({ code: "P2025" });
+    await expect(
+      withOrg(a.id).space.update({ where: { id: bSpace.id }, data: { active: false } }),
+    ).rejects.toMatchObject({ code: "P2025" });
+
+    const after = await db.space.findUniqueOrThrow({ where: { id: bSpace.id } });
+    expect(after.name).toBe("Salón ajeno");
+    expect(after.active).toBe(true);
+  });
+
+  it("A no puede borrar un salón de B; un deleteMany desde A no lo alcanza", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+    const bSpace = await makeSpace(b.id, "Salón ajeno");
+
+    await expect(withOrg(a.id).space.delete({ where: { id: bSpace.id } })).rejects.toMatchObject({
+      code: "P2025",
+    });
+
+    await withOrg(a.id).space.deleteMany({});
+    expect(await db.space.count({ where: { orgId: b.id } })).toBe(1);
+  });
+
+  it("un salón creado vía withOrg(A) no puede aterrizar en B: el orgId se fuerza", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+
+    const created = await withOrg(a.id).space.create({
+      data: { name: "Salón colado", orgId: b.id },
+    });
+
+    expect(created.orgId).toBe(a.id);
+    expect(await db.space.count({ where: { orgId: b.id } })).toBe(0);
   });
 });

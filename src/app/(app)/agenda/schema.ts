@@ -64,6 +64,8 @@ export const groupSchema = z.object({
    * para un teacher el servicio la ignora directamente.
    */
   teacherId: z.string().min(1).nullable().optional(),
+  /** Salón (S8, solo STUDIO): mismas convenciones que teacherId. */
+  spaceId: z.string().min(1).nullable().optional(),
   franjas: z
     .array(franjaSchema)
     .min(1, "Agregá al menos una franja.")
@@ -78,9 +80,18 @@ export const groupSchema = z.object({
 export type GroupFormInput = z.infer<typeof groupSchema>;
 export type GroupField = keyof GroupFormInput;
 
+/** Un conflicto de horario ya FORMATEADO en el server (S8): la pantalla solo lo lista. */
+export type OverlapWarning = { severity: "strong" | "soft"; message: string };
+
 export type GroupFormState = {
   errors?: Partial<Record<GroupField, string>>;
   formError?: string;
+  /**
+   * Solapamientos detectados (S8): el guardado NO ocurrió — la pantalla muestra la
+   * confirmación y reenvía con `confirmOverlaps` si el profe decide seguir. Nunca es
+   * un bloqueo (decisión sostenida del ticket original).
+   */
+  overlaps?: OverlapWarning[];
 };
 
 export function toGroupFieldErrors(error: z.ZodError): GroupFormState["errors"] {

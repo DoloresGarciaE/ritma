@@ -36,6 +36,8 @@ export type GroupListItem = {
   discipline: { id: string; name: string };
   /** Profe a cargo (S7); null = "sin profe asignado" (solo lo ven owner/admin). */
   teacher: { id: string; displayName: string } | null;
+  /** Salón (S8, solo STUDIO); null = sin salón — ciudadano pleno igual. */
+  space: { id: string; name: string } | null;
   slots: GroupSlot[];
 };
 
@@ -57,6 +59,11 @@ export type GroupInput = {
    * sin profe; string = ese perfil, verificado contra la org.
    */
   teacherId?: string | null;
+  /**
+   * Salón (S8, solo STUDIO — mismas convenciones que teacherId): `undefined` = no
+   * tocar; `null` = sin salón; string = ese salón ACTIVO, verificado contra la org.
+   */
+  spaceId?: string | null;
   slots: SlotInput[];
 };
 
@@ -69,6 +76,7 @@ const LIST_FIELDS = {
   defaultPrice: true,
   discipline: { select: { id: true, name: true } },
   teacher: { select: { id: true, displayName: true } },
+  space: { select: { id: true, name: true } },
   // El orden lunes-primero no se puede expresar en SQL (weekday 0 = domingo): lo hace
   // `toListItem` en JS, así que acá no hay orderBy.
   slots: { select: SLOT_FIELDS },
@@ -81,6 +89,7 @@ type GroupRow = {
   defaultPrice: { toNumber(): number } | number;
   discipline: { id: string; name: string };
   teacher: { id: string; displayName: string } | null;
+  space: { id: string; name: string } | null;
   slots: GroupSlot[];
 };
 
@@ -98,6 +107,7 @@ function toListItem(row: GroupRow): GroupListItem {
       typeof row.defaultPrice === "number" ? row.defaultPrice : row.defaultPrice.toNumber(),
     discipline: row.discipline,
     teacher: row.teacher,
+    space: row.space,
     slots: [...row.slots].sort(
       (a, b) =>
         mondayFirst(a.weekday) - mondayFirst(b.weekday) || a.startTime.localeCompare(b.startTime),
@@ -121,6 +131,18 @@ async function assertTeacherInOrg(orgId: string, teacherId: string): Promise<voi
     select: { id: true },
   });
   if (!teacher) throw new Error("El perfil de profe no pertenece a esta organización.");
+}
+
+/**
+ * Ídem para el salón (S8): ajeno o DESACTIVADO no se asigna — un salón dado de baja
+ * salió del calendario y no puede volver a ocuparse por un form viejo.
+ */
+async function assertSpaceInOrg(orgId: string, spaceId: string): Promise<void> {
+  const space = await withOrg(orgId).space.findUnique({
+    where: { id: spaceId, active: true },
+    select: { id: true },
+  });
+  if (!space) throw new Error("El salón no pertenece a esta organización.");
 }
 
 /**
@@ -194,12 +216,18 @@ export async function createGroup(orgId: string, input: GroupInput): Promise<{ i
   await assertDisciplineInOrg(orgId, input.disciplineId);
   const teacherId = await resolveTeacherId(orgId, input.teacherId);
 
+  // Salón (S8): opcional siempre; ajeno o inactivo no pasa. En una INDEPENDENT no hay
+  // salones que referenciar, así que cualquier spaceId forjado muere acá mismo.
+  const spaceId = input.spaceId ?? null;
+  if (spaceId) await assertSpaceInOrg(orgId, spaceId);
+
   return withOrg(orgId).classGroup.create({
     data: {
       orgId,
       name: input.name,
       disciplineId: input.disciplineId,
       teacherId,
+      spaceId,
       defaultPrice: input.defaultPrice,
       slots: {
         // orgId EXPLÍCITO: la escritura anidada no pasa por el hook del hijo.
@@ -262,11 +290,20 @@ export async function updateGroup(
     teacherAssignment = { teacherId: input.teacherId };
   }
 
+  // El salón (S8) sigue la misma regla que el profe a cargo: es un recurso compartido
+  // del estudio — un teacher no lo toca, se fuerza como está.
+  let spaceAssignment: { spaceId: string | null } | undefined;
+  if (!isTeacher && input.spaceId !== undefined) {
+    if (input.spaceId) await assertSpaceInOrg(orgId, input.spaceId);
+    spaceAssignment = { spaceId: input.spaceId };
+  }
+
   const groupData = {
     name: input.name,
     disciplineId: input.disciplineId,
     ...(isTeacher ? {} : { defaultPrice: input.defaultPrice }),
     ...(teacherAssignment ?? {}),
+    ...(spaceAssignment ?? {}),
   };
 
   const current = await org.scheduleSlot.findMany({

@@ -33,6 +33,11 @@ export type AgendaOccurrence = Occurrence & {
   colorIndex: number;
   /** Profe a cargo (S7): se muestra en el bloque de la agenda del ESTUDIO; null = sin asignar. */
   teacherName: string | null;
+  /** El id del perfil (S8): alimenta el filtro por profe del calendario por salón. */
+  teacherId: string | null;
+  /** Salón (S8, solo STUDIO): la columna del calendario; null = "Sin salón". */
+  spaceId: string | null;
+  spaceName: string | null;
 };
 
 export type AgendaWeek = {
@@ -68,8 +73,11 @@ export async function weekData(
         name: true,
         defaultPrice: true,
         disciplineId: true,
+        teacherId: true,
+        spaceId: true,
         discipline: { select: { name: true } },
         teacher: { select: { displayName: true } },
+        space: { select: { name: true } },
         slots: { select: { id: true, weekday: true, startTime: true, durationMin: true } },
       },
     }),
@@ -128,6 +136,9 @@ export async function weekData(
       defaultPrice: group.defaultPrice.toNumber(),
       colorIndex: colorIndexByDiscipline.get(group.disciplineId) ?? 0,
       teacherName: group.teacher?.displayName ?? null,
+      teacherId: group.teacherId,
+      spaceId: group.spaceId,
+      spaceName: group.space?.name ?? null,
     };
   });
 
