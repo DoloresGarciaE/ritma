@@ -622,7 +622,7 @@ del diagnóstico. Se pueden borrar con Prisma Studio apuntando al branch de prod
   (badges §3.3, detalle con la cancelada tachada, pagar/editar/exonerar), Reportes con
   CSV (BOM + `;`), y la marca "· alquila" en toda la agenda. Seed: Marina Iglesias con
   dos grupos de tango en la Terraza — junio 8×$6.000=$48.000 PAGADO, julio 9×$6.000
-  (la cancelada afuera) = $54.000 pendiente, generados por el cron real. Suite 570
+  (la cancelada afuera) = $54.000 pendiente, generados por el cron real. Suite 546
   verde, build, 3 E2E, recorrido real 20/20 (ciclo completo de una externa nueva
   incluido: alta → acuerdo → grupo → cron → pagado → limpieza).
 - **Trabado:** nada bloqueante. Dos decisiones de sesión con caso armado (Plan §7/§8,
