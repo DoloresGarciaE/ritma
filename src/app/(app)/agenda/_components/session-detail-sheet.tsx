@@ -170,8 +170,16 @@ export function SessionDetailSheet({
         formatFullDayDate(occurrence.date),
         formatTimeRange(occurrence.startTime, occurrence.durationMin),
         occurrence.disciplineName,
-        // S7/S8: profe a cargo y salón, solo en la agenda del estudio.
-        ...(showTeacher ? [occurrence.teacherName ?? "Sin profe asignado"] : []),
+        // S7/S8/S10: profe a cargo (el externo, marcado) y salón, solo en el estudio.
+        ...(showTeacher
+          ? [
+              occurrence.teacherName
+                ? occurrence.teacherExternal
+                  ? `${occurrence.teacherName} · alquila`
+                  : occurrence.teacherName
+                : "Sin profe asignado",
+            ]
+          : []),
         ...(showTeacher && occurrence.spaceName ? [occurrence.spaceName] : []),
       ].join(" · ")}
     >
@@ -191,46 +199,57 @@ export function SessionDetailSheet({
           </p>
         ) : null}
 
-        <div className="flex items-baseline justify-between rounded-card border border-border bg-surface p-3">
-          <span className="text-sm text-text-secondary">Tarifa de referencia</span>
-          <span className="font-display text-sm font-medium text-text tabular-nums">
-            {formatMoney(occurrence.defaultPrice)}
-          </span>
-        </div>
+        {/* RN13 (S10): el grupo de un externo es agenda y ocupación — ni tarifa, ni
+            inscriptos, ni inscribir. La regla dura vive en el server. */}
+        {occurrence.teacherExternal ? (
+          <p className="rounded-card border border-border bg-surface p-3 text-sm text-text-secondary">
+            Grupo de un profe externo: el estudio le alquila el salón. Sus alumnos y sus cobranzas
+            no pasan por acá.
+          </p>
+        ) : (
+          <>
+            <div className="flex items-baseline justify-between rounded-card border border-border bg-surface p-3">
+              <span className="text-sm text-text-secondary">Tarifa de referencia</span>
+              <span className="font-display text-sm font-medium text-text tabular-nums">
+                {formatMoney(occurrence.defaultPrice)}
+              </span>
+            </div>
 
-        {/* Inscriptos del grupo (S3): tap a la ficha; inscribir abre el sheet de HU4.1. */}
-        <div className="flex flex-col gap-2 rounded-card border border-border bg-surface p-3">
-          <span className="text-sm font-medium text-text">
-            Inscriptos{enrolled.length > 0 ? ` · ${enrolled.length}` : ""}
-          </span>
+            {/* Inscriptos del grupo (S3): tap a la ficha; inscribir abre el sheet de HU4.1. */}
+            <div className="flex flex-col gap-2 rounded-card border border-border bg-surface p-3">
+              <span className="text-sm font-medium text-text">
+                Inscriptos{enrolled.length > 0 ? ` · ${enrolled.length}` : ""}
+              </span>
 
-          {enrolled.length === 0 ? (
-            <p className="text-sm text-text-secondary">
-              Nadie todavía. Inscribí a tus alumnos y las cuotas se generan solas.
-            </p>
-          ) : (
-            <ul className="flex flex-col">
-              {enrolled.map((enrollment) => (
-                <li key={enrollment.id}>
-                  <Link
-                    href={`/alumnos/${enrollment.student.id}`}
-                    className="flex min-h-11 items-center justify-between gap-2 text-sm text-text"
-                  >
-                    <span className="truncate">{enrollment.student.name}</span>
-                    <span className="shrink-0 text-xs text-text-secondary">
-                      {enrollment.plan === "DROP_IN" ? "Clase suelta" : ""}
-                      {enrollment.student.active ? "" : " Alumno de baja"}
-                    </span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
+              {enrolled.length === 0 ? (
+                <p className="text-sm text-text-secondary">
+                  Nadie todavía. Inscribí a tus alumnos y las cuotas se generan solas.
+                </p>
+              ) : (
+                <ul className="flex flex-col">
+                  {enrolled.map((enrollment) => (
+                    <li key={enrollment.id}>
+                      <Link
+                        href={`/alumnos/${enrollment.student.id}`}
+                        className="flex min-h-11 items-center justify-between gap-2 text-sm text-text"
+                      >
+                        <span className="truncate">{enrollment.student.name}</span>
+                        <span className="shrink-0 text-xs text-text-secondary">
+                          {enrollment.plan === "DROP_IN" ? "Clase suelta" : ""}
+                          {enrollment.student.active ? "" : " Alumno de baja"}
+                        </span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
 
-          <Button variant="secondary" size="md" onClick={() => onEnroll(occurrence.groupId)}>
-            Inscribir alumno
-          </Button>
-        </div>
+              <Button variant="secondary" size="md" onClick={() => onEnroll(occurrence.groupId)}>
+                Inscribir alumno
+              </Button>
+            </div>
+          </>
+        )}
 
         {rescheduleOpen && !cancelled ? (
           <div className="flex flex-col gap-3 rounded-card border border-border bg-surface p-3">

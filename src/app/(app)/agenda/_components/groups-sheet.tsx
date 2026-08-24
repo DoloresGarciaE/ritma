@@ -77,7 +77,12 @@ export function GroupsSheet({
                   {showTeacher ? (
                     <span className="truncate text-xs text-text-secondary">
                       {[
-                        group.teacher ? group.teacher.displayName : "Sin profe asignado",
+                        // S10: el externo, marcado — de un vistazo qué es alquilado.
+                        group.teacher
+                          ? group.teacher.kind === "EXTERNAL"
+                            ? `${group.teacher.displayName} · alquila`
+                            : group.teacher.displayName
+                          : "Sin profe asignado",
                         ...(group.space ? [group.space.name] : []),
                       ].join(" · ")}
                     </span>

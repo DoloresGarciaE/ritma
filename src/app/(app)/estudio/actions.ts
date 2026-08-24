@@ -12,17 +12,22 @@ import { getShellOrganization } from "@/server/organizations";
 import {
   AgreementRuleError,
   listAgreements,
+  listRentalAgreements,
   setAgreement,
+  setRentalAgreement,
   type AgreementListItem,
+  type RentalAgreementItem,
 } from "@/server/services/agreements";
 import { ForbiddenError, type Actor } from "@/server/services/permissions";
 import {
+  createExternalProfile,
   createInvitation,
   getInvitationToken,
   regenerateInvitation,
   revokeInvitation,
   revokeMemberAccess,
   TeamRuleError,
+  updateExternalProfile,
 } from "@/server/services/team";
 
 import { inviteSchema } from "./schema";
@@ -191,5 +196,82 @@ export async function setAgreementAction(input: {
   }
   revalidatePath("/estudio/equipo");
   revalidatePath("/estudio/liquidaciones");
+  return {};
+}
+
+// ─── Externos y su acuerdo de alquiler (S10, HU6.1/HU6.3) — mismo patrón. ─────
+
+export async function createExternalAction(
+  displayName: string,
+): Promise<{ id?: string; error?: string }> {
+  const actor = await currentAdmin();
+
+  try {
+    const { id } = await createExternalProfile(actor, displayName);
+    revalidatePath("/estudio/equipo");
+    return { id };
+  } catch (error) {
+    if (error instanceof TeamRuleError) return { error: error.message };
+    throw error;
+  }
+}
+
+export async function renameExternalAction(
+  teacherId: string,
+  displayName: string,
+): Promise<{ error?: string }> {
+  const actor = await currentAdmin();
+
+  try {
+    await updateExternalProfile(actor, teacherId, displayName);
+  } catch (error) {
+    if (error instanceof TeamRuleError) return { error: error.message };
+    throw error;
+  }
+  revalidatePath("/estudio/equipo");
+  return {};
+}
+
+const rentalAgreementSchema = z.object({
+  teacherId: z.string().min(1),
+  rentalAmount: z
+    .number({ error: "Poné la tarifa del alquiler." })
+    .positive("La tarifa tiene que ser mayor a cero."),
+  rentalPeriod: z.enum(["MONTHLY", "PER_SESSION", "PER_HOUR"]),
+  validFrom: z.string().refine(isCivilDate, "Esa fecha no es válida."),
+});
+
+export async function listRentalAgreementsAction(
+  teacherId: string,
+): Promise<RentalAgreementItem[] | { error: string }> {
+  const actor = await currentAdmin();
+  return listRentalAgreements(actor, teacherId);
+}
+
+export async function setRentalAgreementAction(input: {
+  teacherId: string;
+  rentalAmount: number | null;
+  rentalPeriod: "MONTHLY" | "PER_SESSION" | "PER_HOUR";
+  validFrom: string;
+}): Promise<{ error?: string; field?: "rentalAmount" | "validFrom" }> {
+  const actor = await currentAdmin();
+
+  const parsed = rentalAgreementSchema.safeParse(input);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    return {
+      error: issue?.message ?? "Revisá el acuerdo.",
+      field: issue?.path[0] === "validFrom" ? "validFrom" : "rentalAmount",
+    };
+  }
+
+  try {
+    await setRentalAgreement(actor, parsed.data);
+  } catch (error) {
+    if (error instanceof AgreementRuleError) return { error: error.message };
+    throw error;
+  }
+  revalidatePath("/estudio/equipo");
+  revalidatePath("/estudio/alquileres");
   return {};
 }

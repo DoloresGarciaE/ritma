@@ -49,16 +49,18 @@ export const getOrgSettings = cache(async (orgId: string) =>
 );
 
 /**
- * Los perfiles docentes de la org para el selector "Profe a cargo" (S7): solo los
- * VINCULADOS a una cuenta — un perfil desvinculado es historia, no una opción de
- * asignación. Los grupos que ya apuntan a uno desvinculado lo siguen mostrando por
- * nombre (la relación del grupo, no esta lista). Lo consumen páginas de owner/admin.
+ * Los perfiles docentes de la org para el selector "Profe a cargo" (S7): los VINCULADOS
+ * a una cuenta — un perfil desvinculado es historia, no una opción de asignación — y,
+ * desde S10, también los EXTERNOS (perfil sin cuenta, decisión 1: aparecen en el
+ * selector, marcados). `kind` deja que cada consumidor decida: el form de grupo los
+ * ofrece con su marca; los selectores de PLATA de alumnos (receivedById) los FILTRAN —
+ * un externo jamás cobra cuotas (RN13). Lo consumen páginas de owner/admin.
  */
 export const listTeacherOptions = cache(async (orgId: string) =>
   withOrg(orgId).teacherProfile.findMany({
-    where: { membershipUserId: { not: null } },
+    where: { OR: [{ membershipUserId: { not: null } }, { kind: "EXTERNAL" }] },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-    select: { id: true, displayName: true },
+    select: { id: true, displayName: true, kind: true },
   }),
 );
 

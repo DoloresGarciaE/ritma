@@ -23,6 +23,8 @@ export type SessionBlockData = {
   colorIndex: number;
   /** Profe a cargo (S7): se muestra solo con `showTeacher` (agenda del ESTUDIO). */
   teacherName?: string | null;
+  /** S10: profe EXTERNAL — la marca sutil "alquila" (propio vs alquilado, §3.7). */
+  teacherExternal?: boolean;
   /** Salón (S8, §3.7: "salón en text-secondary, solo estudios"): con `showSpace`. */
   spaceName?: string | null;
 };
@@ -112,7 +114,12 @@ export function SessionBlock({
         {showTeacher && !cancelled ? (
           <span className="block truncate text-xs text-text-secondary">
             {[
-              session.teacherName ?? "Sin profe asignado",
+              // S10: el externo se marca con texto, sutil — nunca solo color (§3.7).
+              session.teacherName
+                ? session.teacherExternal
+                  ? `${session.teacherName} · alquila`
+                  : session.teacherName
+                : "Sin profe asignado",
               ...(showSpace && session.spaceName ? [session.spaceName] : []),
             ].join(" · ")}
           </span>

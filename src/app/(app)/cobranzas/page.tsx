@@ -49,9 +49,11 @@ export default async function CobranzasPage({
   ]);
   const groups = await listGroups(orgId, scope);
   // S9: el sheet de pago pregunta "¿qué profe cobró?" solo a owner/admin de un estudio
-  // (un teacher se auto-atribuye en el server).
+  // (un teacher se auto-atribuye en el server). S10: sin externos — no cobran cuotas (RN13).
   const teachers =
-    shellOrg?.type === "STUDIO" && can(actor, "org:viewAll") ? await listTeacherOptions(orgId) : [];
+    shellOrg?.type === "STUDIO" && can(actor, "org:viewAll")
+      ? (await listTeacherOptions(orgId)).filter((teacher) => teacher.kind !== "EXTERNAL")
+      : [];
   const today = todayInTz(settings?.timezone ?? DEFAULT_TIMEZONE);
   const currentPeriod = periodOf(today);
 

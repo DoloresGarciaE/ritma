@@ -71,8 +71,11 @@ export default async function StudentPage({ params }: Params) {
   const timezone = settings?.timezone ?? "";
 
   // S9: el sheet de pago pregunta "¿qué profe cobró?" solo a owner/admin de un estudio.
+  // S10: sin externos — no cobran cuotas (RN13).
   const teachers =
-    shellOrg?.type === "STUDIO" && can(actor, "org:viewAll") ? await listTeacherOptions(orgId) : [];
+    shellOrg?.type === "STUDIO" && can(actor, "org:viewAll")
+      ? (await listTeacherOptions(orgId)).filter((teacher) => teacher.kind !== "EXTERNAL")
+      : [];
 
   // El recordatorio de la ficha habla del período EN CURSO (el de Deudores, del período
   // visible). buildReminder trae mensaje + deuda; el link wa.me se arma acá, server-side.
@@ -96,11 +99,14 @@ export default async function StudentPage({ params }: Params) {
             <EnrollmentsCard
               student={{ id: student.id, name: student.name }}
               enrollments={enrollments}
-              groups={groups.map((g) => ({
-                id: g.id,
-                name: g.name,
-                defaultPrice: g.defaultPrice,
-              }))}
+              groups={groups
+                // RN13 (S10): los grupos de externos no se ofrecen para inscribir.
+                .filter((g) => g.teacher?.kind !== "EXTERNAL")
+                .map((g) => ({
+                  id: g.id,
+                  name: g.name,
+                  defaultPrice: g.defaultPrice,
+                }))}
               today={today}
             />
             <AccountStatementCard

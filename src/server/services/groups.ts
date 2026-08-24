@@ -34,8 +34,12 @@ export type GroupListItem = {
   /** Numérico plano: `Decimal` no cruza a un client component. */
   defaultPrice: number;
   discipline: { id: string; name: string };
-  /** Profe a cargo (S7); null = "sin profe asignado" (solo lo ven owner/admin). */
-  teacher: { id: string; displayName: string } | null;
+  /** Profe a cargo (S7); null = "sin profe asignado" (solo lo ven owner/admin). S10: `kind` marca al externo. */
+  teacher: {
+    id: string;
+    displayName: string;
+    kind: "OWNER_TEACHER" | "STAFF" | "EXTERNAL";
+  } | null;
   /** Salón (S8, solo STUDIO); null = sin salón — ciudadano pleno igual. */
   space: { id: string; name: string } | null;
   slots: GroupSlot[];
@@ -75,7 +79,7 @@ const LIST_FIELDS = {
   active: true,
   defaultPrice: true,
   discipline: { select: { id: true, name: true } },
-  teacher: { select: { id: true, displayName: true } },
+  teacher: { select: { id: true, displayName: true, kind: true } },
   space: { select: { id: true, name: true } },
   // El orden lunes-primero no se puede expresar en SQL (weekday 0 = domingo): lo hace
   // `toListItem` en JS, así que acá no hay orderBy.
@@ -88,7 +92,11 @@ type GroupRow = {
   active: boolean;
   defaultPrice: { toNumber(): number } | number;
   discipline: { id: string; name: string };
-  teacher: { id: string; displayName: string } | null;
+  teacher: {
+    id: string;
+    displayName: string;
+    kind: "OWNER_TEACHER" | "STAFF" | "EXTERNAL";
+  } | null;
   space: { id: string; name: string } | null;
   slots: GroupSlot[];
 };

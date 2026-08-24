@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronRight, DoorOpen, Scale, Users } from "lucide-react";
+import { BarChart3, ChevronRight, DoorOpen, KeyRound, Scale, Users } from "lucide-react";
 
 import { Card } from "@/components/ui/card";
 import { requireSession } from "@/lib/auth";
@@ -53,6 +53,18 @@ export default async function EstudioPage() {
           icon: Scale,
           label: "Liquidaciones",
           hint: "El cierre de mes de cada profe (RN6)",
+        },
+        {
+          href: "/estudio/alquileres",
+          icon: KeyRound,
+          label: "Alquileres",
+          hint: "Los cargos de los profes externos",
+        },
+        {
+          href: "/estudio/reportes",
+          icon: BarChart3,
+          label: "Reportes",
+          hint: "Ingresos por profe y por disciplina",
         },
       ]
     : [

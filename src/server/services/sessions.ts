@@ -35,6 +35,8 @@ export type AgendaOccurrence = Occurrence & {
   teacherName: string | null;
   /** El id del perfil (S8): alimenta el filtro por profe del calendario por salón. */
   teacherId: string | null;
+  /** S10: el profe es EXTERNAL — el bloque lo marca sutil ("alquila"): propio vs alquilado. */
+  teacherExternal: boolean;
   /** Salón (S8, solo STUDIO): la columna del calendario; null = "Sin salón". */
   spaceId: string | null;
   spaceName: string | null;
@@ -76,7 +78,7 @@ export async function weekData(
         teacherId: true,
         spaceId: true,
         discipline: { select: { name: true } },
-        teacher: { select: { displayName: true } },
+        teacher: { select: { displayName: true, kind: true } },
         space: { select: { name: true } },
         slots: { select: { id: true, weekday: true, startTime: true, durationMin: true } },
       },
@@ -137,6 +139,7 @@ export async function weekData(
       colorIndex: colorIndexByDiscipline.get(group.disciplineId) ?? 0,
       teacherName: group.teacher?.displayName ?? null,
       teacherId: group.teacherId,
+      teacherExternal: group.teacher?.kind === "EXTERNAL",
       spaceId: group.spaceId,
       spaceName: group.space?.name ?? null,
     };

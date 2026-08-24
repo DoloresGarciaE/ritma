@@ -7,11 +7,12 @@ import { isEmailConfigured } from "@/lib/email";
 import { formatListDate } from "@/lib/format";
 import { requireScopedMember } from "@/server/authz";
 import { getOrgSettings, getShellOrganization } from "@/server/organizations";
-import { currentAgreements } from "@/server/services/agreements";
+import { currentAgreements, currentRentalAgreements } from "@/server/services/agreements";
 import { can } from "@/server/services/permissions";
-import { listPendingInvitations, listTeam } from "@/server/services/team";
+import { listExternals, listPendingInvitations, listTeam } from "@/server/services/team";
 
 import { AppBar } from "../../_components/app-bar";
+import { ExternalsSection } from "./_components/externals-section";
 import { InvitationsSection } from "./_components/invitations-section";
 import { InviteTeam } from "./_components/invite-team";
 import { TeamSection } from "./_components/team-section";
@@ -35,11 +36,13 @@ export default async function EquipoPage() {
   const { actor } = await requireScopedMember(session.activeOrgId!);
   if (!can(actor, "members:manage")) notFound();
 
-  const [team, pending, settings, agreements] = await Promise.all([
+  const [team, pending, settings, agreements, externals, rentalAgreements] = await Promise.all([
     listTeam(actor),
     listPendingInvitations(actor),
     getOrgSettings(actor.orgId),
     currentAgreements(actor),
+    listExternals(actor),
+    currentRentalAgreements(actor),
   ]);
 
   const timezone = settings?.timezone ?? DEFAULT_TIMEZONE;
@@ -65,6 +68,12 @@ export default async function EquipoPage() {
           members={team}
           selfUserId={actor.userId}
           agreements={agreements}
+          today={todayInTz(timezone)}
+        />
+        {/* S10: los externos — perfiles sin cuenta que alquilan salón (RN7/RN13). */}
+        <ExternalsSection
+          externals={externals}
+          rentalAgreements={rentalAgreements}
           today={todayInTz(timezone)}
         />
         <InvitationsSection invitations={invitations} />

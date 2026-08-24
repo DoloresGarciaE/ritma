@@ -70,8 +70,8 @@ export function GroupSheet({
   /** Owner/admin (S7, §4.3): tarifa, disciplina nueva, switch de activo y profe a cargo. */
   manage: boolean;
   isStudio: boolean;
-  /** Opciones del selector "Profe a cargo": vacío salvo owner/admin de un STUDIO. */
-  teachers: { id: string; displayName: string }[];
+  /** Opciones del selector "Profe a cargo": vacío salvo owner/admin de un STUDIO. S10: el externo, marcado. */
+  teachers: { id: string; displayName: string; kind?: "OWNER_TEACHER" | "STAFF" | "EXTERNAL" }[];
   /** Salones ACTIVOS (S8): opciones del selector "Salón" — vacío salvo owner/admin STUDIO. */
   spaces: { id: string; name: string }[];
 }) {
@@ -420,7 +420,10 @@ export function GroupSheet({
                       className={chipStyles(selected)}
                     >
                       {selected ? <Check aria-hidden className="size-4" /> : null}
-                      {teacher.displayName}
+                      {/* S10: el externo se ofrece marcado — sus grupos son alquiler (RN13). */}
+                      {teacher.kind === "EXTERNAL"
+                        ? `${teacher.displayName} · alquila`
+                        : teacher.displayName}
                     </button>
                   );
                 })}
