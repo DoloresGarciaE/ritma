@@ -337,3 +337,75 @@ export async function acceptInvitation(
 
   return { orgId };
 }
+
+// ─── Profes externos (S10, decisión 1): perfil sin cuenta, sin invitación ─────────────
+
+export type ExternalProfile = {
+  id: string;
+  displayName: string;
+  groupCount: number;
+};
+
+/** Los externos del estudio (no son miembros: no tienen cuenta ni Membership). */
+export async function listExternals(actor: Actor): Promise<ExternalProfile[]> {
+  assertCanManageMembers(actor);
+  const org = withOrg(actor.orgId);
+  await assertStudio(org, actor.orgId);
+
+  const rows = await org.teacherProfile.findMany({
+    where: { kind: "EXTERNAL" },
+    orderBy: [{ createdAt: "asc" }, { displayName: "asc" }],
+    select: {
+      id: true,
+      displayName: true,
+      _count: { select: { groups: { where: { active: true } } } },
+    },
+  });
+
+  return rows.map((row) => ({
+    id: row.id,
+    displayName: row.displayName,
+    groupCount: row._count.groups,
+  }));
+}
+
+/**
+ * Alta de un externo (S10): SOLO un nombre — sin usuario, sin invitación
+ * (`membershipUserId` null). Vincularlo a una cuenta real es fase 3. Sus grupos son
+ * agenda y ocupación, jamás cobranza (RN13); su plata es el alquiler (RN7).
+ */
+export async function createExternalProfile(
+  actor: Actor,
+  displayName: string,
+): Promise<{ id: string }> {
+  assertCanManageMembers(actor);
+  const org = withOrg(actor.orgId);
+  await assertStudio(org, actor.orgId);
+
+  const name = displayName.trim();
+  if (name.length === 0) throw new TeamRuleError("El nombre no puede quedar vacío.");
+
+  return org.teacherProfile.create({
+    data: { orgId: actor.orgId, displayName: name, kind: "EXTERNAL" },
+    select: { id: true },
+  });
+}
+
+/** Renombrar un externo (el único dato que tiene). */
+export async function updateExternalProfile(
+  actor: Actor,
+  teacherId: string,
+  displayName: string,
+): Promise<void> {
+  assertCanManageMembers(actor);
+  const org = withOrg(actor.orgId);
+
+  const name = displayName.trim();
+  if (name.length === 0) throw new TeamRuleError("El nombre no puede quedar vacío.");
+
+  const updated = await org.teacherProfile.updateMany({
+    where: { id: teacherId, kind: "EXTERNAL" },
+    data: { displayName: name },
+  });
+  if (updated.count === 0) throw new Error("Ese perfil no es de un profe externo.");
+}

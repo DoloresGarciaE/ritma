@@ -15,6 +15,7 @@ import {
   makeOrg,
   makePayment,
   makeReminderLog,
+  makeRentalCharge,
   makeSession,
   makeSettlement,
   makeSlot,
@@ -1263,5 +1264,46 @@ describe("aislamiento org × org — Settlement", () => {
 
     expect(created.orgId).toBe(a.id);
     expect(await db.settlement.count({ where: { orgId: b.id } })).toBe(0);
+  });
+});
+
+describe("aislamiento org × org — RentalCharge", () => {
+  it("A no ve, no edita ni borra cargos de alquiler de B; deleteMany no los alcanza", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+    const bExternal = await makeTeacherProfile(b.id, "Externa de B", { kind: "EXTERNAL" });
+    const bCharge = await makeRentalCharge(b.id, bExternal.id);
+
+    expect(await withOrg(a.id).rentalCharge.findMany()).toEqual([]);
+    expect(await withOrg(a.id).rentalCharge.findUnique({ where: { id: bCharge.id } })).toBeNull();
+    await expect(
+      withOrg(a.id).rentalCharge.update({
+        where: { id: bCharge.id },
+        data: { status: "PAID" },
+      }),
+    ).rejects.toMatchObject({ code: "P2025" });
+    await withOrg(a.id).rentalCharge.deleteMany({});
+    const after = await db.rentalCharge.findUniqueOrThrow({ where: { id: bCharge.id } });
+    expect(after.status).toBe("PENDING");
+  });
+
+  it("un cargo creado vía withOrg(A) no puede aterrizar en B: el orgId se fuerza", async () => {
+    const a = await makeOrg("Estudio A");
+    const b = await makeOrg("Estudio B");
+    const aExternal = await makeTeacherProfile(a.id, "Externa de A", { kind: "EXTERNAL" });
+
+    const created = await withOrg(a.id).rentalCharge.create({
+      data: {
+        teacherId: aExternal.id,
+        period: "2026-07",
+        amount: 20000,
+        currency: "ARS",
+        dueDate: new Date("2026-08-10T00:00:00.000Z"),
+        orgId: b.id,
+      },
+    });
+
+    expect(created.orgId).toBe(a.id);
+    expect(await db.rentalCharge.count({ where: { orgId: b.id } })).toBe(0);
   });
 });

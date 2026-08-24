@@ -210,6 +210,54 @@ export async function makeAgreement(
   });
 }
 
+/** Un acuerdo de ALQUILER (S10, RN7), por el camino crudo. */
+export async function makeRentalAgreement(
+  orgId: string,
+  teacherId: string,
+  extra: {
+    rentalAmount?: number;
+    rentalPeriod?: "MONTHLY" | "PER_SESSION" | "PER_HOUR";
+    validFrom?: string;
+  } = {},
+) {
+  return db.agreement.create({
+    data: {
+      orgId,
+      teacherId,
+      type: "RENTAL",
+      rentalAmount: extra.rentalAmount ?? 5000,
+      rentalPeriod: extra.rentalPeriod ?? "PER_SESSION",
+      validFrom: new Date(`${extra.validFrom ?? "2026-01-01"}T00:00:00.000Z`),
+    },
+  });
+}
+
+/** Un cargo de alquiler (S10), por el camino crudo — setup y aislamiento. */
+export async function makeRentalCharge(
+  orgId: string,
+  teacherId: string,
+  extra: {
+    period?: string;
+    amount?: number;
+    status?: "PENDING" | "PAID" | "OVERDUE" | "WAIVED";
+    dueDate?: string;
+    sessionsCount?: number;
+  } = {},
+) {
+  return db.rentalCharge.create({
+    data: {
+      orgId,
+      teacherId,
+      period: extra.period ?? "2026-07",
+      amount: extra.amount ?? 20000,
+      currency: "ARS",
+      dueDate: new Date(`${extra.dueDate ?? "2026-08-10"}T00:00:00.000Z`),
+      status: extra.status ?? "PENDING",
+      sessionsCount: extra.sessionsCount ?? 4,
+    },
+  });
+}
+
 /** Una liquidación cerrada, por el camino crudo (S9) — solo para aislamiento. */
 export async function makeSettlement(
   orgId: string,

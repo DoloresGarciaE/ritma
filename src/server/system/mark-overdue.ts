@@ -20,6 +20,8 @@ export type MarkOverdueSummary = {
   orgs: number;
   /** Cuotas que pasaron a OVERDUE en esta corrida. */
   marked: number;
+  /** Cargos de alquiler (S10, RN7) que pasaron a OVERDUE. */
+  rentalsMarked: number;
 };
 
 export async function runMarkOverdue(): Promise<MarkOverdueSummary> {
@@ -30,6 +32,7 @@ export async function runMarkOverdue(): Promise<MarkOverdueSummary> {
   });
 
   let marked = 0;
+  let rentalsMarked = 0;
 
   for (const org of orgs) {
     const today = todayInTz(org.timezone);
@@ -43,17 +46,37 @@ export async function runMarkOverdue(): Promise<MarkOverdueSummary> {
       candidates.map((c) => ({ id: c.id, status: c.status, dueDate: dbToCivil(c.dueDate) })),
       today,
     );
-    if (ids.length === 0) continue;
 
-    // El where re-chequea el estado: si un pago llegó entre la lectura y esta escritura
-    // (S4), la cuota ya no está PENDING/PARTIAL y no se pisa.
-    const result = await system.charge.updateMany({
-      where: { id: { in: ids }, orgId: org.id, status: { in: ["PENDING", "PARTIAL"] } },
-      data: { status: "OVERDUE" },
+    if (ids.length > 0) {
+      // El where re-chequea el estado: si un pago llegó entre la lectura y esta escritura
+      // (S4), la cuota ya no está PENDING/PARTIAL y no se pisa.
+      const result = await system.charge.updateMany({
+        where: { id: { in: ids }, orgId: org.id, status: { in: ["PENDING", "PARTIAL"] } },
+        data: { status: "OVERDUE" },
+      });
+      marked += result.count;
+    }
+
+    // S10 (RN7): los cargos de alquiler siguen las MISMAS reglas de estado (RN3), con el
+    // MISMO servicio puro. Sin PARTIAL: un alquiler se paga completo (decisión S10).
+    const rentalCandidates = await system.rentalCharge.findMany({
+      where: { orgId: org.id, status: "PENDING" },
+      select: { id: true, status: true, dueDate: true },
     });
 
-    marked += result.count;
+    const rentalIds = markOverdue(
+      rentalCandidates.map((c) => ({ id: c.id, status: c.status, dueDate: dbToCivil(c.dueDate) })),
+      today,
+    );
+
+    if (rentalIds.length > 0) {
+      const result = await system.rentalCharge.updateMany({
+        where: { id: { in: rentalIds }, orgId: org.id, status: "PENDING" },
+        data: { status: "OVERDUE" },
+      });
+      rentalsMarked += result.count;
+    }
   }
 
-  return { orgs: orgs.length, marked };
+  return { orgs: orgs.length, marked, rentalsMarked };
 }

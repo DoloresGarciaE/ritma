@@ -190,11 +190,19 @@ async function assertRefsInScope(
     org.student.findUnique({ where: { id: studentId }, select: { id: true } }),
     org.classGroup.findUnique({
       where: { id: groupId, AND: [groupScopeWhere(scope)] },
-      select: { id: true },
+      select: { id: true, teacher: { select: { kind: true } } },
     }),
   ]);
   if (!student) throw new Error("El alumno no pertenece a esta organización.");
   if (!group) throw new Error("El grupo no pertenece a esta organización.");
+  // RN13 (propuesta S10): el grupo de un EXTERNO es agenda y ocupación del estudio,
+  // no cobranza — sus alumnos no son alumnos de la org. La UI lo esconde (§4.3); acá
+  // la regla dura.
+  if (group.teacher?.kind === "EXTERNAL") {
+    throw new EnrollmentRuleError(
+      "El grupo de un profe externo no lleva inscripciones: el estudio le alquila el salón, no le cobra a sus alumnos.",
+    );
+  }
 }
 
 /**
@@ -339,7 +347,7 @@ export async function enrollMany(
   const [group, students] = await Promise.all([
     org.classGroup.findUnique({
       where: { id: input.groupId, AND: [groupScopeWhere(scope)] },
-      select: { id: true },
+      select: { id: true, teacher: { select: { kind: true } } },
     }),
     org.student.findMany({
       where: { id: { in: studentIds } },
@@ -347,6 +355,12 @@ export async function enrollMany(
     }),
   ]);
   if (!group) throw new Error("El grupo no pertenece a esta organización.");
+  // RN13 (propuesta S10): mismo rechazo que la inscripción individual.
+  if (group.teacher?.kind === "EXTERNAL") {
+    throw new EnrollmentRuleError(
+      "El grupo de un profe externo no lleva inscripciones: el estudio le alquila el salón, no le cobra a sus alumnos.",
+    );
+  }
   if (students.length !== studentIds.length) {
     throw new Error("Alguno de los alumnos no pertenece a esta organización.");
   }

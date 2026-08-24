@@ -47,18 +47,25 @@ enum TeacherKind {
   EXTERNAL
 }
 
-/// Tipo de acuerdo económico (Plan §7). RENTAL queda DECLARADO para S10 (decisión S9):
-/// sus columnas (rentalAmount, rentalPeriod) llegan con la lógica de alquileres — un
-/// valor usable sin código detrás sería un estado imposible de manejar.
+/// Tipo de acuerdo económico (Plan §7): porcentaje para STAFF (S9), alquiler para
+/// EXTERNAL (S10, RN7).
 enum AgreementType {
   REVENUE_SHARE
   RENTAL
 }
 
-/// Acuerdo económico de un perfil docente (HU6.1, RN6). CAMBIAR el porcentaje CREA un
-/// registro nuevo con su `validFrom`: el historial queda intacto y cada pago liquida
-/// con el acuerdo vigente a su `paidAt` (propuesta RN6-bis, S9) — un cambio a mitad de
-/// mes parte el cálculo en dos tramos.
+/// Cómo se calcula el alquiler de un externo (RN7, S10).
+enum RentalPeriod {
+  MONTHLY
+  PER_SESSION
+  PER_HOUR
+}
+
+/// Acuerdo económico de un perfil docente (HU6.1, RN6/RN7). CAMBIAR las condiciones
+/// CREA un registro nuevo con su `validFrom`: el historial queda intacto. Un pago de
+/// alumno liquida con el acuerdo vigente a su `paidAt` (RN6-bis, S9); un cargo de
+/// alquiler usa el acuerdo vigente al ÚLTIMO día de su período (decisión S10 — un solo
+/// acuerdo por cargo, sin tramos).
 model Agreement {
   id       String        @id @default(cuid())
   orgId    String
@@ -66,6 +73,9 @@ model Agreement {
   type     AgreementType
   /// Porcentaje de retención del ESTUDIO (30 = 30%). Decimal: la plata no toca floats.
   studioPercent Decimal? @db.Decimal(5, 2)
+  /// RENTAL (S10): la tarifa — por mes, por sesión o por hora según `rentalPeriod`.
+  rentalAmount Decimal? @db.Decimal(12, 2)
+  rentalPeriod RentalPeriod?
   /// Fecha civil desde la que rige (@db.Date, RN10).
   validFrom DateTime @db.Date
 
@@ -78,6 +88,46 @@ model Agreement {
   /// Dos acuerdos del mismo profe desde el mismo día serían ambiguos.
   @@unique([teacherId, validFrom])
   @@index([orgId, teacherId, validFrom])
+}
+
+/// Cargo de alquiler de un profe EXTERNAL (HU6.3, RN7): generado por el cron del día 1
+/// — MONTHLY para el período que arranca; PER_SESSION/PER_HOUR para el que acaba de
+/// cerrar, contando las ocurrencias NO canceladas (RN8) por su fecha MOSTRADA (una
+/// movida cobra donde se dictó — decisión S10). Sin imputaciones ni parciales: se marca
+/// pagado completo con fecha y método (decisión S10, HU6.3). `sessionsCount`/
+/// `minutesTotal`/`unspacedSessions` congelan los HECHOS del cálculo al generar (el
+/// monto es editable en PENDING, mismo espíritu que RN2 — los hechos no).
+model RentalCharge {
+  id        String @id @default(cuid())
+  orgId     String
+  teacherId String
+  /// "YYYY-MM", el período que cobra (RN10, zona de la org).
+  period    String
+  amount    Decimal @db.Decimal(12, 2)
+  currency  String
+  /// Día `dueDay` de la org en el MES DE GENERACIÓN (@db.Date): un cargo no vence
+  /// antes de existir. `markOverdue` lo incluye (RN3).
+  dueDate DateTime     @db.Date
+  status  ChargeStatus @default(PENDING)
+  /// El pago (HU6.3): fecha civil y método, sin más maquinaria.
+  paidAt DateTime?  @db.Date
+  method PayMethod?
+  /// Los hechos del cálculo (0 en MONTHLY): sesiones contadas, minutos sumados
+  /// (PER_HOUR) y cuántas fueron de grupos SIN salón (se cuentan igual y se señalan).
+  sessionsCount    Int @default(0)
+  minutesTotal     Int @default(0)
+  unspacedSessions Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  org     Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  teacher TeacherProfile @relation(fields: [teacherId], references: [id], onDelete: Restrict)
+
+  /// Un cargo por externo y período: la garantía dura de idempotencia del cron.
+  @@unique([teacherId, period])
+  @@index([orgId, period])
+  @@index([orgId, status])
 }
 
 enum SettlementStatus {
@@ -153,6 +203,7 @@ model Organization {
   spaces      Space[]
   agreements  Agreement[]
   settlements Settlement[]
+  rentals     RentalCharge[]
 }
 
 /// Salón del estudio (Plan §3/§7, HU3.1/HU3.4 — S8). Solo una org STUDIO lo usa; en
@@ -203,6 +254,7 @@ model TeacherProfile {
   groups           ClassGroup[]
   agreements       Agreement[]
   settlements      Settlement[]
+  rentalCharges    RentalCharge[]
   receivedPayments Payment[]
 
   /// Un usuario tiene a lo sumo UN perfil por org; varios `null` conviven (perfiles

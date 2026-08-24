@@ -82,3 +82,98 @@ export async function dashboardMetrics(orgId: string, scope: DataScope): Promise
     todayClasses: occurrencesOn(week.occurrences, today),
   };
 }
+
+// ─── Reportes del estudio (S10, HU7.2): ingresos por profe y por disciplina ───────────
+
+export type RevenueRow = {
+  key: string;
+  label: string;
+  /** Numérico plano, solo para mostrar. */
+  total: number;
+};
+
+export type PeriodRevenue = {
+  period: string;
+  /** Imputaciones del período agrupadas por el profe del grupo ("Sin profe" incluido). */
+  byTeacher: RevenueRow[];
+  /** Las mismas imputaciones, por disciplina del grupo. */
+  byDiscipline: RevenueRow[];
+  /**
+   * El total del período — la MISMA vara del dashboard (imputaciones a cuotas del
+   * período, S6): los dos cortes suman EXACTO esto por construcción (cada imputación
+   * cae en un solo profe y una sola disciplina).
+   */
+  total: number;
+  /** Alquileres del período ya cobrados (RentalCharge PAID, S10) — línea aparte. */
+  rentalsCollected: number;
+};
+
+/**
+ * Ingresos del período (HU7.2, owner/admin — la page asegura el rol): cero queries
+ * sueltas en pantallas, cero aritmética fuera del motor (`sumMoney`). El CSV refleja
+ * exactamente estas filas.
+ */
+export async function periodRevenue(orgId: string, period: string): Promise<PeriodRevenue> {
+  const org = withOrg(orgId);
+
+  const [allocations, rentals] = await Promise.all([
+    org.paymentAllocation.findMany({
+      where: { charge: { period } },
+      select: {
+        amount: true,
+        charge: {
+          select: {
+            enrollment: {
+              select: {
+                group: {
+                  select: {
+                    teacherId: true,
+                    teacher: { select: { displayName: true } },
+                    discipline: { select: { id: true, name: true } },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    }),
+    org.rentalCharge.findMany({ where: { period, status: "PAID" }, select: { amount: true } }),
+  ]);
+
+  const teacherBuckets = new Map<string, { label: string; amounts: Money[] }>();
+  const disciplineBuckets = new Map<string, { label: string; amounts: Money[] }>();
+
+  for (const allocation of allocations) {
+    const group = allocation.charge.enrollment.group;
+    const teacherKey = group.teacherId ?? "none";
+    const teacherLabel = group.teacher?.displayName ?? "Sin profe";
+    const teacher = teacherBuckets.get(teacherKey) ?? { label: teacherLabel, amounts: [] };
+    teacher.amounts.push(allocation.amount as Money);
+    teacherBuckets.set(teacherKey, teacher);
+
+    const discipline = disciplineBuckets.get(group.discipline.id) ?? {
+      label: group.discipline.name,
+      amounts: [],
+    };
+    discipline.amounts.push(allocation.amount as Money);
+    disciplineBuckets.set(group.discipline.id, discipline);
+  }
+
+  const toRows = (buckets: Map<string, { label: string; amounts: Money[] }>): RevenueRow[] =>
+    [...buckets.entries()]
+      .map(([key, bucket]) => ({
+        key,
+        label: bucket.label,
+        total: sumMoney(bucket.amounts).toNumber(),
+      }))
+      .sort((a, b) => b.total - a.total || a.label.localeCompare(b.label));
+
+  return {
+    period,
+    byTeacher: toRows(teacherBuckets),
+    byDiscipline: toRows(disciplineBuckets),
+    total: collectedOfPeriod(allocations.map((a) => ({ amount: a.amount as Money }))).toNumber(),
+    rentalsCollected: sumMoney(rentals.map((r) => r.amount as Money)).toNumber(),
+  };
+}

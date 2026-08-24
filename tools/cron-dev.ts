@@ -6,6 +6,7 @@ import { config as loadEnv } from "dotenv";
  *
  *   npm run cron:dev -- generate-charges           # el período de "hoy" de cada org
  *   npm run cron:dev -- generate-charges 2026-08   # un período puntual
+ *   npm run cron:dev -- generate-rentals 2026-08   # alquileres (S10): 2026-08 "arranca"
  *   npm run cron:dev -- mark-overdue
  *
  * Es la herramienta del DoD de S3 ("simular el cambio de mes"): generá el período que
@@ -31,15 +32,27 @@ async function main() {
         );
         break;
       }
+      case "generate-rentals": {
+        const { runGenerateRentals } = await import("../src/server/system/generate-rentals");
+        const summary = await runGenerateRentals(period);
+        console.log(
+          `generate-rentals${period ? ` (${period})` : ""} — orgs: ${summary.orgs} · ` +
+            `creados: ${summary.created} · ya existían: ${summary.skipped}`,
+        );
+        break;
+      }
       case "mark-overdue": {
         const { runMarkOverdue } = await import("../src/server/system/mark-overdue");
         const summary = await runMarkOverdue();
-        console.log(`mark-overdue — orgs: ${summary.orgs} · marcadas vencidas: ${summary.marked}`);
+        console.log(
+          `mark-overdue — orgs: ${summary.orgs} · marcadas vencidas: ${summary.marked} · ` +
+            `alquileres vencidos: ${summary.rentalsMarked}`,
+        );
         break;
       }
       default:
         console.error(
-          `Uso: npm run cron:dev -- <generate-charges [YYYY-MM] | mark-overdue>` +
+          `Uso: npm run cron:dev -- <generate-charges [YYYY-MM] | generate-rentals [YYYY-MM] | mark-overdue>` +
             (job ? `\nJob desconocido: "${job}"` : ""),
         );
         process.exitCode = 1;

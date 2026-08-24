@@ -73,6 +73,8 @@ const SCOPE: Record<Prisma.ModelName, Scope> = {
   // S9: el corazón contable — acuerdos y liquidaciones.
   Agreement: "orgId",
   Settlement: "orgId",
+  // S10: los alquileres de externos (RN7).
+  RentalCharge: "orgId",
   User: "global",
   Session: "global",
   Account: "global",
