@@ -285,6 +285,48 @@ ritma/
   drill-down recalculado pero no en los totales congelados — v2 podría cantarlo; hoy se
   evita no fechando pagos hacia atrás de un cierre.
 
+## Alquileres de externos y reportes (desde S10 — Fase 2 completa)
+
+- **El externo es un perfil con SOLO nombre** (`TeacherProfile` EXTERNAL,
+  `membershipUserId` null, alta en el equipo sin invitación — vincular cuenta es fase 3).
+  **RN13 (propuesta en Plan §8): sus grupos son agenda y ocupación, jamás cobranza** —
+  inscribir a un grupo de externo se RECHAZA en `assertRefsInScope`/`enrollMany`
+  (testeado) y la UI ni lo ofrece (§4.3: sin picker, sin tarifa, sin inscriptos en su
+  detalle de sesión). Su única plata es el alquiler (RN7). La marca en TODA la agenda es
+  el sufijo **"· alquila"** en la línea del profe (§3.21); `listTeacherOptions` ahora
+  trae `kind` e incluye externos — los selectores de PLATA de alumnos (receivedById) los
+  FILTRAN.
+- **La fórmula RN7 vive en UN lugar**: `computeRentalCharge`
+  ([`services/rentals.ts`](src/server/services/rentals.ts)), pura sobre Decimal — el
+  seed genera con el cron real. **El cargo de un período usa EL acuerdo vigente al
+  ÚLTIMO día de ese período** (decisión de sesión: un solo acuerdo, SIN tramos — a
+  diferencia de RN6-bis); las sesiones cuentan NO canceladas (RN8) **por su fecha
+  MOSTRADA** (una movida cobra donde se dictó — el motor de ocurrencias ya lo decide);
+  grupos sin salón cuentan igual y se SEÑALAN (`unspacedSessions`); **cargo cero no se
+  genera**; PER_HOUR = tarifa × minutos/60, redondeo HALF_UP a 2. Acuerdo RENTAL con la
+  vigencia de S9 (`setRentalAgreement`, solo EXTERNAL; el % solo STAFF).
+- **Generación en el cron del día 1** ([`system/generate-rentals.ts`](src/server/system/generate-rentals.ts),
+  mismo endpoint que las cuotas): MONTHLY → el período que ARRANCA (nada retroactivo);
+  PER_SESSION/PER_HOUR → el que acaba de CERRAR con `occurrencesForRange` (cero motor
+  nuevo). Idempotente por unique `(teacherId, period)` con `update: {}` — no pisa un
+  monto editado. `dueDate` = dueDay del MES DE GENERACIÓN (un cargo no nace vencido);
+  `markOverdue` incluye los alquileres con el mismo servicio puro (RN3, sin PARTIAL).
+  ⚠️ Una externa nueva con acuerdo "desde hoy" NO genera el mes pasado: el acuerdo debe
+  regir desde dentro del período a cobrar (el recorrido S10 tropezó con esto).
+- **Pagado según HU6.3, sin más**: completo con fecha y método (`markRentalPaid`, desde
+  PENDING u OVERDUE); monto editable SOLO en PENDING; exonerar jamás un pagado; sin
+  comprobante público (el externo no es audiencia todavía). Los HECHOS del cálculo
+  (sesiones/minutos/sin-salón) quedan congelados en la fila; el detalle §3.21 muestra la
+  cancelada tachada ("cancelada · no cuenta").
+- **Reportes (HU7.2) con la vara de S6**: `periodRevenue`
+  ([`services/metrics.ts`](src/server/services/metrics.ts)) agrupa LAS MISMAS
+  imputaciones del período por profe (fila "Sin profe" incluida) y por disciplina — los
+  cortes suman EXACTO el total y cuadran con el dashboard por construcción (testeado).
+  Alquileres cobrados (PAID del período) en línea APARTE: no son cobranza de alumnos.
+  **CSV server-side** ([`reportes/csv/route.ts`](<src/app/(app)/estudio/reportes/csv/route.ts>)):
+  UTF-8 CON BOM + separador `;` (Excel es-AR) + formatos §4.2, mismas filas que la
+  pantalla; la guardia va EN el route handler (no pasa por el layout).
+
 ## El patrón para un modelo de negocio nuevo (desde S1)
 
 `Student` (S1) es la plantilla. Todo modelo de negocio que llegue después se construye **en este

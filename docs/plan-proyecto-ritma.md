@@ -249,11 +249,11 @@ model Agreement {
   id            String @id @default(cuid())
   orgId         String          // S9: la convención de §7, como todo modelo de negocio
   teacherId     String
-  type          AgreementType   // REVENUE_SHARE | RENTAL (RENTAL declarado; usable en S10)
+  type          AgreementType   // REVENUE_SHARE | RENTAL (activado en S10)
   studioPercent Decimal?        // ej. 30.0 si REVENUE_SHARE
-  rentalAmount  Decimal?        // si RENTAL — llega en S10
-  rentalPeriod  RentalPeriod?   // PER_HOUR | PER_SESSION | MONTHLY — llega en S10
-  validFrom     DateTime        // @db.Date: cambiar el % crea un registro nuevo (RN6-bis)
+  rentalAmount  Decimal?        // RENTAL (S10): la tarifa según rentalPeriod
+  rentalPeriod  RentalPeriod?   // PER_HOUR | PER_SESSION | MONTHLY
+  validFrom     DateTime        // @db.Date: cambiar las condiciones crea un registro nuevo
   @@unique([teacherId, validFrom]) // dos acuerdos del mismo día serían ambiguos — nota S9
 }
 
@@ -376,9 +376,18 @@ model RentalCharge {
   id        String @id @default(cuid())
   orgId     String
   teacherId String
-  period    String
-  amount    Decimal
-  status    ChargeStatus
+  period    String       // el período que COBRA (nota S10: MONTHLY el que arranca;
+                         // por sesión/hora el que acaba de cerrar)
+  amount    Decimal      // @db.Decimal(12, 2); editable solo en PENDING (espíritu RN2)
+  currency  String       // RN10, como toda plata
+  dueDate   DateTime     // @db.Date: día dueDay de la org en el MES DE GENERACIÓN
+  status    ChargeStatus // sin PARTIAL: el alquiler se paga completo (S10, HU6.3)
+  paidAt    DateTime?    // @db.Date: cuándo se pagó (HU6.3)
+  method    PayMethod?   // con qué se pagó
+  sessionsCount    Int   // S10: los HECHOS del cálculo, congelados al generar
+  minutesTotal     Int
+  unspacedSessions Int   // sesiones de grupos SIN salón: cuentan igual y se señalan
+  @@unique([teacherId, period]) // la idempotencia dura del cron (patrón S3)
 }
 
 model ReminderLog {
@@ -447,6 +456,14 @@ Toda tabla lleva además `createdAt` (`@default(now())`) y `updatedAt` (`@update
 4. **La imputación tardía liquida donde OCURRE**: si el crédito a favor de un alumno se aplica (cron nocturno) sobre un pago que YA quedó en una liquidación cerrada, esa plata entra a la liquidación del período en que la imputación sucede — cada peso se liquida UNA vez, ninguno se pierde. Como solo se cierran períodos terminados, una imputación nueva jamás clasifica a un período cerrado. El drill-down la marca ("imputación de un mes ya cerrado"). También parte de RN6-bis.
 5. **Solo los STAFF se liquidan**: la titular (`OWNER_TEACHER`) no se liquida a sí misma y sus grupos no entran a ninguna liquidación; los `EXTERNAL` son alquiler (RN7, S10). Un perfil STAFF desvinculado (revocado) SIGUE liquidando — la revocación no borra plata. Los pagos a grupos **sin profe** no entran a ninguna liquidación: bloque "sin asignar" con monto y acceso directo a asignar, visible antes de cerrar.
 
+**Nota S10 (al construir alquileres y reportes).** Cinco decisiones sobre el borrador, ya reflejadas arriba:
+
+1. **El externo es un perfil con SOLO un nombre** (`TeacherProfile` kind `EXTERNAL`, `membershipUserId` null): se crea desde la gestión del equipo, sin invitación y sin cuenta — vincularlo a una cuenta real es fase 3. Aparece en el selector de profe de los grupos, marcado ("alquila"); el calendario y el detalle de sesión llevan la misma marca sutil: de un vistazo, qué es propio y qué es alquilado.
+2. **El acuerdo RENTAL usa la MISMA vigencia de S9** (historial por `validFrom`), pero **el cargo de un período usa EL acuerdo vigente al ÚLTIMO día de ese período** (decisión de sesión): un solo acuerdo por cargo, sin tramos — el caso armado: tarifa que sube el 15, el mes entero cobra la nueva. Cubre además a la externa nueva con acuerdo de mitad de mes. Sin acuerdo vigente, el cargo no se genera (y la pantalla lo canta).
+3. **La generación vive en el cron del día 1, idempotente** (unique `[teacherId, period]`, upsert `update: {}` — patrón S3): `MONTHLY` genera el cargo fijo del período que ARRANCA (nada retroactivo, espíritu del alta S3); `PER_SESSION`/`PER_HOUR` generan el del período que acaba de CERRAR, contando las ocurrencias reales (`occurrencesForRange`, cero motor nuevo) **no canceladas** (RN8) **por su fecha MOSTRADA** — una reprogramada cuenta (no está cancelada) y una movida de mes cobra donde SE DICTÓ (decisión de sesión: el alquiler es por el uso del salón, y el calendario y el cargo cuentan lo mismo). **Cargo cero no se genera.** Los grupos sin salón **cuentan igual y se señalan** (`unspacedSessions`) — corrección al "en espacios del estudio" del RN7 original: la sesión existió y ocupó al externo; dónde se dictó es un dato, no un descuento. `dueDate` = día `dueDay` de la org en el mes de generación (un cargo por julio, generado el 1/8, vence en agosto: no nace vencido); `markOverdue` los incluye con el mismo servicio puro (RN3).
+4. **Pagado según HU6.3, sin más**: completo, con fecha y método — sin imputaciones ni parciales (esa maquinaria es de cuotas de alumnos; acá sobra, y `PARTIAL` jamás se usa). Monto editable solo en `PENDING` (espíritu RN2); exonerable con confirmación (jamás un pagado). Los hechos del cálculo (sesiones, minutos, sin-salón) quedan congelados al generar: el monto se puede pisar, los hechos no.
+5. **Los reportes (HU7.2) usan la vara de S6**: ingresos por profe y por disciplina = las MISMAS imputaciones del período que el dashboard, agrupadas — los dos cortes suman exacto el total por construcción. Los alquileres cobrados (cargos `PAID` del período) van en una **línea aparte**: no son cobranza de alumnos. CSV server-side por reporte: UTF-8 **con BOM** y separador `;` (lo que el Excel en español espera), formatos §4.2, mismas filas que la pantalla.
+
 ## 8. Reglas de negocio
 
 **RN1 — Generación de cuotas.** El día 1 de cada mes, un cron crea una cuota `pendiente` por cada inscripción mensual activa, con `amount = enrollment.price` y `dueDate = día de vencimiento de la org`. La cuota es única por (inscripción, período).
@@ -477,6 +494,10 @@ Si `N > 0`, el estudio le debe al profe; si `N < 0`, el profe le debe al estudio
 > **Propuesta RN6-bis (S9, pendiente de aprobar).** Dos reglas que RN6 no cubría: **(a) vigencia** — el acuerdo es un historial por `validFrom`; cada pago liquida con el acuerdo vigente a su fecha de pago, y un período con cambio de % se muestra por tramos que suman exacto el total; sin acuerdo vigente a la fecha de un pago, la liquidación no se calcula (jamás un 0% silencioso). **(b) imputación tardía** — una imputación aplicada después del cierre del período del pago (crédito del cron sobre un pago ya liquidado) entra a la liquidación del período en que OCURRE: cada peso se liquida una sola vez y ninguno se pierde. Exacto por construcción: solo se cierran períodos terminados.
 
 **RN7 — Alquileres de externos.** Acuerdo `mensual`: un cargo fijo por período. Acuerdo `por hora/turno`: el cargo del período se calcula sobre las sesiones no canceladas de sus grupos en espacios del estudio. El estado del cargo (`pendiente`/`pagada`/`vencida`) sigue las mismas reglas que las cuotas.
+
+> **Aclaración S10 (decisiones de sesión, ago 2026).** (a) El cargo de un período usa **el acuerdo vigente al último día de ese período** — un solo acuerdo por cargo, sin tramos. (b) Las sesiones cuentan **por su fecha mostrada**: una reprogramada cuenta (no está cancelada) y una movida de mes cobra en el mes donde se dictó. (c) Los grupos **sin salón cuentan igual y se señalan** en el detalle — "en espacios del estudio" se lee como "sus grupos del estudio", tengan salón asignado o no. (d) Cargo cero no se genera.
+>
+> **Propuesta RN13 (S10, pendiente de aprobar).** Los grupos de un profe `EXTERNAL` son **agenda y ocupación solamente**: no admiten inscripciones ni pagos en la organización del estudio — sus alumnos no son alumnos de la org, y su única plata con el estudio es el alquiler (RN7). La UI lo esconde (§4.3) y el server lo rechaza con test. Ya estaban fuera de liquidaciones por diseño de S9 (solo STAFF liquida).
 
 **RN8 — Cancelación de sesiones.** Cancelar una sesión no modifica cuotas mensuales (el plan mensual no descuenta por clase). Sí afecta el cálculo de alquiler por hora/turno (RN7). Los descuentos por asistencia son territorio de los packs (fase 2+).
 

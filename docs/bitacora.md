@@ -606,3 +606,33 @@ del diagnóstico. Se pueden borrar con Prisma Studio apuntando al branch de prod
   cerró y lo RESETEÓ borrando la fila, limpieza de demo, no una reapertura—, intentar
   borrar el pago congelado, marcar pagada, y cambiar a la docente para ver la suya) y su
   PR; la rama SIN mergear. S10 (alquileres y reportes) NO se arranca.
+
+## Semana 20 (agosto 2026) — S10: alquileres de externos y reportes. FASE 2 COMPLETA.
+
+- **Hecho:** S10 completo en `feat/s10-rentals-reports` (S9 mergeado como PR #38).
+  Migración `RentalCharge` (+ paidAt/method y los HECHOS del cálculo congelados) y la
+  activación de RENTAL en `Agreement` (misma vigencia de S9). `computeRentalCharge`
+  pura, TESTS FIRST: 12 casos puros (fijo, por sesión sin canceladas, por hora con
+  duraciones mixtas y redondeo, cambio de acuerdo entre y a MITAD de período, cargo
+  cero que no se genera, sin-salón contado y señalado) + 12 con base (cron idempotente
+  que no pisa montos editados, RN3 sobre alquileres, RN13 rechazando inscripciones,
+  matriz de roles, reportes que cuadran contra el dashboard) + aislamiento. Cron del
+  día 1 extendido (mismo endpoint), `markOverdue` cubre alquileres. UI: externos en el
+  equipo (alta con solo nombre + acuerdo RENTAL con historial), pantalla Alquileres
+  (badges §3.3, detalle con la cancelada tachada, pagar/editar/exonerar), Reportes con
+  CSV (BOM + `;`), y la marca "· alquila" en toda la agenda. Seed: Marina Iglesias con
+  dos grupos de tango en la Terraza — junio 8×$6.000=$48.000 PAGADO, julio 9×$6.000
+  (la cancelada afuera) = $54.000 pendiente, generados por el cron real. Suite 570
+  verde, build, 3 E2E, recorrido real 20/20 (ciclo completo de una externa nueva
+  incluido: alta → acuerdo → grupo → cron → pagado → limpieza).
+- **Trabado:** nada bloqueante. Dos decisiones de sesión con caso armado (Plan §7/§8,
+  nota S10): el cargo usa EL acuerdo vigente al último día del período (sin tramos), y
+  una sesión movida de mes cobra donde SE DICTÓ. El motor atrapó dos veces al propio
+  recorrido: el acuerdo "desde hoy" no genera el mes pasado (hay que fecharlo dentro
+  del período a cobrar — anotado para el guion), y la franja default del form arranca
+  con LUNES tildado (el grupo de prueba quedó Lun+Mié y el cargo lo contó perfecto).
+- **Próximo:** verificación de Dolores con la planilla y el teléfono (guion en el
+  reporte), su PR, y — si el DoD de Fase 2 cierra — el tag `v0.3.0-f2`. La rama SIN
+  mergear. **El plan de implementación queda EJECUTADO: no hay bloque siguiente que
+  arrancar.** Lo que venga (fase 3, hito de validación §8 del plan, backlog) se decide
+  con Dolores, no desde acá.

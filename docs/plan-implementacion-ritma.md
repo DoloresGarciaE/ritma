@@ -196,9 +196,19 @@ ritma/
       pago congelado se rechaza nombrando el período.)
 
 ### S10 — Alquileres y reportes
-- [ ] `RentalCharge`: acuerdos mensual y por hora/turno (RN7, calculado sobre sesiones no canceladas); marcar pagado.
-- [ ] Reporte de ingresos por profe y disciplina + export CSV (HU7.2).
+- [x] `RentalCharge`: acuerdos mensual y por hora/turno (RN7, calculado sobre sesiones no canceladas); marcar pagado.
+      (El acuerdo RENTAL con la MISMA vigencia de S9; el cargo de un período usa el
+      acuerdo vigente al ÚLTIMO día de ese período — decisión S10, sin tramos. Cron del
+      día 1, idempotente por unique (teacherId, period); `markOverdue` los incluye (RN3).
+      Externos = perfil con solo nombre (sin cuenta); sus grupos no llevan inscripciones
+      — propuesta RN13, nota S10 del Plan §8.)
+- [x] Reporte de ingresos por profe y disciplina + export CSV (HU7.2).
+      (Misma vara que el dashboard: imputaciones del período — los cortes suman exacto
+      el total por construcción; línea de alquileres cobrados aparte; CSV server-side
+      UTF-8 con BOM y separador `;`, un archivo por reporte.)
 - **DoD Fase 2 = DoD del Plan §12:** el cierre de mes de un estudio con 3 staff y 1 externo cuadra contra su planilla histórica.
+  (Verificado con el seed de Meraki: liquidación staff de S9 y los cargos de Marina
+  calculados a mano al centavo — ver la bitácora de la semana 20.)
 
 ## 10. Estrategia de testing
 

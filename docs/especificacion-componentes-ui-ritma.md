@@ -205,7 +205,9 @@ Los tres hex de cada modo viven como tokens `--google-btn-*` en `globals.css` �
 
 La **página de aceptación** (`/invitacion/[token]`) vive fuera del shell: logotipo, "{Org} te invita a su equipo", el rol, y — según haya sesión o no — "Aceptar invitación" o los CTAs de entrar/crear cuenta (que vuelven con `?next=`). Usada/vencida/revocada muestran SOLO su estado, con voz de marca y **sin nombrar la organización**: un link viejo reenviado no cuenta para quién era.
 
-*(S9)* La fila de un profe **staff** suma una línea con su acuerdo — "Acuerdo: 30% el estudio · desde el {fecha}", o **"Sin acuerdo: su liquidación no se puede calcular"** (la falta se canta, jamás un default silencioso) — y el botón secundario `sm` "Acuerdo", que abre un sheet (§3.8) con el **historial de vigencias** (solo lectura, el más nuevo primero) y el alta de una nueva: porcentaje del estudio (coma tolerada) + "Rige desde" (default hoy). Cambiar el % nunca edita el vigente: crea un registro nuevo (RN6-bis). La titular y los externos no llevan acuerdo — sus filas no muestran nada de esto (§4.3).
+*(S9)* La fila de un profe **staff** suma una línea con su acuerdo — "Acuerdo: 30% el estudio · desde el {fecha}", o **"Sin acuerdo: su liquidación no se puede calcular"** (la falta se canta, jamás un default silencioso) — y el botón secundario `sm` "Acuerdo", que abre un sheet (§3.8) con el **historial de vigencias** (solo lectura, el más nuevo primero) y el alta de una nueva: porcentaje del estudio (coma tolerada) + "Rige desde" (default hoy). Cambiar el % nunca edita el vigente: crea un registro nuevo (RN6-bis). La titular no lleva acuerdo — su fila no muestra nada de esto (§4.3).
+
+*(S10)* Sección aparte **"Externos · alquilan salón"**: perfiles con SOLO un nombre — sin cuenta, sin invitación (vincularlos es fase 3). Alta con "Agregar" (sheet de un campo), renombre en la fila, y el mismo botón "Acuerdo" con la variante de **alquiler** (RN7): modo por chips (Fijo por mes / Por sesión / Por hora), tarifa con input de monto, "Rige desde" e historial de vigencias — la falta también se canta ("Sin acuerdo: su alquiler no se puede generar"). Cada fila dice cuántos grupos ocupa en el calendario.
 
 ### 3.19 Calendario por salón (S8)
 
@@ -225,6 +227,16 @@ Mobile-first: un panel con scroll propio en ambos ejes — encabezados de column
 
 **Cerrar** (solo owner/admin, solo períodos terminados): botón primario en el footer del sheet → confirmación (§3.8) que resume lo que congela — cuántos pagos, el neto fijado, y "**No hay reapertura**". Cerrada, el footer ofrece "Marcar pagada" (registra cuándo se saldó la diferencia). Los toasts largos van con **título corto + descripción** (§3.9: el título trunca a una línea; el detalle —período, neto— viaja en la descripción, que envuelve).
 
+### 3.21 Alquileres y reportes (S10)
+
+**Alquileres** (`/estudio/alquileres`, solo STUDIO, solo owner/admin — 404 para el resto, §4.3): navegación de período ‹ › (default: el ANTERIOR, donde aterrizan los cargos por sesión/hora recién generados; el fijo mensual vive en el en curso). Una **card por externo**: nombre + **badge de estado §3.3** (los mismos de cuota — sin Parcial: el alquiler se paga completo) o la insignia neutra "Sin acuerdo" / "Sin cargo" con el motivo abajo, monto en `tabular-nums`, y "N sesiones dictadas · vence/pagado el {fecha}".
+
+El **detalle** (sheet §3.8): monto + estado + vencimiento (o "Pagado el {fecha} · {método}"), el **cálculo que lo generó** ("9 sesiones a $6.000 cada una" / "300 min a $8.000 la hora" — los hechos congelados al generar), la **señal warning de grupos sin salón** ("N de esas sesiones son de grupos sin salón: contaron igual"), y la lista de sesiones del período — la **cancelada tachada con "cancelada · no cuenta"** (RN8: el descuento se VE). Acciones: "Marcar pagado" (primario: fecha default hoy + método por chips), "Editar monto" (solo Pendiente, espíritu RN2) y "Exonerar" (confirmación §3.8 que nombra monto y consecuencia; jamás un pagado).
+
+**Reportes** (`/estudio/reportes`, mismas guardias): período ‹ › (default: el EN CURSO, el mismo que el Inicio — cuadran a simple vista). Dos tablas §3.12 colapsadas a filas en mobile — **por profe** (con "Sin profe" como fila propia) y **por disciplina** — cada una con su fila **Total** (idéntico en ambas: son las mismas imputaciones) y su botón **CSV** en el header. La línea "**Alquileres cobrados del período**" va en card aparte: no es cobranza de alumnos. La pantalla no suma nada: todo llega sumado del servicio (regla S4).
+
+**La marca del externo** (§3.7/§3.19): donde se muestra el profe a cargo —bloque de sesión, calendario por salón, detalle de sesión, lista de grupos, selector "Profe a cargo"— un externo va con el sufijo **"· alquila"** en el mismo `text-secondary`: sutil, texto (jamás solo color), y de un vistazo se sabe qué es propio y qué es alquilado. El detalle de sesión de un grupo externo **no muestra tarifa, inscriptos ni "Inscribir alumno"** (RN13, §4.3): en su lugar, una línea que explica que el estudio le alquila el salón.
+
 ## 4. Patrones
 
 ### 4.1 Formularios
@@ -240,6 +252,8 @@ Formato único en toda la app: `$20.000` (miles con punto, sin decimales salvo n
 *(S2)* Dos formatos nuevos que la agenda necesitó, fijados acá y en `lib/format.ts`: **rangos de hora** `19:00–20:30` (guion corto sin espacios; el fin sale de la duración) y **rangos de semana** `12–18 may` — cruzando mes, cada punta con su mes: `27 jul – 2 ago`. En confirmaciones que nombran el objeto (§3.8) el día va completo: `martes 12/05`.
 
 *(Ticket de horarios, ago 2026)* El **resumen de franja** — `Lun, Mié y Vie · 19:00 · 90 min` — es EL formato de un horario recurrente, en el editor (§3.15), la lista de grupos y donde haga falta leerlo: días capitalizados de 3 letras lunes-primero con "y" antes del último, hora, duración en minutos. Una sola función (`formatFranja`), jamás re-armado a mano.
+
+*(S10)* El **CSV** exportado usa los MISMOS formatos que la pantalla — montos `$20.000`, períodos "Marzo 2026" — y refleja exactamente sus filas, sin inventar columnas. Se arma server-side: **UTF-8 con BOM** (sin él, Excel rompe las tildes) y **separador `;`** (el list separator del Excel en español; con `,` todo cae en una columna), CRLF, un archivo por reporte, nombrado `ritma-{reporte}-{período}.csv`.
 
 ### 4.3 Permisos en la UI
 
