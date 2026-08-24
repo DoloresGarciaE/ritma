@@ -76,14 +76,25 @@ async function main() {
   const { db, createOrganizationWithOwner } = await import("../src/lib/db");
   const { auth } = await import("../src/lib/auth");
   const { normalizeForSearch } = await import("../src/lib/students");
-  const { addMonths, periodOf, todayInTz, addDays, civilToDb, DEFAULT_TIMEZONE } =
-    await import("../src/lib/dates");
+  const {
+    addMonths,
+    periodOf,
+    todayInTz,
+    addDays,
+    civilToDb,
+    dateInPeriod,
+    daysInPeriod,
+    weekdayOf,
+    DEFAULT_TIMEZONE,
+  } = await import("../src/lib/dates");
   const { runGenerateCharges } = await import("../src/server/system/generate-charges");
   const { runMarkOverdue } = await import("../src/server/system/mark-overdue");
   const { createEnrollment } = await import("../src/server/services/enrollments");
   const { waiveCharge } = await import("../src/server/services/charges");
   const { createPayment, deletePayment } = await import("../src/server/services/payments");
   const { closeSettlement } = await import("../src/server/services/settlements");
+  const { markRentalPaid } = await import("../src/server/services/rentals");
+  const { runGenerateRentals } = await import("../src/server/system/generate-rentals");
   const { logReminder } = await import("../src/server/services/reminders");
 
   try {
@@ -224,6 +235,17 @@ async function main() {
       },
     });
 
+    // Marina (S10): la EXTERNA — perfil con solo nombre, sin cuenta ni invitación
+    // (decisión 1). Alquila la Terraza los viernes; su plata es RN7, no cuotas (RN13).
+    const MARINA = "Marina Iglesias";
+    const marinaProfile =
+      (await db.teacherProfile.findFirst({
+        where: { orgId: meraki.id, displayName: MARINA, kind: "EXTERNAL" },
+      })) ??
+      (await db.teacherProfile.create({
+        data: { orgId: meraki.id, displayName: MARINA, kind: "EXTERNAL" },
+      }));
+
     // ── Alumnos ──────────────────────────────────────────────────────────────
     type StudentSpec = { name: string; phone?: string; active?: boolean };
 
@@ -349,6 +371,12 @@ async function main() {
       },
       data: { name: CARGO },
     });
+    // La disciplina de Marina (S10): las de la org nacen con el wizard; esta llega tarde.
+    await db.discipline.upsert({
+      where: { orgId_name: { orgId: meraki.id, name: "Tango" } },
+      update: {},
+      create: { orgId: meraki.id, name: "Tango" },
+    });
     const merakiGroups = await ensureGroups(
       meraki.id,
       [
@@ -417,6 +445,23 @@ async function main() {
           salon: "Salón B",
           slots: [{ weekday: 6, startTime: "12:00", durationMin: 60 }],
         },
+        // Los grupos de MARINA (S10): la Terraza los viernes, espalda con espalda (no
+        // es cruce). Son agenda y ocupación — sin inscripciones ni cuotas (RN13); el
+        // precio de referencia es decorativo (la plata de Marina es el alquiler, RN7).
+        {
+          name: "Tango iniciación",
+          discipline: "Tango",
+          price: 0,
+          salon: "Terraza",
+          slots: [{ weekday: 5, startTime: "18:30", durationMin: 90 }],
+        },
+        {
+          name: "Tango escenario",
+          discipline: "Tango",
+          price: 0,
+          salon: "Terraza",
+          slots: [{ weekday: 5, startTime: "20:00", durationMin: 90 }],
+        },
       ],
       merakiSpaces,
     );
@@ -429,9 +474,14 @@ async function main() {
     // salones a la vez — el eje por profe de S8 (con razón) lo marcaría imposible.
     // Así el cruce del martes queda como lo que es: dos salones, dos clases, y un
     // grupo esperando al próximo profe que se invite.
+    const MARINA_GROUPS = ["Tango iniciación", "Tango escenario"];
     await db.classGroup.updateMany({
       where: { orgId: meraki.id, name: CARGO },
       data: { teacherId: dualProfile.id },
+    });
+    await db.classGroup.updateMany({
+      where: { orgId: meraki.id, name: { in: MARINA_GROUPS } },
+      data: { teacherId: marinaProfile.id },
     });
     await db.classGroup.updateMany({
       where: { orgId: meraki.id, name: { in: ["Canto grupal", "Contemporáneo juvenil"] } },
@@ -440,7 +490,7 @@ async function main() {
     await db.classGroup.updateMany({
       where: {
         orgId: meraki.id,
-        name: { notIn: [CARGO, "Canto grupal", "Contemporáneo juvenil"] },
+        name: { notIn: [CARGO, "Canto grupal", "Contemporáneo juvenil", ...MARINA_GROUPS] },
       },
       data: { teacherId: merakiOwnerProfile.id },
     });
@@ -709,6 +759,69 @@ async function main() {
       );
     }
 
+    // ── Alquileres de Marina (S10, RN7): acuerdo, cancelada y cargos del cron real ────
+    // Acuerdo POR SESIÓN, vigente desde antes de todo el guion.
+    await db.agreement.upsert({
+      where: {
+        teacherId_validFrom: { teacherId: marinaProfile.id, validFrom: civilToDb("2026-01-01") },
+      },
+      update: {},
+      create: {
+        orgId: meraki.id,
+        teacherId: marinaProfile.id,
+        type: "RENTAL",
+        rentalAmount: 6000,
+        rentalPeriod: "PER_SESSION",
+        validFrom: civilToDb("2026-01-01"),
+      },
+    });
+
+    // El PRIMER viernes de PREV de "Tango escenario" quedó CANCELADO: RN7/RN8 en acción
+    // — el cargo de PREV lo excluye y el detalle lo muestra tachado ("no cuenta").
+    const escenario = merakiGroups.get("Tango escenario")!;
+    const escenarioSlot = await db.scheduleSlot.findFirstOrThrow({
+      where: { groupId: escenario.id },
+    });
+    let firstFriday = "";
+    for (let day = 1; day <= daysInPeriod(PREV); day++) {
+      const date = dateInPeriod(PREV, day);
+      if (weekdayOf(date) === 5) {
+        firstFriday = date;
+        break;
+      }
+    }
+    await db.classSession.upsert({
+      where: { slotId_date: { slotId: escenarioSlot.id, date: civilToDb(firstFriday) } },
+      update: { status: "CANCELLED" },
+      create: {
+        orgId: meraki.id,
+        groupId: escenario.id,
+        slotId: escenarioSlot.id,
+        date: civilToDb(firstFriday),
+        status: "CANCELLED",
+        note: "Marina avisó que no viene",
+      },
+    });
+
+    // Los cargos, por el CRON REAL (idempotente): correr "el día 1 de PREV" genera el
+    // cargo de TWO_AGO (el mes que cerraba entonces); correr "el día 1 de CUR" genera
+    // el de PREV, ya sin la cancelada. La fórmula RN7 no se reimplementa acá.
+    await runGenerateRentals(PREV);
+    await runGenerateRentals(CUR);
+
+    // TWO_AGO quedó cobrado (transferencia a los pocos días); PREV queda a cobrar —
+    // el recorrido del teléfono lo marca pagado en vivo.
+    const marinaOld = await db.rentalCharge.findUnique({
+      where: { teacherId_period: { teacherId: marinaProfile.id, period: TWO_AGO } },
+    });
+    if (marinaOld && marinaOld.status !== "PAID") {
+      const ownerActor = { userId: owner.id, orgId: meraki.id, role: "OWNER" as const };
+      await markRentalPaid(ownerActor, marinaOld.id, {
+        paidAt: dateInPeriod(PREV, 5),
+        method: "TRANSFER",
+      });
+    }
+
     // Independiente: el mundo chico con estados mezclados.
     await ensurePayment(folklore.id, folkStudents, "Rocío Almada", {
       amount: 24000, // PREV + CUR: al día
@@ -771,6 +884,16 @@ async function main() {
         `pagos congelados: ${await db.payment.count({
           where: { orgId: meraki.id, settlementId: { not: null } },
         })}`,
+    );
+    const marinaCharges = await db.rentalCharge.findMany({
+      where: { orgId: meraki.id, teacherId: marinaProfile.id },
+      orderBy: { period: "asc" },
+    });
+    console.log(
+      `S10 (Meraki) — alquileres de ${MARINA}: ` +
+        marinaCharges
+          .map((c) => `${c.period} $${c.amount} (${c.sessionsCount} sesiones, ${c.status})`)
+          .join(" · "),
     );
     console.log(
       `\nPersonas del recorrido (guion en docs/observaciones-demo.md):\n` +
